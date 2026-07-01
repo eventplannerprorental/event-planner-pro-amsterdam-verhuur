@@ -1,8 +1,7 @@
-Event Planner PRO Amsterdam verhuur v15
+# Event Planner PRO Rental v848
 
-Schone klanttemplate met harde licentieblokkade.
-- customerId: amsterdam-verhuur
-- PIN: 3330
-- mastercode: 9119
-- Firebase: epp-amsterdam-verhuur
-- license-guard blokkeert direct bij verlopen/geblokkeerde licentie.
+Basis: v846/v847 lijn. Firebase verbindt achter de schermen met Anonymous Auth; gebruiker ziet alleen PIN-scherm.
+
+Let op: in Firebase Authentication moet Anonymous/Anoniem inloggen aan staan.
+
+Upload naar GitHub dezelfde app-bestanden als v846/v847.

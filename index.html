@@ -3,7 +3,7 @@
  <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1" name="viewport"/>
-  <title>Event Planner PRO Amsterdam verhuur v22</title>
+  <title>Event Planner PRO Amsterdam verhuur v24</title>
   <link href="styles.css" rel="stylesheet"/>
   <link href="material-fix.css" rel="stylesheet"/>
  </head>
@@ -395,7 +395,7 @@
     var overlay = document.createElement('div');
     overlay.id = 'eppLicenseHardGateV20';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-family:Arial,sans-serif;padding:24px;';
-    overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #334155;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:42px;margin-bottom:10px">⏳</div><h1 style="margin:0 0 12px;font-size:28px">Licentie controleren</h1><p style="font-size:18px;line-height:1.5;margin:0">De planner start pas nadat de licentie is goedgekeurd.</p><p style="opacity:.7;margin-top:18px;font-size:13px">Event Planner PRO · '+customerId+' · v22 padfix</p></div>';
+    overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #334155;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:42px;margin-bottom:10px">⏳</div><h1 style="margin:0 0 12px;font-size:28px">Licentie controleren</h1><p style="font-size:18px;line-height:1.5;margin:0">De planner start pas nadat de licentie is goedgekeurd.</p><p style="opacity:.7;margin-top:18px;font-size:13px">Event Planner PRO · '+customerId+' · v24 padfix</p></div>';
     document.documentElement.appendChild(overlay);
     window.EPP_LICENSE_BLOCKED = true;
     window.EPP_LICENSE_CHECK_DONE = false;
@@ -407,7 +407,7 @@
       window.EPP_LICENSE_REASON = reason || 'blocked';
       console.warn('EPP licentie geblokkeerd:', reason || 'blocked');
       overlay.style.display='flex';
-      overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #7f1d1d;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:44px;margin-bottom:10px">🔒</div><h1 style="margin:0 0 12px;font-size:30px">Licentie niet actief</h1><p style="font-size:18px;line-height:1.5;margin:0">'+esc(msg || PUBLIC_MSG)+'</p><p style="opacity:.7;margin-top:18px;font-size:13px">'+esc(customerId)+' · v22 padfix</p></div>';
+      overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #7f1d1d;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:44px;margin-bottom:10px">🔒</div><h1 style="margin:0 0 12px;font-size:30px">Licentie niet actief</h1><p style="font-size:18px;line-height:1.5;margin:0">'+esc(msg || PUBLIC_MSG)+'</p><p style="opacity:.7;margin-top:18px;font-size:13px">'+esc(customerId)+' · v24 padfix</p></div>';
     }
     function todayLocal(){
       var d = new Date();
@@ -431,7 +431,7 @@
       var blocked = lic.blocked === true || lic.active === false || status === 'blocked' || status === 'inactive';
       var paidFalse = lic.paid === false;
       var today = todayLocal();
-      console.log('EPP licentie check v22 padfix', {customerId:customerId, today:today, validUntil:until, blocked:blocked, paid:lic.paid, paidUntil:lic.paidUntil, status:status, raw:lic});
+      console.log('EPP licentie check v24 padfix', {customerId:customerId, today:today, validUntil:until, blocked:blocked, paid:lic.paid, paidUntil:lic.paidUntil, status:status, raw:lic});
       if(blocked) return {ok:false, reason:'blocked'};
       if(paidFalse) return {ok:false, reason:'not_paid'};
       if(until && until < today) return {ok:false, reason:'expired', until:until, today:today};
@@ -447,8 +447,8 @@
       window.EPP_LICENSE_CHECK_DONE = true;
       if(overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
       await load('bns-preloader.js?v=22');
-      await load('app.js?v=22_license_first');
-      await load('app-patches.js?v=22');
+      await load('app.js?v=24_clean_appjs');
+      await load('app-patches.js?v=24');
     }
     function licensePaths(){
       return [
@@ -486,7 +486,7 @@
       if(!fb || !fb.databaseURL || !fb.apiKey) throw new Error('missing_firebase_config');
       var appMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
       var authMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
-      var appName='epp-license-v22-'+customerId;
+      var appName='epp-license-v24-'+customerId;
       var existing = appMod.getApps().find(function(a){return a.name===appName;});
       var app = existing || appMod.initializeApp(fb, appName);
       var auth = authMod.getAuth(app);
@@ -510,8 +510,8 @@
     }
     async function readLicense(){
       var errors=[];
-      try{ return await fetchLicenseDirect(); }catch(e){ errors.push(e && e.message ? e.message : String(e)); console.warn('EPP v22 directe licentie-read faalde', e); }
-      try{ return await fetchLicenseWithAuth(); }catch(e){ errors.push(e && e.message ? e.message : String(e)); console.warn('EPP v22 auth licentie-read faalde', e); }
+      try{ return await fetchLicenseDirect(); }catch(e){ errors.push(e && e.message ? e.message : String(e)); console.warn('EPP v24 directe licentie-read faalde', e); }
+      try{ return await fetchLicenseWithAuth(); }catch(e){ errors.push(e && e.message ? e.message : String(e)); console.warn('EPP v24 auth licentie-read faalde', e); }
       throw new Error(errors.join(' | ') || 'read_failed');
     }
     async function run(){
@@ -522,7 +522,7 @@
         if(!check.ok){ block(PUBLIC_MSG, check.reason); return; }
         await startApp();
       }catch(e){
-        console.error('EPP licentie lezen/controleren mislukt v22', e);
+        console.error('EPP licentie lezen/controleren mislukt v24', e);
         block(PUBLIC_MSG, 'read_failed: '+(e && e.message ? e.message : 'onbekend'));
       }
     }
