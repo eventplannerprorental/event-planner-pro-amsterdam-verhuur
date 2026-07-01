@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Event Planner PRO Beheer v849</title>
+  <style>
+    :root{font-family:Arial,Helvetica,sans-serif;color:#0f172a;background:#eef2f7}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:0 auto;padding:20px}.hero{background:linear-gradient(135deg,#0f172a,#2563eb);color:#fff;border-radius:24px;padding:22px;margin-bottom:18px;box-shadow:0 18px 50px rgba(15,23,42,.25)}.hero h1{margin:0 0 6px}.card{background:#fff;border-radius:20px;padding:18px;margin:14px 0;box-shadow:0 8px 28px rgba(15,23,42,.08)}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}label{display:block;font-weight:800;font-size:13px;color:#334155}input,select,textarea{width:100%;border:1px solid #cbd5e1;border-radius:12px;padding:11px;margin-top:5px;font:inherit}textarea{min-height:92px}button{border:0;border-radius:12px;padding:11px 14px;font-weight:900;cursor:pointer;background:#2563eb;color:#fff}.danger{background:#dc2626}.ok{background:#16a34a}.grey{background:#64748b}.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid #e2e8f0;border-radius:16px;padding:12px;margin:8px 0}.row small{color:#64748b}.actions{display:flex;gap:8px;flex-wrap:wrap}.hidden{display:none!important}.pill{display:inline-block;border-radius:999px;padding:4px 9px;background:#e0f2fe;color:#0369a1;font-size:12px;font-weight:900}.pill.bad{background:#fee2e2;color:#991b1b}.pill.ok{background:#dcfce7;color:#166534}.topbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}.login{max-width:420px;margin:12vh auto}.muted{color:#64748b}.copy{background:#7c3aed}.warn{background:#f59e0b;color:#111827}@media(max-width:760px){.grid,.grid2{grid-template-columns:1fr}.row{grid-template-columns:1fr}.wrap{padding:12px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section id="loginCard" class="card login">
+    <h1>Event Planner PRO Beheer</h1>
+    <p class="muted">Alleen voor eigenaar/beheer. Gebruik dit om klanten, licenties, boekhouding en backups te beheren.</p>
+    <label>Mastercode<input id="masterPin" type="password" inputmode="numeric" placeholder="Mastercode"></label>
+    <button id="loginBtn">Beheer openen</button>
+    <p id="loginMsg" class="muted"></p>
+  </section>
+
+  <section id="app" class="hidden">
+    <div class="hero">
+      <div class="topbar">
+        <div><h1>Event Planner PRO Beheer v849</h1><div>Klanten, licenties, adresboek, boekhouding en backups.</div></div>
+        <div class="actions"><button id="refreshBtn">Vernieuwen</button><button class="grey" id="logoutBtn">Afmelden</button></div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>Nieuwe klant / klant wijzigen</h2>
+      <div class="grid">
+        <label>Klantnaam<input id="customerName" placeholder="Jansen Events"></label>
+        <label>Klantcode<input id="customerCode" placeholder="jansen-events"></label>
+        <label>Customer ID<input id="customerId" placeholder="jansen-events"></label>
+      </div>
+      <div class="grid">
+        <label>Status<select id="licenseStatus"><option value="active">active</option><option value="blocked">blocked</option><option value="expired">expired</option></select></label>
+        <label>Geldig van<input id="validFrom" type="date"></label>
+        <label>Geldig tot<input id="validUntil" type="date"></label>
+      </div>
+      <div class="grid">
+        <label>Waarschuwing dagen<input id="warningDays" type="number" value="5"></label>
+        <label>Plan/pakket<input id="packageName" placeholder="Rental basis"></label>
+        <label>Bedrag per maand<input id="monthlyPrice" placeholder="99,00"></label>
+      </div>
+      <h3>Adresboek / contact</h3>
+      <div class="grid">
+        <label>Contactpersoon<input id="contactName"></label>
+        <label>E-mail<input id="email"></label>
+        <label>Telefoon<input id="phone"></label>
+      </div>
+      <div class="grid">
+        <label>Straat + nr<input id="street"></label>
+        <label>Postcode<input id="zip"></label>
+        <label>Plaats<input id="city"></label>
+      </div>
+      <h3>Boekhouding</h3>
+      <div class="grid">
+        <label>Factuur e-mail<input id="invoiceEmail"></label>
+        <label>KvK<input id="kvk"></label>
+        <label>BTW nummer<input id="vatNumber"></label>
+      </div>
+      <div class="grid2">
+        <label>IBAN<input id="iban"></label>
+        <label>Betaallink<input id="paymentLink"></label>
+      </div>
+      <label>Notities<textarea id="notes" placeholder="Interne opmerkingen, afspraken, prijs, support..."></textarea></label>
+      <div class="actions">
+        <button id="saveCustomerBtn" class="ok">Klant opslaan</button>
+        <button id="clearFormBtn" class="grey">Nieuw/leegmaken</button>
+        <button id="deleteCustomerBtn" class="danger">Klant blokkeren</button>
+        <button id="copyAppLinkBtn" class="copy">App-link kopiëren</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="topbar"><h2>Bestaande klanten</h2><input id="search" placeholder="Zoek klant, code, e-mail..."></div>
+      <div id="customerList"></div>
+    </section>
+
+    <section class="card">
+      <h2>Backup beheer</h2>
+      <p class="muted">Selecteer eerst een klant in de lijst. Daarna kun je een backup maken, downloaden of terugzetten.</p>
+      <div class="actions">
+        <button id="makeBackupBtn">Backup maken</button>
+        <button id="downloadBackupBtn">Laatste backup downloaden</button>
+        <button class="warn" id="restoreBackupBtn">Laatste backup terugzetten</button>
+      </div>
+      <div id="backupList" class="muted"></div>
+    </section>
+  </section>
+</div>
+<script type="module">
+const CONFIG = Object.freeze({
+  apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
+  authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
+  databaseURL: 'https://event-planner-pro-rental-22e00-default-rtdb.europe-west1.firebasedatabase.app',
+  projectId: 'event-planner-pro-rental-22e00',
+  storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
+  messagingSenderId: '912386697606',
+  appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
+});
+const MASTER_FALLBACK = '9119';
+const VERSION = '10.12.5';
+const appMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
+const authMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
+const dbMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-database.js');
+const app = appMod.initializeApp(CONFIG, 'epp-admin-v849');
+const auth = authMod.getAuth(app);
+const db = dbMod.getDatabase(app);
+await authMod.signInAnonymously(auth);
+let customers = {}; let codes = {}; let selectedId = '';
+const $ = id => document.getElementById(id);
+const s = v => String(v ?? '').trim();
+function safeId(v){ return s(v).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60); }
+function today(){ const d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+function addDays(n){ const d=new Date(); d.setDate(d.getDate()+Number(n||0)); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+async function read(path){ const snap=await dbMod.get(dbMod.ref(db,path)); return snap.exists()?snap.val():null; }
+async function write(path,val){ return dbMod.set(dbMod.ref(db,path), val); }
+async function update(path,val){ return dbMod.update(dbMod.ref(db,path), val); }
+async function remove(path){ return dbMod.remove(dbMod.ref(db,path)); }
+async function masterPin(){ return s(await read('platform/masterPin')) || MASTER_FALLBACK; }
+function appLink(code){ return location.origin + location.pathname.replace(/admin-beheer\.html$/,'index.html') + '?code=' + encodeURIComponent(code); }
+function fillDefaults(){ $('validFrom').value=today(); $('validUntil').value=addDays(14); $('warningDays').value='5'; $('licenseStatus').value='active'; $('packageName').value='Rental basis'; }
+function clearForm(){ selectedId=''; ['customerName','customerCode','customerId','contactName','email','phone','street','zip','city','invoiceEmail','kvk','vatNumber','iban','paymentLink','monthlyPrice','notes'].forEach(id=>$(id).value=''); fillDefaults(); $('backupList').textContent='Geen klant geselecteerd.'; }
+function formData(){
+  const code=safeId($('customerCode').value || $('customerName').value);
+  const id=safeId($('customerId').value || code);
+  return {id,code,name:s($('customerName').value),license:{active:$('licenseStatus').value==='active',status:$('licenseStatus').value,validFrom:s($('validFrom').value),validUntil:s($('validUntil').value),warningDays:Number($('warningDays').value||5),contactText:'Uw licentie verloopt binnenkort. Neem contact op.'},settings:{companyName:s($('customerName').value),customerId:id,customerCode:code,packageName:s($('packageName').value)},contact:{name:s($('contactName').value),email:s($('email').value),phone:s($('phone').value),street:s($('street').value),zip:s($('zip').value),city:s($('city').value)},bookkeeping:{invoiceEmail:s($('invoiceEmail').value),kvk:s($('kvk').value),vatNumber:s($('vatNumber').value),iban:s($('iban').value),paymentLink:s($('paymentLink').value),monthlyPrice:s($('monthlyPrice').value),notes:s($('notes').value)}};
+}
+function setForm(id){
+  selectedId=id; const c=customers[id]||{}; const lic=c.license||{}, st=c.settings||{}, con=c.contact||{}, bk=c.bookkeeping||{};
+  $('customerName').value=st.companyName||c.name||id; $('customerId').value=id; $('customerCode').value=st.customerCode||Object.keys(codes).find(k=>codes[k]&&codes[k].customerId===id)||id;
+  $('licenseStatus').value=lic.status||'active'; $('validFrom').value=lic.validFrom||today(); $('validUntil').value=lic.validUntil||addDays(14); $('warningDays').value=lic.warningDays||5; $('packageName').value=st.packageName||'Rental basis';
+  $('contactName').value=con.name||''; $('email').value=con.email||''; $('phone').value=con.phone||''; $('street').value=con.street||''; $('zip').value=con.zip||''; $('city').value=con.city||'';
+  $('invoiceEmail').value=bk.invoiceEmail||''; $('kvk').value=bk.kvk||''; $('vatNumber').value=bk.vatNumber||''; $('iban').value=bk.iban||''; $('paymentLink').value=bk.paymentLink||''; $('monthlyPrice').value=bk.monthlyPrice||''; $('notes').value=bk.notes||'';
+  renderBackups(id);
+  scrollTo({top:0,behavior:'smooth'});
+}
+async function saveCustomer(){
+  const f=formData(); if(!f.name||!f.code||!f.id) return alert('Vul minimaal klantnaam, klantcode en customerId in.');
+  const now=new Date().toISOString();
+  await update('customers/'+f.id,{name:f.name,license:f.license,settings:f.settings,contact:f.contact,bookkeeping:f.bookkeeping,updatedAt:now,createdAt:(customers[f.id]&&customers[f.id].createdAt)||now});
+  await write('customerAccessCodes/'+f.code,{customerId:f.id,active:true,name:f.name,updatedAt:now});
+  selectedId=f.id; await loadAll(); alert('Klant opgeslagen. App-link: '+appLink(f.code));
+}
+async function blockCustomer(){ if(!selectedId) return alert('Selecteer eerst een klant.'); if(!confirm('Klant blokkeren? De app gaat dan dicht voor deze klant.')) return; await update('customers/'+selectedId+'/license',{status:'blocked',active:false}); await loadAll(); alert('Klant geblokkeerd.'); }
+async function loadAll(){ customers=await read('customers')||{}; codes=await read('customerAccessCodes')||{}; renderList(); if(selectedId) renderBackups(selectedId); }
+function licensePill(c){ const l=(c.license||{}); const until=s(l.validUntil); let bad=l.active===false || /blocked|expired/i.test(s(l.status)); return `<span class="pill ${bad?'bad':'ok'}">${s(l.status||'active')} tot ${until||'-'}</span>`; }
+function renderList(){ const q=s($('search').value).toLowerCase(); const list=$('customerList'); const ids=Object.keys(customers).sort(); const rows=ids.filter(id=>JSON.stringify(customers[id]).toLowerCase().includes(q)||id.includes(q)).map(id=>{ const c=customers[id]||{}, st=c.settings||{}, con=c.contact||{}; const code=Object.keys(codes).find(k=>codes[k]&&codes[k].customerId===id)||id; return `<div class="row"><div><b>${st.companyName||c.name||id}</b> ${licensePill(c)}<br><small>ID: ${id} | code: ${code} | ${con.email||''} ${con.phone||''}</small></div><div class="actions"><button onclick="window.editCustomer('${id}')">Wijzig</button><button class="copy" onclick="navigator.clipboard.writeText('${appLink(code)}')">Link</button></div></div>`; }).join(''); list.innerHTML=rows||'<p class="muted">Geen klanten gevonden.</p>'; }
+async function makeBackup(){ if(!selectedId) return alert('Selecteer eerst een klant.'); const appState=await read('customers/'+selectedId+'/appState'); const key=new Date().toISOString().replace(/[:.]/g,'-'); await write('customers/'+selectedId+'/backups/'+key,{createdAt:new Date().toISOString(),createdBy:'beheer',appState}); await renderBackups(selectedId); alert('Backup gemaakt.'); }
+async function renderBackups(id){ const b=await read('customers/'+id+'/backups')||{}; const keys=Object.keys(b).sort().reverse(); $('backupList').innerHTML=keys.slice(0,20).map(k=>`<div class="row"><div><b>${k}</b><br><small>${b[k].createdBy||''}</small></div></div>`).join('')||'Nog geen backups.'; }
+async function latestBackup(){ if(!selectedId) throw new Error('Selecteer eerst een klant.'); const b=await read('customers/'+selectedId+'/backups')||{}; const k=Object.keys(b).sort().reverse()[0]; if(!k) throw new Error('Geen backup gevonden.'); return {key:k,data:b[k]}; }
+async function downloadLatest(){ try{ const b=await latestBackup(); const blob=new Blob([JSON.stringify(b.data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='backup-'+selectedId+'-'+b.key+'.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),5000); }catch(e){ alert(e.message||e); } }
+async function restoreLatest(){ try{ const b=await latestBackup(); if(!confirm('Laatste backup terugzetten voor '+selectedId+'? Huidige appState wordt overschreven.')) return; await write('customers/'+selectedId+'/appState', b.data.appState || b.data.state || b.data); alert('Backup teruggezet.'); }catch(e){ alert(e.message||e); } }
+window.editCustomer=setForm;
+$('loginBtn').onclick=async()=>{ const p=s($('masterPin').value); if(p !== await masterPin()){ $('loginMsg').textContent='Verkeerde mastercode.'; return; } $('loginCard').classList.add('hidden'); $('app').classList.remove('hidden'); await loadAll(); };
+$('logoutBtn').onclick=()=>location.reload(); $('refreshBtn').onclick=loadAll; $('saveCustomerBtn').onclick=saveCustomer; $('clearFormBtn').onclick=clearForm; $('deleteCustomerBtn').onclick=blockCustomer; $('search').oninput=renderList; $('makeBackupBtn').onclick=makeBackup; $('downloadBackupBtn').onclick=downloadLatest; $('restoreBackupBtn').onclick=restoreLatest;
+$('copyAppLinkBtn').onclick=()=>{ const f=formData(); navigator.clipboard.writeText(appLink(f.code)); alert('App-link gekopieerd.'); };
+$('customerName').addEventListener('input',()=>{ if(!$('customerCode').value) $('customerCode').value=safeId($('customerName').value); if(!$('customerId').value) $('customerId').value=safeId($('customerName').value); });
+fillDefaults();
+document.addEventListener('contextmenu',e=>e.preventDefault(),true); document.addEventListener('keydown',e=>{ const k=String(e.key||'').toUpperCase(); if(k==='F12'||(e.ctrlKey&&e.shiftKey&&['I','J','C'].includes(k))||(e.ctrlKey&&k==='U')){e.preventDefault(); alert('Inspecteren is uitgeschakeld.');}},true);
+</script>
+</body>
+</html>

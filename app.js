@@ -273,7 +273,13 @@ function ensure(){
   state.customers??=[];
   state.locations??=[];
   state.alerts??=[];
-  state.adminPin??='1111';
+  state.adminPin='9119';
+  try{
+    var hasUser3330 = state.users.some(function(u){ return String(u && u.pin || '') === '3330'; });
+    if(!hasUser3330){ state.users.unshift({id:'u_gebruiker_3330', name:'Gebruiker', pin:'3330', role:'Admin', active:true, rights:{prices:true,agenda:true,gps:true,resolve:true}}); }
+    var hasMaster9119 = state.users.some(function(u){ return String(u && u.pin || '') === '9119'; });
+    if(!hasMaster9119){ state.users.unshift({id:'u_master_9119', name:'Master beheer', pin:'9119', role:'Admin', active:true, master:true, rights:{prices:true,agenda:true,gps:true,resolve:true}}); }
+  }catch(e){}
 }
 function id(){
   return Math.random().toString(36).slice(2,10)
@@ -45511,890 +45517,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 })();
 
 
-// ===== EPP RENTAL v840: Firebase Authentication + Realtime Database =====
-// Let op: gebruikt NIET window.BNS_FIREBASE_CONFIG om oude Firestore-lagen niet wakker te maken.
-(function(){
-  'use strict';
-  if(window.__EPP_RENTAL_V840_FIREBASE_RTD__) return;
-  window.__EPP_RENTAL_V840_FIREBASE_RTD__ = true;
 
-  var FIREBASE_VERSION = '10.12.5';
-  var REMOTE_PATH = 'customers/rental/appState';
-  var CONFIG = Object.freeze({
-    apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
-    databaseURL: 'https://event-planner-pro-rental-22e00-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
-    messagingSenderId: '912386697606',
-    appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
-  });
-
-  var app = null, auth = null, db = null, authMod = null, dbMod = null;
-  var ready = false, remoteLoaded = false, applyingRemote = false, uploadTimer = null;
-  var lastLocalWrite = 0;
-  var originalSave = (typeof save === 'function') ? save : null;
-
-  window.EPP_RENTAL_FIREBASE = {
-    version: 'v840',
-    projectId: CONFIG.projectId,
-    databaseURL: CONFIG.databaseURL,
-    path: REMOTE_PATH,
-    connected: false,
-    signedIn: false,
-    remoteLoaded: false,
-    lastError: null
-  };
-
-  function qs(id){ return document.getElementById(id); }
-  function status(text, cls){
-    window.EPP_RENTAL_FIREBASE.status = text;
-    var el = qs('eppFirebaseStatus');
-    if(el){ el.textContent = text; el.className = 'epp-fb-status ' + (cls || ''); }
-    try{
-      var b = qs('syncBtn');
-      if(b) b.textContent = 'Firebase: ' + text;
-    }catch(e){}
-  }
-  function stripLarge(obj){
-    var BIG = ['photoData','photo','image','signatureData','signature','data','customerSignature'];
-    function walk(x){
-      if(!x || typeof x !== 'object') return;
-      if(Array.isArray(x)){ x.forEach(walk); return; }
-      BIG.forEach(function(k){ if(x[k] && String(x[k]).length > 200) delete x[k]; });
-      Object.keys(x).forEach(function(k){ walk(x[k]); });
-    }
-    walk(obj);
-    return obj;
-  }
-  function cloneState(){
-    try{ return stripLarge(JSON.parse(JSON.stringify(state || {}))); }
-    catch(e){ return {}; }
-  }
-  async function loadSdk(){
-    if(ready) return true;
-    status('SDK laden...', 'busy');
-    var appMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-app.js');
-    authMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-auth.js');
-    dbMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-database.js');
-    app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(CONFIG);
-    auth = authMod.getAuth(app);
-    db = dbMod.getDatabase(app);
-    try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
-    ready = true;
-    window.EPP_RENTAL_FIREBASE.connected = true;
-    return true;
-  }
-  async function uploadNow(reason){
-    if(!ready || !auth || !auth.currentUser || applyingRemote) return;
-    var payload = {
-      version: 'v840',
-      customerId: 'rental',
-      updatedAt: new Date().toISOString(),
-      reason: reason || 'save',
-      state: cloneState()
-    };
-    await dbMod.set(dbMod.ref(db, REMOTE_PATH), payload);
-    lastLocalWrite = Date.now();
-    status('opgeslagen online', 'ok');
-  }
-  function scheduleUpload(reason){
-    if(!remoteLoaded || !ready || !auth || !auth.currentUser || applyingRemote) return;
-    clearTimeout(uploadTimer);
-    uploadTimer = setTimeout(function(){ uploadNow(reason).catch(function(e){
-      window.EPP_RENTAL_FIREBASE.lastError = String(e && e.message || e);
-      status('opslaan fout', 'bad');
-      console.warn('[EPP v840] Firebase opslaan fout', e);
-    }); }, 700);
-  }
-  async function loadRemoteOrSeed(){
-    var ref = dbMod.ref(db, REMOTE_PATH);
-    var snap = await dbMod.get(ref);
-    if(snap.exists()){
-      var payload = snap.val() || {};
-      var remoteState = payload.state && typeof payload.state === 'object' ? payload.state : payload;
-      if(remoteState && typeof remoteState === 'object'){
-        applyingRemote = true;
-        try{
-          state = Object.assign(structuredClone(INITIAL_STATE), remoteState);
-          if(typeof ensure === 'function') ensure();
-          if(originalSave) originalSave();
-          if(typeof renderAll === 'function') renderAll();
-        }finally{ applyingRemote = false; }
-      }
-      remoteLoaded = true;
-      window.EPP_RENTAL_FIREBASE.remoteLoaded = true;
-      status('online geladen', 'ok');
-    }else{
-      remoteLoaded = true;
-      window.EPP_RENTAL_FIREBASE.remoteLoaded = true;
-      await uploadNow('eerste upload vanuit v840');
-      status('online gestart', 'ok');
-    }
-  }
-  async function firebaseLogin(email, password){
-    try{
-      await loadSdk();
-      status('inloggen...', 'busy');
-      await authMod.signInWithEmailAndPassword(auth, email, password);
-      window.EPP_RENTAL_FIREBASE.signedIn = true;
-      window.EPP_RENTAL_FIREBASE.email = email;
-      status('ingelogd', 'ok');
-      await loadRemoteOrSeed();
-      return true;
-    }catch(e){
-      window.EPP_RENTAL_FIREBASE.lastError = String(e && e.message || e);
-      status('login fout', 'bad');
-      alert('Firebase login fout. Controleer e-mail/wachtwoord.\n\n' + (e && e.message ? e.message : e));
-      return false;
-    }
-  }
-  function installPanel(){
-    if(qs('eppFirebaseLoginBox')) return;
-    var loginCard = document.querySelector('#login .login-card') || qs('login');
-    if(!loginCard) return;
-    var box = document.createElement('div');
-    box.id = 'eppFirebaseLoginBox';
-    box.innerHTML = '<div class="epp-fb-title">Firebase online test v840</div>'+
-      '<input id="eppFbEmail" type="email" value="eventplannerprorental@gmail.com" autocomplete="username" placeholder="E-mail">'+
-      '<input id="eppFbPass" type="password" autocomplete="current-password" placeholder="Firebase wachtwoord">'+
-      '<button type="button" id="eppFbLoginBtn">Firebase verbinden</button>'+
-      '<div id="eppFirebaseStatus" class="epp-fb-status">nog niet verbonden</div>'+
-      '<small>Daarna kunt u met de gewone PIN verder.</small>';
-    loginCard.appendChild(box);
-    qs('eppFbLoginBtn').onclick = function(){
-      var email = (qs('eppFbEmail').value || '').trim();
-      var pass = qs('eppFbPass').value || '';
-      if(!email || !pass){ alert('Vul e-mail en Firebase wachtwoord in.'); return; }
-      firebaseLogin(email, pass);
-    };
-    status('nog niet verbonden', '');
-  }
-  function installStyle(){
-    if(qs('eppV840Style')) return;
-    var st = document.createElement('style');
-    st.id = 'eppV840Style';
-    st.textContent = '#eppFirebaseLoginBox{margin-top:14px;padding:12px;border:1px solid rgba(255,255,255,.25);border-radius:14px;background:rgba(255,255,255,.08);display:grid;gap:8px}'+
-      '#eppFirebaseLoginBox input{width:100%;box-sizing:border-box;border-radius:10px;border:1px solid #cbd5e1;padding:10px;font-size:14px}'+
-      '#eppFirebaseLoginBox button{border:0;border-radius:10px;padding:10px;font-weight:900;cursor:pointer}'+
-      '.epp-fb-title{font-weight:900}.epp-fb-status{font-size:12px;font-weight:800}.epp-fb-status.ok{color:#22c55e}.epp-fb-status.bad{color:#ef4444}.epp-fb-status.busy{color:#f59e0b}';
-    document.head.appendChild(st);
-  }
-
-  if(originalSave){
-    save = function(){
-      var r = originalSave.apply(this, arguments);
-      scheduleUpload('save');
-      return r;
-    };
-  }
-  document.addEventListener('DOMContentLoaded', function(){
-    installStyle();
-    installPanel();
-    try{ if(qs('syncBtn')) qs('syncBtn').onclick = function(){
-      if(!remoteLoaded) alert('Firebase is nog niet verbonden. Log eerst in via het Firebase-vak op het PIN-scherm.');
-      else alert('Firebase status: ' + (window.EPP_RENTAL_FIREBASE.status || 'onbekend'));
-    }; }catch(e){}
-  });
-})();
-
-// ===== EPP RENTAL v842: Firebase login debug + vaste named app =====
-// Doel: niet meer gokken bij loginfouten. Deze laag gebruikt een eigen named Firebase app,
-// zodat een oude/default Firebase app nooit per ongeluk wordt hergebruikt.
-(function(){
-  'use strict';
-  if(window.__EPP_RENTAL_V842_FIREBASE_DEBUG__) return;
-  window.__EPP_RENTAL_V842_FIREBASE_DEBUG__ = true;
-
-  var FIREBASE_VERSION = '10.12.5';
-  var APP_NAME = 'epp-rental-v842';
-  var REMOTE_PATH = 'customers/rental/appState';
-  var CONFIG = Object.freeze({
-    apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
-    databaseURL: 'https://event-planner-pro-rental-22e00-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
-    messagingSenderId: '912386697606',
-    appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
-  });
-
-  var app = null, auth = null, db = null, authMod = null, dbMod = null, ready = false;
-
-  window.EPP_RENTAL_FIREBASE_DEBUG = {
-    version: 'v842',
-    appName: APP_NAME,
-    projectId: CONFIG.projectId,
-    authDomain: CONFIG.authDomain,
-    databaseURL: CONFIG.databaseURL,
-    path: REMOTE_PATH,
-    lastCode: null,
-    lastMessage: null
-  };
-
-  function qs(id){ return document.getElementById(id); }
-  function status(text, cls){
-    var el = qs('eppFirebaseStatus');
-    if(el){ el.textContent = text; el.className = 'epp-fb-status ' + (cls || ''); }
-    try{ if(window.EPP_RENTAL_FIREBASE) window.EPP_RENTAL_FIREBASE.status = text; }catch(e){}
-  }
-  function normalizeEmail(v){ return String(v || '').trim().toLowerCase(); }
-  function cloneState(){
-    try{ return JSON.parse(JSON.stringify(window.state || state || {})); }
-    catch(e){ return {}; }
-  }
-  async function loadSdk(){
-    if(ready) return true;
-    status('SDK laden v842...', 'busy');
-    var appMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-app.js');
-    authMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-auth.js');
-    dbMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-database.js');
-    var existing = null;
-    try{ existing = appMod.getApps().find(function(a){ return a && a.name === APP_NAME; }); }catch(e){}
-    app = existing || appMod.initializeApp(CONFIG, APP_NAME);
-    auth = authMod.getAuth(app);
-    db = dbMod.getDatabase(app);
-    try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
-    ready = true;
-    return true;
-  }
-  async function seedOrLoad(){
-    var ref = dbMod.ref(db, REMOTE_PATH);
-    var snap = await dbMod.get(ref);
-    if(snap.exists()){
-      var payload = snap.val() || {};
-      var remoteState = payload.state && typeof payload.state === 'object' ? payload.state : payload;
-      try{
-        if(remoteState && typeof remoteState === 'object'){
-          window.__EPP_V842_APPLYING_REMOTE__ = true;
-          window.state = Object.assign(structuredClone(INITIAL_STATE), remoteState);
-          try{ state = window.state; }catch(e){}
-          if(typeof ensure === 'function') ensure();
-          if(typeof save === 'function') save();
-          if(typeof renderAll === 'function') renderAll();
-        }
-      }finally{ window.__EPP_V842_APPLYING_REMOTE__ = false; }
-      status('online geladen v842', 'ok');
-    }else{
-      await dbMod.set(ref, {
-        version: 'v842',
-        customerId: 'rental',
-        updatedAt: new Date().toISOString(),
-        reason: 'eerste upload vanuit v842',
-        state: cloneState()
-      });
-      status('online gestart v842', 'ok');
-    }
-    try{
-      if(window.EPP_RENTAL_FIREBASE){
-        window.EPP_RENTAL_FIREBASE.signedIn = true;
-        window.EPP_RENTAL_FIREBASE.remoteLoaded = true;
-        window.EPP_RENTAL_FIREBASE.connected = true;
-        window.EPP_RENTAL_FIREBASE.version = 'v842';
-      }
-    }catch(e){}
-  }
-  async function loginV842(){
-    var email = normalizeEmail(qs('eppFbEmail') && qs('eppFbEmail').value);
-    var pass = (qs('eppFbPass') && qs('eppFbPass').value) || '';
-    if(!email || !pass){ alert('Vul e-mail en Firebase wachtwoord in.'); return false; }
-    try{
-      await loadSdk();
-      status('inloggen v842...', 'busy');
-      var cred = await authMod.signInWithEmailAndPassword(auth, email, pass);
-      status('ingelogd v842: ' + email, 'ok');
-      try{
-        window.EPP_RENTAL_FIREBASE_DEBUG.uid = cred && cred.user && cred.user.uid;
-        window.EPP_RENTAL_FIREBASE_DEBUG.email = email;
-      }catch(e){}
-      await seedOrLoad();
-      return true;
-    }catch(e){
-      var code = String((e && e.code) || 'geen-code');
-      var msg = String((e && e.message) || e || 'geen bericht');
-      window.EPP_RENTAL_FIREBASE_DEBUG.lastCode = code;
-      window.EPP_RENTAL_FIREBASE_DEBUG.lastMessage = msg;
-      try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.lastError = code + ' | ' + msg; } }catch(_e){}
-      status('login fout: ' + code, 'bad');
-      alert(
-        'Firebase login fout v842\n\n' +
-        'Code: ' + code + '\n\n' +
-        'Bericht: ' + msg + '\n\n' +
-        'Project: ' + CONFIG.projectId + '\n' +
-        'Auth domain: ' + CONFIG.authDomain + '\n' +
-        'Database: ' + CONFIG.databaseURL + '\n\n' +
-        'Gebruik dit exacte foutscherm om verder te zoeken.'
-      );
-      return false;
-    }
-  }
-  function installV842(){
-    var title = document.querySelector('#eppFirebaseLoginBox .epp-fb-title');
-    if(title) title.textContent = 'Firebase online test v842';
-    var btn = qs('eppFbLoginBtn');
-    if(btn){
-      btn.textContent = 'Firebase verbinden v842';
-      btn.onclick = function(){ loginV842(); };
-    }
-    var email = qs('eppFbEmail');
-    if(email) email.value = normalizeEmail(email.value || 'eventplannerprorental@gmail.com');
-    status('v842 klaar voor login', '');
-  }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(installV842, 350); setTimeout(installV842, 1200); });
-  else { setTimeout(installV842, 350); setTimeout(installV842, 1200); }
-})();
-
-// ===== EPP RENTAL v844: Firebase leidend veilig opslaan =====
-// Doel:
-// - Firebase blijft de enige leidende online bron.
-// - Geen lokale/standaarddata die Firebase overschrijft bij starten.
-// - Als Firebase leeg is, wordt NIET automatisch een lege database geupload.
-// - Na login worden gewone app-saves online opgeslagen naar customers/rental/appState.
-(function(){
-  'use strict';
-  if(window.__EPP_RENTAL_V844_FIREBASE_LEADING_SAFE__) return;
-  window.__EPP_RENTAL_V844_FIREBASE_LEADING_SAFE__ = true;
-
-  var FIREBASE_VERSION = '10.12.5';
-  var APP_NAME = 'epp-rental-v844';
-  var REMOTE_PATH = 'customers/rental/appState';
-  var CONFIG = Object.freeze({
-    apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
-    databaseURL: 'https://event-planner-pro-rental-22e00-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
-    messagingSenderId: '912386697606',
-    appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
-  });
-
-  var app=null, auth=null, db=null, authMod=null, dbMod=null;
-  var ready=false, signedIn=false, remoteReady=false, applyingRemote=false, uploadTimer=null;
-  var previousSave = (typeof save === 'function') ? save : null;
-
-  window.EPP_RENTAL_FIREBASE_V844 = {
-    version: 'v844',
-    mode: 'firebase-leading-safe',
-    projectId: CONFIG.projectId,
-    databaseURL: CONFIG.databaseURL,
-    path: REMOTE_PATH,
-    signedIn: false,
-    remoteReady: false,
-    remoteEmpty: null,
-    lastUpload: null,
-    lastError: null
-  };
-
-  function qs(id){ return document.getElementById(id); }
-  function status(text, cls){
-    window.EPP_RENTAL_FIREBASE_V844.status = text;
-    try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.status = text; window.EPP_RENTAL_FIREBASE.version = 'v844'; } }catch(e){}
-    var el = qs('eppFirebaseStatus');
-    if(el){ el.textContent = text; el.className = 'epp-fb-status ' + (cls || ''); }
-    try{ var b=qs('syncBtn'); if(b) b.textContent='Firebase: '+text; }catch(e){}
-  }
-  function normalizeEmail(v){ return String(v||'').trim().toLowerCase(); }
-  function stripLarge(obj){
-    var BIG=['photoData','photo','image','signatureData','signature','data','customerSignature'];
-    function walk(x){
-      if(!x || typeof x !== 'object') return;
-      if(Array.isArray(x)){ x.forEach(walk); return; }
-      BIG.forEach(function(k){ if(x[k] && String(x[k]).length>200) delete x[k]; });
-      Object.keys(x).forEach(function(k){ walk(x[k]); });
-    }
-    walk(obj); return obj;
-  }
-  function cloneState(){
-    try{ return stripLarge(JSON.parse(JSON.stringify(window.state || state || {}))); }
-    catch(e){ return {}; }
-  }
-  function applyRemote(remoteState){
-    applyingRemote = true;
-    try{
-      var base = (typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : {};
-      window.state = Object.assign(base, remoteState || {});
-      try{ state = window.state; }catch(e){}
-      try{ if(typeof ensure === 'function') ensure(); }catch(e){}
-      // Lokaal mag een kopie bewaren voor snelheid, maar dit mag niet naar Firebase terugduwen tijdens apply.
-      try{ if(previousSave) previousSave(); else if(typeof save === 'function') save(); }catch(e){}
-      try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
-    }finally{ applyingRemote = false; }
-  }
-  async function loadSdk(){
-    if(ready) return true;
-    status('SDK laden v844...', 'busy');
-    var appMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-app.js');
-    authMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-auth.js');
-    dbMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-database.js');
-    var existing=null;
-    try{ existing = appMod.getApps().find(function(a){ return a && a.name === APP_NAME; }); }catch(e){}
-    app = existing || appMod.initializeApp(CONFIG, APP_NAME);
-    auth = authMod.getAuth(app);
-    db = dbMod.getDatabase(app);
-    try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
-    ready = true;
-    return true;
-  }
-  async function uploadNow(reason){
-    if(!ready || !signedIn || !auth || !auth.currentUser || applyingRemote) return false;
-    var payload={
-      version:'v844',
-      customerId:'rental',
-      mode:'firebase-leading',
-      updatedAt:new Date().toISOString(),
-      updatedBy:(auth.currentUser && auth.currentUser.email) || '',
-      reason:reason || 'save',
-      state:cloneState()
-    };
-    await dbMod.set(dbMod.ref(db, REMOTE_PATH), payload);
-    window.EPP_RENTAL_FIREBASE_V844.lastUpload = payload.updatedAt;
-    window.EPP_RENTAL_FIREBASE_V844.remoteEmpty = false;
-    try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.lastUpload = payload.updatedAt; window.EPP_RENTAL_FIREBASE.remoteLoaded = true; } }catch(e){}
-    status('online opgeslagen v844', 'ok');
-    return true;
-  }
-  function scheduleUpload(reason){
-    if(!remoteReady || !signedIn || applyingRemote) return;
-    clearTimeout(uploadTimer);
-    uploadTimer = setTimeout(function(){
-      uploadNow(reason).catch(function(e){
-        var code=String((e&&e.code)||'geen-code'); var msg=String((e&&e.message)||e||'geen bericht');
-        window.EPP_RENTAL_FIREBASE_V844.lastError = code+' | '+msg;
-        status('opslaan fout: '+code, 'bad');
-        console.warn('[EPP v844] Online opslaan fout', e);
-      });
-    }, 650);
-  }
-  async function loadRemoteFirebaseLeading(){
-    var ref=dbMod.ref(db, REMOTE_PATH);
-    var snap=await dbMod.get(ref);
-    remoteReady=true;
-    window.EPP_RENTAL_FIREBASE_V844.remoteReady=true;
-    try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.remoteLoaded=true; window.EPP_RENTAL_FIREBASE.connected=true; } }catch(e){}
-    if(snap.exists()){
-      var payload=snap.val() || {};
-      var remoteState = payload.state && typeof payload.state === 'object' ? payload.state : payload;
-      if(remoteState && typeof remoteState === 'object'){
-        applyRemote(remoteState);
-        window.EPP_RENTAL_FIREBASE_V844.remoteEmpty=false;
-        status('Firebase geladen v844', 'ok');
-      }else{
-        window.EPP_RENTAL_FIREBASE_V844.remoteEmpty=true;
-        status('Firebase leeg: eerste opslag vult online', 'busy');
-      }
-    }else{
-      // Belangrijk: hier NIET automatisch lege data uploaden.
-      // Firebase is leidend, maar de eerste echte app-save vult de online database.
-      window.EPP_RENTAL_FIREBASE_V844.remoteEmpty=true;
-      status('Firebase leeg: eerste opslag vult online', 'busy');
-    }
-  }
-  async function loginV844(){
-    var email = normalizeEmail(qs('eppFbEmail') && qs('eppFbEmail').value);
-    var pass = (qs('eppFbPass') && qs('eppFbPass').value) || '';
-    if(!email || !pass){ alert('Vul e-mail en Firebase wachtwoord in.'); return false; }
-    try{
-      await loadSdk();
-      status('inloggen v844...', 'busy');
-      var cred = await authMod.signInWithEmailAndPassword(auth, email, pass);
-      signedIn=true;
-      window.EPP_RENTAL_FIREBASE_V844.signedIn=true;
-      window.EPP_RENTAL_FIREBASE_V844.email=email;
-      window.EPP_RENTAL_FIREBASE_V844.uid=cred && cred.user && cred.user.uid;
-      try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.signedIn=true; window.EPP_RENTAL_FIREBASE.email=email; window.EPP_RENTAL_FIREBASE.version='v844'; } }catch(e){}
-      status('ingelogd v844: Firebase laden...', 'busy');
-      await loadRemoteFirebaseLeading();
-      return true;
-    }catch(e){
-      var code=String((e&&e.code)||'geen-code'); var msg=String((e&&e.message)||e||'geen bericht');
-      window.EPP_RENTAL_FIREBASE_V844.lastError=code+' | '+msg;
-      status('login fout: '+code, 'bad');
-      alert('Firebase login fout v844\n\nCode: '+code+'\n\nBericht: '+msg+'\n\nProject: '+CONFIG.projectId+'\nDatabase: '+CONFIG.databaseURL);
-      return false;
-    }
-  }
-  function installSaveHook(){
-    if(window.__EPP_RENTAL_V844_SAVE_HOOK__) return;
-    window.__EPP_RENTAL_V844_SAVE_HOOK__=true;
-    if(typeof save === 'function') previousSave = save;
-    if(previousSave){
-      save = function(){
-        var r = previousSave.apply(this, arguments);
-        scheduleUpload('save');
-        return r;
-      };
-    }
-  }
-  function installPanel(){
-    var box = qs('eppFirebaseLoginBox');
-    if(!box){
-      var loginCard = document.querySelector('#login .login-card') || qs('login');
-      if(loginCard){
-        box=document.createElement('div'); box.id='eppFirebaseLoginBox';
-        box.innerHTML='<div class="epp-fb-title">Firebase online v844</div><input id="eppFbEmail" type="email" autocomplete="username" placeholder="App-login e-mail"><input id="eppFbPass" type="password" autocomplete="current-password" placeholder="Firebase wachtwoord"><button type="button" id="eppFbLoginBtn">Firebase verbinden v844</button><div id="eppFirebaseStatus" class="epp-fb-status">v844 klaar voor login</div><small>Firebase is leidend. Een lege online database wordt pas gevuld na een echte opslag.</small>';
-        loginCard.appendChild(box);
-      }
-    }
-    var title = document.querySelector('#eppFirebaseLoginBox .epp-fb-title'); if(title) title.textContent='Firebase online v844';
-    var small = document.querySelector('#eppFirebaseLoginBox small'); if(small) small.textContent='Firebase is leidend. Een lege online database wordt pas gevuld na een echte opslag.';
-    var email=qs('eppFbEmail'); if(email){ email.placeholder='App-login e-mail'; if(/tapwagenverhuur@gmail\.com/i.test(email.value||'')) email.value=''; }
-    var btn=qs('eppFbLoginBtn'); if(btn){ btn.textContent='Firebase verbinden v844'; btn.onclick=function(){ loginV844(); }; }
-    status('v844 klaar voor login', '');
-  }
-  function installStatusButton(){
-    try{
-      var b=qs('syncBtn');
-      if(b) b.onclick=function(){
-        alert('Firebase v844\nStatus: '+(window.EPP_RENTAL_FIREBASE_V844.status||'onbekend')+'\nLaatste online opslag: '+(window.EPP_RENTAL_FIREBASE_V844.lastUpload||'nog niet')+'\nPad: '+REMOTE_PATH);
-      };
-    }catch(e){}
-  }
-  function cleanVisibleTitles(){
-    try{ document.title='Event Planner PRO Rental'; }catch(e){}
-    try{
-      var hs=document.querySelectorAll('h1,h2,.brand,.app-title,.title');
-      hs.forEach(function(el){ if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental'); });
-    }catch(e){}
-  }
-  function boot(){ installSaveHook(); installPanel(); installStatusButton(); cleanVisibleTitles(); }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,350); setTimeout(boot,1400); });
-  else { setTimeout(boot,350); setTimeout(boot,1400); }
-})();
-
-
-// ===== EPP RENTAL v848: Firebase anoniem automatisch, alleen PIN scherm, status bewaren =====
-// Doel: NIET aan v821 komen. Rental gebruikt Firebase als hoofdbron, maar uploadt alleen schone velden.
-(function(){
-  'use strict';
-  if(window.__EPP_RENTAL_V848_AUTO_PIN__) return;
-  window.__EPP_RENTAL_V848_AUTO_PIN__ = true;
-
-  var FIREBASE_VERSION = '10.12.5';
-  var APP_NAME = 'epp-rental-v848';
-  var REMOTE_PATH = 'customers/rental/appState';
-  var CONFIG = Object.freeze({
-    apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
-    databaseURL: 'https://event-planner-pro-rental-22e00-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
-    messagingSenderId: '912386697606',
-    appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
-  });
-
-  var app=null, auth=null, db=null, authMod=null, dbMod=null;
-  var ready=false, signedIn=false, remoteReady=false, applyingRemote=false, uploadTimer=null;
-  var previousSave = (typeof save === 'function') ? save : null;
-
-  window.EPP_RENTAL_FIREBASE_V848 = {
-    version:'v848', mode:'firebase-leading-anonymous-pin', projectId:CONFIG.projectId,
-    databaseURL:CONFIG.databaseURL, path:REMOTE_PATH, signedIn:false, remoteReady:false,
-    lastUpload:null, lastError:null
-  };
-
-  function E(id){ return document.getElementById(id); }
-  function T(v){ return String(v == null ? '' : v).trim(); }
-  function L(v){ return T(v).toLowerCase(); }
-  function isObj(x){ return !!(x && typeof x === 'object' && !Array.isArray(x)); }
-  function clone(x){ try{ return JSON.parse(JSON.stringify(x)); }catch(e){ return Array.isArray(x)?[]:{}; } }
-  function now(){ return new Date().toISOString(); }
-  function status(text, cls){
-    window.EPP_RENTAL_FIREBASE_V848.status = text;
-    try{ if(window.EPP_RENTAL_FIREBASE){ window.EPP_RENTAL_FIREBASE.status=text; window.EPP_RENTAL_FIREBASE.version='v848'; } }catch(e){}
-    var el=E('eppFirebaseStatus'); if(el){ el.textContent=text; el.className='epp-fb-status '+(cls||''); }
-    try{ var b=E('syncBtn'); if(b){ b.textContent='Firebase: '+text; b.style.background = cls==='bad' ? '#dc2626' : (cls==='ok' ? '#2563eb' : ''); } }catch(e){}
-  }
-  function getState(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || {}; }
-  function setState(s){
-    try{ state = s; }catch(e){}
-    window.state = s;
-  }
-  function normalizeStatus(v){
-    var s=T(v||'Offerte');
-    var l=L(s);
-    if(!s) return 'Offerte';
-    if(l==='opdracht' || l==='bevestigd') return 'Opdrachtbevestiging';
-    if(l==='14 dagen optie' || l==='optie 14 dagen' || l==='optie14dagen') return 'optie 14 dagen';
-    if(l==='offerte') return 'Offerte';
-    return s;
-  }
-  function isOnlineOrderStatus(v){
-    return L(normalizeStatus(v)) !== 'offerte';
-  }
-  function orderNumberOf(o){ return T(o && (o.number || o.orderNumber || o.nr || o.id || o.orderNo)); }
-  function domOrderNumber(){ return T((E('orderNumber')||{}).value); }
-  function findStoredOrder(nr){
-    if(!nr) return null;
-    var s=getState();
-    var arr=Array.isArray(s.orders)?s.orders:[];
-    return arr.find(function(o){ return orderNumberOf(o)===nr; }) || null;
-  }
-  function preserveVisibleStoredStatus(){
-    var nr=domOrderNumber(); if(!nr) return;
-    var o=findStoredOrder(nr); if(!o) return;
-    var saved=normalizeStatus(o.status || o.orderStatus || o.state);
-    if(!saved || L(saved)==='offerte') return;
-    var el=E('orderStatus'); if(!el) return;
-    if(L(el.value)==='offerte' || !el.value){
-      el.value=saved;
-      try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
-    }
-  }
-  function stripLarge(x){
-    var big={photoData:1,photo:1,image:1,signatureData:1,signature:1,data:1,customerSignature:1};
-    function walk(o){
-      if(!o || typeof o!=='object') return;
-      if(Array.isArray(o)){ o.forEach(walk); return; }
-      Object.keys(o).forEach(function(k){
-        if(big[k] && String(o[k]||'').length>200){ delete o[k]; return; }
-        walk(o[k]);
-      });
-    }
-    walk(x); return x;
-  }
-  function cleanMaterial(m){
-    m=clone(m||{});
-    delete m.source; delete m.localSource; delete m.__source; delete m.firebaseStatus;
-    return stripLarge(m);
-  }
-  function cleanOrder(o){
-    o=clone(o||{});
-    var saved=normalizeStatus(o.status || o.orderStatus || o.state);
-    o.status=saved; o.orderStatus=saved;
-    delete o.source; delete o.localSource; delete o.__source; delete o.firebaseStatus;
-    return stripLarge(o);
-  }
-  function cleanSettings(st){
-    st=clone(st||{});
-    var out={};
-    ['catColors','categoryColors','dashboardLayout','theme','layout','driverReportTypes'].forEach(function(k){ if(st[k] != null) out[k]=st[k]; });
-    out.productName='Event Planner PRO Rental';
-    out.customerId='rental';
-    out.rentalClean=true;
-    out.firebaseProjectId=CONFIG.projectId;
-    return out;
-  }
-  function cleanStateForFirebase(raw){
-    raw = isObj(raw) ? raw : {};
-    var remote = isObj(raw.state) ? raw.state : raw;
-    var materials = Array.isArray(remote.materials) ? remote.materials : (Array.isArray(raw.materials) ? raw.materials : []);
-    var orders = Array.isArray(remote.orders) ? remote.orders : (Array.isArray(raw.orders) ? raw.orders : []);
-    var customers = Array.isArray(remote.customers) ? remote.customers : [];
-    var locations = Array.isArray(remote.locations) ? remote.locations : [];
-    var users = Array.isArray(remote.users) ? remote.users : [];
-    var alerts = Array.isArray(remote.alerts) ? remote.alerts : [];
-    var invoices = Array.isArray(remote.invoices) ? remote.invoices : [];
-    var settings = cleanSettings(remote.settings || raw.settings || {});
-    orders = orders.map(cleanOrder).filter(function(o){ return isOnlineOrderStatus(o.status || o.orderStatus); });
-    materials = materials.map(cleanMaterial).filter(function(m){ return Object.keys(m||{}).length>0; });
-    customers = customers.map(function(c){ c=clone(c||{}); delete c.source; return stripLarge(c); });
-    locations = locations.map(function(l){ l=clone(l||{}); delete l.source; return stripLarge(l); });
-    alerts = alerts.map(function(a){ a=clone(a||{}); delete a.source; return stripLarge(a); });
-    return {
-      version:'event-planner-pro-rental-v848-auto-pin',
-      seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || '1111') || '1111',
-      users: users,
-      materials: materials,
-      orders: orders,
-      customers: customers,
-      locations: locations,
-      alerts: alerts,
-      invoices: invoices,
-      settings: settings
-    };
-  }
-  function applyCleanRemote(remote){
-    var clean = cleanStateForFirebase(remote);
-    applyingRemote=true;
-    try{
-      var base = (typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : {};
-      if(base && base.settings){ base.settings.customerId='rental'; base.settings.productName='Event Planner PRO Rental'; }
-      var merged = Object.assign(base, clean);
-      setState(merged);
-      try{ if(typeof ensure === 'function') ensure(); }catch(e){}
-      try{ if(previousSave) previousSave(); }catch(e){}
-      try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
-      setTimeout(preserveVisibleStoredStatus,100);
-      setTimeout(preserveVisibleStoredStatus,500);
-    }finally{ applyingRemote=false; }
-  }
-  async function loadSdk(){
-    if(ready) return true;
-    status('SDK laden v848...', 'busy');
-    var appMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-app.js');
-    authMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-auth.js');
-    dbMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-database.js');
-    var existing=null;
-    try{ existing = appMod.getApps().find(function(a){ return a && a.name===APP_NAME; }); }catch(e){}
-    app = existing || appMod.initializeApp(CONFIG, APP_NAME);
-    auth = authMod.getAuth(app); db = dbMod.getDatabase(app);
-    try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
-    ready=true; return true;
-  }
-  async function uploadClean(reason){
-    if(!ready || !signedIn || !auth || !auth.currentUser || applyingRemote) return false;
-    preserveVisibleStoredStatus();
-    var payload = {
-      version:'v848', customerId:'rental', mode:'firebase-leading-anonymous-pin',
-      updatedAt:now(), updatedBy:(auth.currentUser && auth.currentUser.email)||'', reason:reason||'save',
-      state:cleanStateForFirebase(getState())
-    };
-    await dbMod.set(dbMod.ref(db, REMOTE_PATH), payload);
-    window.EPP_RENTAL_FIREBASE_V848.lastUpload=payload.updatedAt;
-    status('online opgeslagen v848', 'ok');
-    return true;
-  }
-  function scheduleUpload(reason){
-    if(!remoteReady || !signedIn || applyingRemote) return;
-    clearTimeout(uploadTimer);
-    uploadTimer=setTimeout(function(){ uploadClean(reason).catch(function(e){
-      var code=String((e&&e.code)||'geen-code'); var msg=String((e&&e.message)||e||'geen bericht');
-      window.EPP_RENTAL_FIREBASE_V848.lastError=code+' | '+msg;
-      status('opslaan fout: '+code,'bad'); console.warn('[EPP v848] upload fout',e);
-    }); }, 1400);
-  }
-  async function loadRemote(){
-    var snap = await dbMod.get(dbMod.ref(db, REMOTE_PATH));
-    remoteReady=true; window.EPP_RENTAL_FIREBASE_V848.remoteReady=true;
-    if(snap.exists()){
-      var payload=snap.val()||{};
-      var remoteState = isObj(payload.state) ? payload.state : payload;
-      applyCleanRemote(remoteState);
-      status('Firebase geladen v848', 'ok');
-      // Alleen schoon terugschrijven na laden, zodat oude items/source/debug verdwijnen.
-      scheduleUpload('clean-after-load');
-    }else{
-      status('Firebase leeg: eerste echte opslag vult online', 'busy');
-    }
-  }
-  async function login(){
-    var email=T((E('eppFbEmail')||{}).value).toLowerCase();
-    var pass=(E('eppFbPass')||{}).value || '';
-    if(!email || !pass){ alert('Vul e-mail en Firebase wachtwoord in.'); return false; }
-    try{
-      await loadSdk(); status('inloggen v848...', 'busy');
-      var cred=await authMod.signInWithEmailAndPassword(auth,email,pass);
-      signedIn=true; window.EPP_RENTAL_FIREBASE_V848.signedIn=true; window.EPP_RENTAL_FIREBASE_V848.email=email; window.EPP_RENTAL_FIREBASE_V848.uid=cred&&cred.user&&cred.user.uid;
-      status('ingelogd v848: Firebase laden...', 'busy');
-      await loadRemote();
-      return true;
-    }catch(e){
-      var code=String((e&&e.code)||'geen-code'); var msg=String((e&&e.message)||e||'geen bericht');
-      window.EPP_RENTAL_FIREBASE_V848.lastError=code+' | '+msg;
-      status('login fout: '+code,'bad');
-      alert('Firebase login fout v848\n\nCode: '+code+'\n\nBericht: '+msg+'\n\nProject: '+CONFIG.projectId+'\nDatabase: '+CONFIG.databaseURL);
-      return false;
-    }
-  }
-  function installSaveHook(){
-    if(window.__EPP_RENTAL_V846_SAVE_HOOK__) return;
-    window.__EPP_RENTAL_V846_SAVE_HOOK__=true;
-    if(typeof save === 'function') previousSave = save;
-    if(previousSave){
-      save = function(){
-        preserveVisibleStoredStatus();
-        var r=previousSave.apply(this, arguments);
-        setTimeout(preserveVisibleStoredStatus,50);
-        scheduleUpload('save');
-        return r;
-      };
-    }
-  }
-  function cleanVisible(){
-    try{ document.title='Event Planner PRO Rental'; }catch(e){}
-    try{
-      Array.prototype.slice.call(document.querySelectorAll('h1,h2,.brand,.app-title,.title')).forEach(function(el){
-        if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental');
-      });
-    }catch(e){}
-    try{
-      if(typeof INITIAL_STATE !== 'undefined' && INITIAL_STATE && INITIAL_STATE.settings){
-        INITIAL_STATE.settings.customerId='rental'; INITIAL_STATE.settings.productName='Event Planner PRO Rental'; delete INITIAL_STATE.settings.source;
-      }
-    }catch(e){}
-  }
-  function autoStartFirebaseSession(){
-    if(window.__EPP_RENTAL_V848_AUTO_STARTED__) return;
-    window.__EPP_RENTAL_V848_AUTO_STARTED__ = true;
-    (async function(){
-      try{
-        await loadSdk();
-        status('Firebase automatisch verbinden...', 'busy');
-        if(auth.currentUser){
-          signedIn=true;
-          window.EPP_RENTAL_FIREBASE_V848.signedIn=true;
-          window.EPP_RENTAL_FIREBASE_V848.email=auth.currentUser.email||'';
-          window.EPP_RENTAL_FIREBASE_V848.uid=auth.currentUser.uid||'';
-          await loadRemote();
-          return;
-        }
-        authMod.onAuthStateChanged(auth, async function(user){
-          if(user && !signedIn){
-            signedIn=true;
-            window.EPP_RENTAL_FIREBASE_V848.signedIn=true;
-            window.EPP_RENTAL_FIREBASE_V848.email=user.email||'';
-            window.EPP_RENTAL_FIREBASE_V848.uid=user.uid||'';
-            status('Firebase sessie gevonden: laden...', 'busy');
-            try{ await loadRemote(); }catch(e){ status('Firebase laden fout', 'bad'); console.warn('[EPP v848] loadRemote fout', e); }
-          }else if(!user && !signedIn){
-            status('Firebase anoniem verbinden...', 'busy');
-            try{
-              await authMod.signInAnonymously(auth);
-            }catch(e){
-              var code=String((e&&e.code)||'geen-code');
-              window.EPP_RENTAL_FIREBASE_V848.lastError=code+' | '+String((e&&e.message)||e||'');
-              status('Firebase anoniem fout: '+code, 'bad');
-              console.warn('[EPP v848] Anonymous Auth staat mogelijk nog niet aan in Firebase.', e);
-            }
-          }
-        });
-      }catch(e){
-        var code=String((e&&e.code)||'geen-code');
-        window.EPP_RENTAL_FIREBASE_V848.lastError=code+' | '+String((e&&e.message)||e||'');
-        status('Firebase auto fout: '+code, 'bad');
-        console.warn('[EPP v848] auto firebase fout', e);
-      }
-    })();
-  }
-  function installPanel(){
-    var card=document.querySelector('#login .login-card') || E('login');
-    if(card){
-      var sub=card.querySelector('p');
-      if(sub) sub.textContent='Powered by tapwagen.nl';
-    }
-    var box=E('eppFirebaseLoginBox');
-    if(!box && card){ box=document.createElement('div'); box.id='eppFirebaseLoginBox'; card.appendChild(box); }
-    if(box){
-      box.innerHTML='<div id="eppFirebaseStatus" class="epp-fb-status" style="display:none">Firebase automatisch</div>';
-      box.style.display='none';
-    }
-    autoStartFirebaseSession();
-  }
-  function installStatusButton(){
-    var b=E('syncBtn');
-    if(b) b.onclick=function(){ alert('Firebase v848\nStatus: '+(window.EPP_RENTAL_FIREBASE_V848.status||'onbekend')+'\nLaatste online opslag: '+(window.EPP_RENTAL_FIREBASE_V848.lastUpload||'nog niet')+'\nPad: '+REMOTE_PATH); };
-  }
-  function installStatusPreserver(){
-    document.addEventListener('click',function(ev){
-      var t=ev.target; if(!t) return;
-      var txt=L((t.textContent||'')+' '+(t.id||''));
-      if(/wijzig|bewerk|open|opslaan|overzicht|opdracht/.test(txt)){
-        setTimeout(preserveVisibleStoredStatus,60);
-        setTimeout(preserveVisibleStoredStatus,350);
-        setTimeout(preserveVisibleStoredStatus,900);
-      }
-    },true);
-    ['change','input'].forEach(function(evName){
-      document.addEventListener(evName,function(ev){ if(ev.target && ev.target.id==='orderNumber') setTimeout(preserveVisibleStoredStatus,30); },true);
-    });
-    setInterval(function(){ try{ preserveVisibleStoredStatus(); cleanVisible(); }catch(e){} }, 2500);
-  }
-  function boot(){ installSaveHook(); installPanel(); installStatusButton(); installStatusPreserver(); cleanVisible(); }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,500); setTimeout(boot,1600); });
-  else { setTimeout(boot,500); setTimeout(boot,1600); }
-})();
-
+// ===== EPP RENTAL v849: oude vaste rental Firebase-lagen uitgeschakeld =====
+// V849 gebruikt klantcode -> customers/{customerId}/... en laadt pas na geldige klant/licentie.
 
 // ===== EPP RENTAL v848: UI opschonen login =====
 (function(){
@@ -46411,4 +45536,378 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setInterval(cleanLogin,1000); cleanLogin(); });
   else { setInterval(cleanLogin,1000); cleanLogin(); }
+})();
+
+/* =========================================================
+   EPP RENTAL v849 - klantcode, licentie, mastercode, backup
+   Eén basisprogramma via GitHub URL. Data strikt onder customers/{customerId}.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__EPP_RENTAL_V849_CUSTOMER_LAYER__) return;
+  window.__EPP_RENTAL_V849_CUSTOMER_LAYER__ = true;
+
+  var FIREBASE_VERSION = '10.12.5';
+  var APP_NAME = 'epp-rental-v849-main';
+  var CONFIG = Object.freeze({
+    apiKey: 'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId: '484128911122',
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
+  });
+
+  var MASTER_PIN_FALLBACK = '9119';
+  var app=null, auth=null, db=null, authMod=null, dbMod=null, ready=false, signedIn=false;
+  var selectedCustomerId = '';
+  var selectedCode = '';
+  var selectedLicense = null;
+  var remoteReady = false;
+  var applyingRemote = false;
+  var uploadTimer = null;
+  var previousSave = (typeof save === 'function') ? save : null;
+  var originalDoLogin = (typeof doLogin === 'function') ? doLogin : null;
+
+  window.EPP_V849 = {
+    version:'v849',
+    mode:'customer-code-license',
+    customerId:null,
+    customerCode:null,
+    remotePath:null,
+    licensePath:null,
+    signedIn:false,
+    remoteReady:false,
+    lastUpload:null,
+    lastError:null,
+    firebaseProjectId:CONFIG.projectId
+  };
+
+  function E(id){ return document.getElementById(id); }
+  function S(v){ return String(v == null ? '' : v).trim(); }
+  function lower(v){ return S(v).toLowerCase(); }
+  function todayYmd(){
+    var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function addDaysYmd(days){
+    var d=new Date(); d.setDate(d.getDate()+Number(days||0)); d.setMinutes(d.getMinutes()-d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function ymdToDate(v){
+    var s=S(v); if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    var p=s.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]);
+  }
+  function daysLeft(validUntil){
+    var end=ymdToDate(validUntil); if(!end) return null;
+    var now=ymdToDate(todayYmd());
+    return Math.ceil((end.getTime()-now.getTime())/86400000);
+  }
+  function toast(t){ try{ if(typeof toastMsg==='function') return toastMsg(t); }catch(e){} alert(t); }
+  function safeId(name){
+    return lower(name).replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60) || 'klant';
+  }
+  function clone(x){ try{return JSON.parse(JSON.stringify(x));}catch(e){return {};}}
+  function getAppState(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || {}; }
+  function setAppState(s){ try{ state=s; }catch(e){} window.state=s; }
+  function remotePath(){ return 'customers/'+selectedCustomerId+'/appState'; }
+  function licensePath(){ return 'customers/'+selectedCustomerId+'/license'; }
+  function customerRoot(){ return 'customers/'+selectedCustomerId; }
+  function platformMasterPath(){ return 'platform/masterPin'; }
+  function stripLarge(x){
+    var big={photoData:1,photo:1,image:1,signatureData:1,signature:1,data:1,customerSignature:1};
+    function walk(o){
+      if(!o || typeof o!=='object') return;
+      if(Array.isArray(o)){ o.forEach(walk); return; }
+      Object.keys(o).forEach(function(k){
+        if(big[k] && String(o[k]||'').length>200){ delete o[k]; return; }
+        walk(o[k]);
+      });
+    }
+    walk(x); return x;
+  }
+  function cleanState(raw){
+    var s=clone(raw||{});
+    s.version='event-planner-pro-rental-v849';
+    s.settings=s.settings||{};
+    s.settings.productName='Event Planner PRO Rental';
+    s.settings.customerId=selectedCustomerId || s.settings.customerId || 'unknown';
+    s.settings.customerCode=selectedCode || s.settings.customerCode || '';
+    s.settings.firebaseProjectId=CONFIG.projectId;
+    s.settings.rentalClean=true;
+    ['orders','materials','users','customers','locations','alerts','invoices'].forEach(function(k){ if(!Array.isArray(s[k])) s[k]=[]; });
+    if(!s.adminPin) s.adminPin='1111';
+    return stripLarge(s);
+  }
+  async function loadSdk(){
+    if(ready) return true;
+    setStatus('Firebase laden...', 'busy');
+    var appMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-app.js');
+    authMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-auth.js');
+    dbMod = await import('https://www.gstatic.com/firebasejs/'+FIREBASE_VERSION+'/firebase-database.js');
+    var existing=null;
+    try{ existing=appMod.getApps().find(function(a){ return a && a.name===APP_NAME; }); }catch(e){}
+    app = existing || appMod.initializeApp(CONFIG, APP_NAME);
+    auth = authMod.getAuth(app);
+    db = dbMod.getDatabase(app);
+    try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
+    ready=true;
+    return true;
+  }
+  async function ensureSignedIn(){
+    await loadSdk();
+    if(auth.currentUser){ signedIn=true; window.EPP_V849.signedIn=true; return true; }
+    await authMod.signInAnonymously(auth);
+    signedIn=true; window.EPP_V849.signedIn=true;
+    return true;
+  }
+  function setStatus(txt, cls){
+    window.EPP_V849.status=txt;
+    var b=E('syncBtn');
+    if(b){ b.textContent='Firebase: '+txt; b.style.background = cls==='bad' ? '#dc2626' : (cls==='ok' ? '#2563eb' : ''); }
+    var el=E('eppV849Status'); if(el){ el.textContent=txt; el.className='epp-v849-status '+(cls||''); }
+  }
+  async function read(path){
+    var snap=await dbMod.get(dbMod.ref(db,path));
+    return snap.exists()?snap.val():null;
+  }
+  async function write(path,val){ return dbMod.set(dbMod.ref(db,path), val); }
+  async function update(path,val){ return dbMod.update(dbMod.ref(db,path), val); }
+
+  async function resolveCustomerCode(code){
+    code=safeId(code);
+    if(!code) throw new Error('Vul eerst een klantcode in.');
+    await ensureSignedIn();
+    var access=await read('customerAccessCodes/'+code);
+    if(!access){
+      // v13: voor losse klant-repo mag de klantcode gelijk zijn aan customerId.
+      // Zo werkt Amsterdam verhuur zonder extra customerAccessCodes setup.
+      access={customerId:code,active:true,createdAt:new Date().toISOString(),autoResolved:true};
+    }
+    if(access.active===false) throw new Error('Deze klantcode staat uit. Neem contact op.');
+    var cid=safeId(access.customerId || code);
+    if(!cid) throw new Error('Deze klantcode heeft geen geldige customerId.');
+    selectedCode=code; selectedCustomerId=cid;
+    window.EPP_V849.customerId=cid; window.EPP_V849.customerCode=code; window.EPP_V849.remotePath='customers/'+cid+'/appState'; window.EPP_V849.licensePath='customers/'+cid+'/license';
+    return cid;
+  }
+  function licenseResult(lic){
+    lic=lic||{};
+    if(lic.active===false) return {ok:false, msg:'Uw licentie is niet actief. Neem contact op.'};
+    if(/blocked|geblokkeerd/i.test(S(lic.status))) return {ok:false, msg:'Uw licentie is geblokkeerd. Neem contact op.'};
+    var left=daysLeft(lic.validUntil || lic.endDate || lic.paidUntil);
+    if(left !== null && left < 0) return {ok:false, expired:true, msg:'Uw licentie is verlopen. Neem contact op.'};
+    return {ok:true, days:left};
+  }
+  async function ensureLicense(){
+    var lic=await read(licensePath());
+    if(!lic && selectedCustomerId==='rental'){
+      lic={active:true,status:'active',validFrom:todayYmd(),validUntil:addDaysYmd(14),warningDays:5,contactText:'Uw licentie verloopt binnenkort. Neem contact op.',autoCreated:true};
+      await write(licensePath(), lic);
+    }
+    if(!lic) throw new Error('Voor deze klant bestaat nog geen licentie. Maak de klant/licentie eerst aan in admin-beheer.html.');
+    selectedLicense=lic;
+    var r=licenseResult(lic);
+    if(!r.ok) throw new Error(r.msg);
+    return lic;
+  }
+  async function loadRemoteState(){
+    var payload=await read(remotePath());
+    remoteReady=true; window.EPP_V849.remoteReady=true;
+    if(payload){
+      var remoteState = payload.state && typeof payload.state==='object' ? payload.state : payload;
+      applyingRemote=true;
+      try{
+        var base = (typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : {};
+        var merged = Object.assign(base, cleanState(remoteState));
+        setAppState(merged);
+        try{ if(typeof ensure==='function') ensure(); }catch(e){}
+        try{ if(previousSave) previousSave(); }catch(e){}
+        try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+      }finally{ applyingRemote=false; }
+      setStatus('klant geladen: '+selectedCustomerId, 'ok');
+    }else{
+      var s=cleanState((typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : getAppState());
+      setAppState(s);
+      await uploadNow('eerste klant-start');
+      setStatus('nieuwe klantomgeving gestart: '+selectedCustomerId, 'ok');
+    }
+  }
+  async function uploadNow(reason){
+    if(!ready || !signedIn || !selectedCustomerId || applyingRemote) return false;
+    var payload={version:'v849',mode:'customer-code-license',customerId:selectedCustomerId,customerCode:selectedCode,updatedAt:new Date().toISOString(),reason:reason||'save',state:cleanState(getAppState())};
+    await write(remotePath(), payload);
+    window.EPP_V849.lastUpload=payload.updatedAt;
+    setStatus('online opgeslagen', 'ok');
+    return true;
+  }
+  function scheduleUpload(reason){
+    if(!remoteReady || !selectedCustomerId || applyingRemote) return;
+    clearTimeout(uploadTimer);
+    uploadTimer=setTimeout(function(){ uploadNow(reason).catch(function(e){ window.EPP_V849.lastError=String(e&&e.message||e); setStatus('opslaan fout', 'bad'); console.warn('[EPP v849] opslaan fout',e); }); }, 900);
+  }
+  function hookSave(){
+    if(window.__EPP_V849_SAVE_HOOK__) return;
+    window.__EPP_V849_SAVE_HOOK__=true;
+    if(typeof save==='function') previousSave=save;
+    if(previousSave){
+      save=function(){ var r=previousSave.apply(this, arguments); scheduleUpload('save'); return r; };
+    }
+  }
+
+  function showLicenseWarning(){
+    var lic=selectedLicense||{};
+    var left=daysLeft(lic.validUntil || lic.endDate || lic.paidUntil);
+    var warn=Number(lic.warningDays==null?5:lic.warningDays);
+    var until=S(lic.validUntil || lic.endDate || lic.paidUntil);
+    if(left !== null && left >=0 && left <= warn){
+      setTimeout(function(){ alert((lic.contactText||'Uw licentie verloopt binnenkort. Neem contact op.')+'\n\nLicentie geldig tot: '+until+'\nNog '+left+' dag(en).'); }, 500);
+    }
+  }
+  function showSetupIfNeeded(){
+    var s=getAppState(); s.settings=s.settings||{};
+    if(s.settings.setupCompleted) return;
+    var old=E('eppSetupModal'); if(old) old.remove();
+    var div=document.createElement('div');
+    div.id='eppSetupModal';
+    div.innerHTML='<div class="epp-v849-modal-card"><h2>Werkplek inrichten</h2><p>Vul de basisgegevens van deze klantomgeving in.</p><label>Bedrijfsnaam<input id="eppSetupCompany" value="'+escapeHtml(s.settings.companyName||'')+'"></label><label><input id="eppSetupPlanPhone" type="checkbox" checked> Plan telefoon gebruiken</label><label><input id="eppSetupDeliveryPhone" type="checkbox" checked> Bezorg telefoon gebruiken</label><label><input id="eppSetupLaptop" type="checkbox" checked> Laptop gebruiken</label><button id="eppSetupSave">Werkplek opslaan</button></div>';
+    document.body.appendChild(div);
+    E('eppSetupSave').onclick=function(){
+      s.settings.companyName=S(E('eppSetupCompany').value);
+      s.settings.devices={planningPhone:E('eppSetupPlanPhone').checked,deliveryPhone:E('eppSetupDeliveryPhone').checked,laptop:E('eppSetupLaptop').checked};
+      s.settings.setupCompleted=true;
+      try{ if(typeof save==='function') save(); }catch(e){}
+      div.remove(); toast('Werkplek opgeslagen');
+    };
+  }
+  function escapeHtml(v){ return S(v).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function openApplication(currentUser){
+    try{ user=currentUser; }catch(e){ window.user=currentUser; }
+    var login=E('login'), appEl=E('app');
+    if(login) login.classList.add('hidden');
+    if(appEl) appEl.classList.remove('hidden');
+    try{ document.querySelectorAll('.admin-only').forEach(function(x){ x.style.display=currentUser.role==='Admin'?'':'none'; }); }catch(e){}
+    try{ if(typeof showPage==='function') showPage('dashboard'); }catch(e){}
+    showLicenseWarning();
+    showSetupIfNeeded();
+  }
+  function isMasterPin(p){
+    var master=(window.EPP_V849 && window.EPP_V849.masterPin) || MASTER_PIN_FALLBACK;
+    return S(p) === S(master);
+  }
+  async function loadMasterPin(){
+    try{
+      var p=await read(platformMasterPath());
+      if(p) window.EPP_V849.masterPin=S(p);
+      else window.EPP_V849.masterPin=MASTER_PIN_FALLBACK;
+    }catch(e){ window.EPP_V849.masterPin=MASTER_PIN_FALLBACK; }
+  }
+  function overrideLogin(){
+    doLogin=function(){
+      var p=''; try{ p=pin; }catch(e){ p=''; }
+      if(!selectedCustomerId || !remoteReady){
+        toast('Vul eerst de klantcode in en laad de klantomgeving.');
+        try{ pin=''; if(E('pinView')) E('pinView').textContent='- - - -'; }catch(e){}
+        return;
+      }
+      var s=getAppState(); s.users=s.users||[];
+      var u=(s.users||[]).find(function(x){ return S(x.pin)===S(p); });
+      if(!u && (isMasterPin(p) || S(p)===S(s.adminPin||'9119') || (s.users.length===0 && S(p)==='9119'))){
+        u={id:'master-admin',name:'Master beheer',role:'Admin',pin:'****',master:true};
+      }
+      if(!u){
+        toast('Verkeerde PIN');
+        try{ pin=''; if(E('pinView')) E('pinView').textContent='- - - -'; }catch(e){}
+        return;
+      }
+      if(lower(u.role)==='bezorger'){
+        toast('Bezorger: gebruik de bezorgtelefoon');
+        try{ pin=''; if(E('pinView')) E('pinView').textContent='- - - -'; }catch(e){}
+        return;
+      }
+      openApplication(u);
+    };
+  }
+  function installCustomerCodeBox(){
+    var card=document.querySelector('#login .login-card') || E('login');
+    if(!card || E('eppCustomerCodeBox')) return;
+    var box=document.createElement('div');
+    box.id='eppCustomerCodeBox';
+    box.innerHTML='<div class="epp-v849-title">Klantomgeving</div><input id="eppCustomerCode" autocomplete="organization" placeholder="Klantcode"><button id="eppLoadCustomer" type="button">Klant laden</button><div id="eppV849Status" class="epp-v849-status">Vul klantcode in</div><small>Daarna logt u in met uw PIN.</small>';
+    var pinView=E('pinView');
+    if(pinView && pinView.parentNode) pinView.parentNode.insertBefore(box, pinView);
+    else card.appendChild(box);
+    var urlCode=''; try{ urlCode=new URLSearchParams(location.search).get('code') || new URLSearchParams(location.search).get('customer') || ''; }catch(e){}
+    var saved=urlCode || localStorage.getItem('epp-v849-last-code') || 'amsterdam-verhuur';
+    if(saved) E('eppCustomerCode').value=saved;
+    E('eppLoadCustomer').onclick=function(){ startCustomer(E('eppCustomerCode').value); };
+    E('eppCustomerCode').addEventListener('keydown',function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); startCustomer(E('eppCustomerCode').value); } });
+    setPinEnabled(false);
+    if(saved) setTimeout(function(){ startCustomer(saved, true); }, 600);
+  }
+  function setPinEnabled(on){
+    var grid=document.querySelector('.pin-grid');
+    if(grid){ grid.style.opacity=on?'1':'.35'; grid.style.pointerEvents=on?'auto':'none'; }
+    var sm=document.querySelector('#login small'); if(sm) sm.textContent=on?'Voer uw pincode in':'Vul eerst uw klantcode in';
+  }
+  async function startCustomer(code, silent){
+    try{
+      setPinEnabled(false); setStatus('klantcode controleren...', 'busy');
+      await resolveCustomerCode(code);
+      await loadMasterPin();
+      await ensureLicense();
+      await loadRemoteState();
+      localStorage.setItem('epp-v849-last-code', selectedCode);
+      setPinEnabled(true);
+      if(!silent) toast('Klantomgeving geladen: '+selectedCustomerId);
+    }catch(e){
+      setPinEnabled(false); setStatus('klant laden fout', 'bad');
+      if(!silent) alert(e && e.message ? e.message : String(e));
+      console.warn('[EPP v849] klant laden fout', e);
+    }
+  }
+  function installBackupButtons(){
+    if(E('eppV849BackupBar')) return;
+    var top=document.querySelector('.top') || document.querySelector('main header');
+    if(!top) return;
+    var wrap=document.createElement('div'); wrap.id='eppV849BackupBar';
+    wrap.innerHTML='<button id="eppBackupDownload" type="button">Backup downloaden</button><button id="eppBackupOnline" type="button">Backup online</button>';
+    top.appendChild(wrap);
+    E('eppBackupDownload').onclick=function(){
+      var data={version:'v849-backup',customerId:selectedCustomerId,createdAt:new Date().toISOString(),state:cleanState(getAppState())};
+      var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='event-planner-backup-'+(selectedCustomerId||'klant')+'-'+todayYmd()+'.json'; a.click(); setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
+    };
+    E('eppBackupOnline').onclick=async function(){
+      if(!selectedCustomerId) return alert('Geen klant geladen.');
+      try{
+        await ensureSignedIn();
+        var key=new Date().toISOString().replace(/[:.]/g,'-');
+        await write(customerRoot()+'/backups/'+key,{createdAt:new Date().toISOString(),createdBy:'app',state:cleanState(getAppState())});
+        alert('Backup online gemaakt voor '+selectedCustomerId+'.');
+      }catch(e){ alert('Backup fout: '+(e&&e.message?e.message:e)); }
+    };
+  }
+  function installDevToolsBrake(){
+    document.addEventListener('contextmenu',function(e){ e.preventDefault(); toast('Rechtermuisknop is uitgeschakeld.'); }, true);
+    document.addEventListener('keydown',function(e){
+      var k=String(e.key||'').toUpperCase();
+      if(k==='F12' || (e.ctrlKey&&e.shiftKey&&['I','J','C'].indexOf(k)>=0) || (e.ctrlKey&&k==='U')){
+        e.preventDefault(); e.stopPropagation(); toast('Inspecteren is uitgeschakeld.'); return false;
+      }
+    }, true);
+  }
+  function installStyle(){
+    if(E('eppV849Style')) return;
+    var st=document.createElement('style'); st.id='eppV849Style';
+    st.textContent='#eppCustomerCodeBox{margin:12px 0;padding:12px;border:1px solid rgba(255,255,255,.28);border-radius:16px;background:rgba(255,255,255,.08);display:grid;gap:8px}#eppCustomerCodeBox input{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid #cbd5e1;padding:12px;font-size:16px}#eppCustomerCodeBox button,#eppV849BackupBar button{border:0;border-radius:12px;padding:10px 12px;font-weight:900;cursor:pointer;background:#2563eb;color:#fff}.epp-v849-title{font-weight:900}.epp-v849-status{font-size:12px;font-weight:900}.epp-v849-status.ok{color:#22c55e}.epp-v849-status.bad{color:#ef4444}.epp-v849-status.busy{color:#f59e0b}#eppV849BackupBar{display:flex;gap:8px;flex-wrap:wrap}#eppSetupModal{position:fixed;inset:0;background:rgba(15,23,42,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:18px}.epp-v849-modal-card{background:#fff;color:#0f172a;border-radius:22px;max-width:460px;width:100%;padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.35)}.epp-v849-modal-card label{display:block;margin:10px 0;font-weight:800}.epp-v849-modal-card input[type=text],.epp-v849-modal-card input:not([type]){width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:12px;padding:12px}.epp-v849-modal-card button{width:100%;border:0;border-radius:14px;background:#2563eb;color:#fff;font-weight:900;padding:14px;margin-top:10px}';
+    document.head.appendChild(st);
+  }
+  function boot(){
+    hookSave(); overrideLogin(); installStyle(); installCustomerCodeBox(); installBackupButtons(); installDevToolsBrake();
+    var b=E('syncBtn'); if(b) b.onclick=function(){ alert('Event Planner PRO Amsterdam Verhuur v13 - PIN 3330 master 9119\nKlant: '+(selectedCustomerId||'nog niet geladen')+'\nPad: '+(selectedCustomerId?remotePath():'-')+'\nLaatste opslag: '+(window.EPP_V849.lastUpload||'nog niet')+'\nStatus: '+(window.EPP_V849.status||'onbekend')); };
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,300); setTimeout(boot,1400); });
+  else { setTimeout(boot,300); setTimeout(boot,1400); }
 })();
