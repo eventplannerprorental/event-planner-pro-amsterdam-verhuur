@@ -3,7 +3,7 @@
  <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1" name="viewport"/>
-  <title>Event Planner PRO Amsterdam Verhuur</title>
+  <title>Event Planner PRO Amsterdam verhuur</title>
   <link href="styles.css" rel="stylesheet"/>
   <link href="material-fix.css" rel="stylesheet"/>
  </head>
@@ -14,7 +14,7 @@
    <div class="login-card">
     <div class="lock">🔐</div>
     <h1>EVENT PLANNER PRO</h1>
-    <p>Amsterdam verhuur · Powered by Tapwagen.nl</p>
+    <p>Powered by tapwagen.nl</p>
     <div class="pin-view" id="pinView">- - - -</div>
     <div class="pin-grid">
      <button data-pin="1">1</button>
@@ -380,21 +380,12 @@
    </div>
   </div>
 
-  <!--
-    SCRIPT VOLGORDE — DIT MAG NIET VERANDERD WORDEN:
-    1. bns-preloader   — patchts MutationObserver + alert/confirm VOOR app.js
-    2. app.js          — hoofdapplicatie
-    3. material-fix.js — materiaalweergave fix (was eerder niet geladen!)
-    4. firebase-config — Firebase sleutels
-    5. firebase-sync   — Firebase synchronisatie
-    6. bns-stabilizer  — opruimen na alles: Wis knop, boekhouding mappen, intervals
-  -->
-<script src="customer-config.js?v=20"></script>
-<script src="firebase-config.js?v=20"></script>
-<script src="license-guard.js?v=20"></script>
-<script src="app.js?v=20"></script>
-  <!-- v840: Firebase RTDB/Auth zit veilig in app.js via EPP-config; oude BNS_FIREBASE_CONFIG blijft geblokkeerd. -->
-  <!-- v840: firebase-sync.js blijft UIT om oude Firestore-sync niet te starten. -->
+  <!-- Amsterdam klant-build v14: vaste klantconfig voor app.js -->
+  <script src="customer-config.js?v=14"></script>
+  <script src="firebase-config.js?v=14"></script>
+  <script src="license-guard.js?v=14"></script>
+  <script src="bns-preloader.js?v=14"></script>
+  <script src="app.js?v=14_amsterdam_clean"></script>
 
  </body>
 </html>

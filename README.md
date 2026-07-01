@@ -1,53 +1,15 @@
-# Event Planner PRO Rental v849
+Event Planner PRO Amsterdam verhuur v14
 
-Deze versie gebruikt de bestaande GitHub Pages URL als basisprogramma voor alle klanten.
+Gebaseerd op de werkende rental app, maar met vaste Amsterdam klantconfig.
 
-## Nieuw in v849
+Klant:
+- customerId: amsterdam-verhuur
+- Firebase project: epp-amsterdam-verhuur
+- Database: https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app
+- Hoofd PIN: 3330
+- Mastercode: 9119
 
-- Klantcode-scherm vóór de PIN.
-- Data onder `customers/{customerId}/appState`.
-- Licentiecontrole met `validFrom`, `validUntil`, `status` en `warningDays`.
-- Popup wanneer licentie bijna verloopt.
-- Blokkade wanneer licentie verlopen/geblokkeerd is.
-- Mastercode-login voor beheer/noodgeval.
-- Werkplek-inrichting bij eerste start.
-- Backup downloaden en online backup maken.
-- Extra beheerpagina: `admin-beheer.html`.
-- Basis F12/rechtermuisknop-rem. Let op: dit is geen echte beveiliging.
+Upload alle bestanden naar GitHub repo event-planner-pro-amsterdam-verhuur.
+Daarna openen met ?v=14 of hoger en Ctrl+F5.
 
-## Testlink
-
-Na upload naar GitHub Pages kun je testen met:
-
-```text
-https://eventplannerprorental.github.io/event-planner-pro-rental/?code=rental
-```
-
-De code `rental` wordt automatisch aangemaakt als die nog niet bestaat.
-
-## Beheer-app
-
-Open na upload:
-
-```text
-https://eventplannerprorental.github.io/event-planner-pro-rental/admin-beheer.html
-```
-
-Tijdelijke mastercode:
-
-```text
-9119
-```
-
-Zet in Firebase later eventueel een andere mastercode op:
-
-```text
-platform/masterPin
-```
-
-## Firebase
-
-Anonymous Auth moet aan staan.
-Realtime Database wordt gebruikt.
-
-Belangrijk: voor echte klanten moeten Firebase Rules nog strakker worden gemaakt.
+Let op: Firebase Authentication Anonymous moet aan staan.
