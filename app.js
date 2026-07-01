@@ -1,4 +1,4 @@
-// ===== EPP AMSTERDAM VERHUUR v14: klantconfig uit customer-config.js =====
+// ===== EPP AMSTERDAM VERHUUR v16: klantconfig uit customer-config.js =====
 (function(){
   var cfg = window.EVENT_PLANNER_CUSTOMER || window.EPP_CUSTOMER_CONFIG || {};
   var fb = cfg.firebaseConfig || {
@@ -782,7 +782,7 @@ function renderAll(){
 }
 function bindAdmin(){
   unlockAdmin.onclick=()=>{
-    if(adminPin.value===state.adminPin||adminPin.value==='1111')adminArea.classList.remove('hidden');
+    if(adminPin.value===state.adminPin)adminArea.classList.remove('hidden');
     else toastMsg('Verkeerde PIN')
   };
   document.querySelectorAll('.adminTab').forEach(b=>b.onclick=()=>{
@@ -1098,7 +1098,7 @@ setTimeout(()=>{
   const ua=document.getElementById('unlockAdmin');
   if(ua) ua.onclick=()=>{
     const pinVal=(document.getElementById('adminPin')?.value||'').trim();
-    if(pinVal === (state.adminPin || '1111') || pinVal === '1111'){
+    if(pinVal === (state.adminPin || '9119')){
       document.getElementById('adminArea')?.classList.remove('hidden');
       alert('Admin beheer geopend');
     } else {
@@ -5364,10 +5364,8 @@ setTimeout(()=>{
       alert("Vul naam en PIN in.");
       return;
     }
-    let user = selectedUserId ? s.users.find(u => String(u.id) === String(selectedUserId)) : null;
-    if (!user) {
-      user = s.users.find(u => String(u.pin) === userPin);
-    }
+    let user = null;
+    user = s.users.find(u => String(u.pin) === userPin);
     if (!user) {
       user = {
         id:makeId(), name:userName, pin:userPin, role:userRole, phone:"", rights:{
@@ -20041,10 +20039,8 @@ setTimeout(()=>{
       alert("Vul naam en PIN in.");
       return false;
     }
-    var user = selectedUserId ? s.users.find(function(u){
-      return String(u.id) === String(selectedUserId);
-    }) : null;
-    if (!user) user = s.users.find(function(u){
+    var user = null;
+    user = s.users.find(function(u){
       return String(u.pin) === String(d.pin);
     });
     if (!user) {
@@ -22500,13 +22496,6 @@ setTimeout(()=>{
     if(!u && p && T(S().adminPin) && p===T(S().adminPin)) u=us.find(function(x){
       return L(x.role)==='admin';
     });
-    if(!u && p==='1111') u=us.find(function(x){
-      return L(x.role)==='admin';
-    }) || {
-      id:'u_admin',name:'Admin',pin:'1111',role:'Admin',rights:{
-        prices:true,agenda:true,gps:true,resolve:true
-      }
-    };
     if(!u){
       toast('Verkeerde PIN');
       try{
@@ -23091,7 +23080,6 @@ setTimeout(()=>{
     p=T(p);
     if(!p) return false;
     var s=S();
-    if(p==='1111') return true;
     if(T(s.adminPin) && p===T(s.adminPin)) return true;
     return !!users().find(function(u){
       return L(u.role)==='admin' && T(u.pin)===p && !u.deleted;
@@ -23152,7 +23140,7 @@ setTimeout(()=>{
     if(adminPinOk(p)) u=users().find(function(x){
       return L(x.role)==='admin';
     }) || {
-      id:'u_admin',name:'Admin',pin:'1111',role:'Admin',rights:{
+      id:'u_admin',name:'Admin',pin:(window.EPP_MASTER_PIN||'9119'),role:'Admin',rights:{
         prices:true,agenda:true,gps:true,resolve:true
       }
     };
@@ -46212,7 +46200,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return {
       version:'event-planner-pro-rental-v848-auto-pin',
       seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || '1111') || '1111',
+      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || '9119') || '9119',
       users: users,
       materials: materials,
       orders: orders,
