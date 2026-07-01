@@ -6,7 +6,7 @@
   window.__EPP_RENTAL_LOCAL_STRICT_V828__ = true;
   window.EVENT_PLANNER_CONFIG = Object.freeze({
     mode: 'customer-firebase-rtdb-test',
-    appName: 'Event Planner PRO Amsterdam',
+    appName: 'Event Planner PRO Rental',
     customerId: 'amsterdam-verhuur',
     storageKey: 'event-planner-pro-amsterdam-verhuur-v1',
     firebaseEnabled: true,
@@ -139,8 +139,8 @@
         console.info('[BNS] localStorage vol: base64 gestript voor', key);
       }catch(e2){
         // Nog steeds vol - verwijder oude backups en probeer minimaal
-        try{ localStorage.removeItem('event-planner-pro-rental-v1'); }catch(_){}
-        try{ localStorage.removeItem('event-planner-pro-rental-v1-date'); }catch(_){}
+        try{ localStorage.removeItem('event-planner-pro-amsterdam-verhuur-v1'); }catch(_){}
+        try{ localStorage.removeItem('event-planner-pro-amsterdam-verhuur-v1-date'); }catch(_){}
         try{
           var stripped2 = stripBase64(value);
           _orig(key, stripped2);
@@ -153,7 +153,7 @@
   
   // Ruim ook direct bestaande base64 op
   try{
-    ['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'].forEach(function(k){
+    ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'].forEach(function(k){
       var raw = localStorage.getItem(k);
       if(!raw || raw.length < 10000) return;
       var clean = stripBase64(raw);
@@ -204,7 +204,7 @@ function bnsIsArchivedOnlyOrder(o){
 
 
 const INITIAL_STATE = {
-  version: "event-planner-pro-rental-v1-documents-clean-from-v830-v836",
+  version: "event-planner-pro-amsterdam-verhuur-v1-documents-clean-from-v830-v836",
   seq: 1,
   users: [],
   materials: [],
@@ -214,7 +214,7 @@ const INITIAL_STATE = {
   alerts: [],
   invoices: [],
   settings: {
-    productName: "Event Planner PRO Amsterdam",
+    productName: "Event Planner PRO Rental",
     customerId: "amsterdam-verhuur",
     firebaseProjectId: null,
     rentalClean: true
@@ -235,8 +235,7 @@ try{
 const KEY='event-planner-pro-amsterdam-verhuur-v1';
 let state=load();
 ensure();
-// ===== AMSTERDAM VEILIGE KLANT-CODES =====
-// Deze regels zijn de enige klant-aanpassing in app.js: 3330 gebruiker, 9119 beheer, 1111 eruit.
+// ===== AMSTERDAM KLANT-CODES - GEEN WIJZIGING AAN ADMIN MATERIALEN =====
 try{
   state.users = Array.isArray(state.users) ? state.users.filter(function(u){ return String(u && u.pin) !== '1111'; }) : [];
   state.adminPin = '9119';
@@ -267,7 +266,7 @@ function save(){
   } catch(e){
     try{
       // Als nog steeds vol: verwijder backup keys om ruimte te maken
-      ['event-planner-pro-rental-v1','event-planner-pro-rental-v1-date'].forEach(function(k){ try{localStorage.removeItem(k);}catch(_){} });
+      ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1-date'].forEach(function(k){ try{localStorage.removeItem(k);}catch(_){} });
       localStorage.setItem(KEY, JSON.stringify({orders:state.orders||[],materials:state.materials||[],users:state.users||[]}));
       console.warn('[Master test] lokale opslag vol, basis opgeslagen');
     } catch(_){
@@ -282,7 +281,7 @@ function ensure(){
   state.customers??=[];
   state.locations??=[];
   state.alerts??=[];
-  state.adminPin??='1111';
+  state.adminPin??='9119';
 }
 function id(){
   return Math.random().toString(36).slice(2,10)
@@ -801,7 +800,7 @@ function bindAdmin(){
     });
     let a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download='event-planner-pro-rental-v1-backup.json';
+    a.download='event-planner-pro-amsterdam-verhuur-v1-backup.json';
     a.click()
   }
 }
@@ -1976,7 +1975,7 @@ setTimeout(()=>{
 // ===== BNS V10.3: systeemmeldingen + echt rubrieken schuiven + datumbalk =====
 (function(){
   const $ = (id)=>document.getElementById(id);
-  const LS = 'event-planner-pro-rental-v1';
+  const LS = 'event-planner-pro-amsterdam-verhuur-v1';
   function st(){
     try{
       return JSON.parse(localStorage.getItem(LS)) || state || {
@@ -2218,7 +2217,7 @@ setTimeout(()=>{
 // - Dubbele rubriek-schuiven knop verwijderd.
 // - Systeem teksten worden overal als systeemmelding getoond.
 (function(){
-  const LS='event-planner-pro-rental-v1';
+  const LS='event-planner-pro-amsterdam-verhuur-v1';
   const $=(id)=>document.getElementById(id);
   function readState(){
     try{
@@ -2368,7 +2367,7 @@ setTimeout(()=>{
 })();
 // ===== BNS V10.5: echte zichtbare fixes basis =====
 (function(){
-  const LS='event-planner-pro-rental-v1';
+  const LS='event-planner-pro-amsterdam-verhuur-v1';
   const $=id=>document.getElementById(id);
   const qs=(s,r=document)=>r.querySelector(s);
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
@@ -2632,7 +2631,7 @@ setTimeout(()=>{
 })();
 // ===== BNS V10.6: GitHub tekst echt weg + titel groot + materiaal kleuren =====
 (function(){
-  const LS='event-planner-pro-rental-v1';
+  const LS='event-planner-pro-amsterdam-verhuur-v1';
   const $=id=>document.getElementById(id);
   const qsa=(s,r=document)=>Array.from(r.querySelectorAll(s));
   const cleanWord=v=>String(v||'').replace(/git\s*hub|github|gitup/ig,'Systeemmelding');
@@ -2894,7 +2893,7 @@ setTimeout(()=>{
   const cleanWord=v=>String(v||'').replace(/git\s*hub|github|gitup/ig,'Systeemmelding');
   function read(){
     try{
-      return JSON.parse(localStorage.getItem('event-planner-pro-rental-v1')||localStorage.getItem('event-planner-pro-rental-v1')||'{}')
+      return JSON.parse(localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||'{}')
     } catch(e){
       return {
       }
@@ -2902,7 +2901,7 @@ setTimeout(()=>{
   }
   function write(s){
     try{
-      localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(s));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(s));
     } catch(e){
     }
   }
@@ -3156,7 +3155,7 @@ setTimeout(()=>{
   const CAT_DEFAULTS={
     TW:'#dc2626',TO:'#f97316',KW:'#2563eb',KA:'#7c3aed',SL:'#16a34a',EXTRA:'#64748b'
   };
-  const LS_MAIN=(typeof KEY!=='undefined')?KEY:'event-planner-pro-rental-v1';
+  const LS_MAIN=(typeof KEY!=='undefined')?KEY:'event-planner-pro-amsterdam-verhuur-v1';
   const $=id=>document.getElementById(id);
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -3849,7 +3848,7 @@ setTimeout(()=>{
   function saveState(){
     try{
       if(typeof save==='function') save();
-      else localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(state()));
+      else localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(state()));
     } catch(e){
     }
   }
@@ -4042,7 +4041,7 @@ setTimeout(()=>{
   const clean=s=>String(s??'').replace(/git\s*hub|github|gitup/ig,'Systeemmelding');
   function getState(){
     try{
-      return JSON.parse(localStorage.getItem('event-planner-pro-rental-v1')||localStorage.getItem('event-planner-pro-rental-v1')||'{}')
+      return JSON.parse(localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||'{}')
     } catch(e){
       return window.state?.()||{
       };
@@ -4050,8 +4049,8 @@ setTimeout(()=>{
   }
   function saveStateObj(s){
     try{
-      localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(s));
-      localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(s));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(s));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(s));
     } catch(e){
     }
   }
@@ -4192,7 +4191,7 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      const s = JSON.parse(localStorage.getItem('event-planner-pro-rental-v1') || localStorage.getItem('event-planner-pro-rental-v1') || localStorage.getItem('event-planner-pro-rental-v1') || '{}');
+      const s = JSON.parse(localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1') || localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1') || localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1') || '{}');
       if (Array.isArray(s.materials)) return s;
     } catch(e) {
     }
@@ -6244,11 +6243,11 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      var raw = localStorage.getItem("event-planner-pro-rental-v1") ||
-      localStorage.getItem("event-planner-pro-rental-v1") ||
-      localStorage.getItem("event-planner-pro-rental-v1") ||
+      var raw = localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") ||
+      localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") ||
+      localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") ||
       localStorage.getItem("eventPlannerState") ||
-      localStorage.getItem("event-planner-pro-rental-v1");
+      localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1");
       var parsed = JSON.parse(raw || "{}");
       if (parsed && Array.isArray(parsed.orders)) return parsed;
     } catch(e) {
@@ -6260,7 +6259,7 @@ setTimeout(()=>{
   function saveState(){
     try {
       if (typeof save === "function") save();
-      else localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(S()));
+      else localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(S()));
     } catch(e) {
     }
   }
@@ -6720,9 +6719,9 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      var raw = localStorage.getItem("event-planner-pro-rental-v1") ||
-      localStorage.getItem("event-planner-pro-rental-v1") ||
-      localStorage.getItem("event-planner-pro-rental-v1");
+      var raw = localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") ||
+      localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") ||
+      localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1");
       var parsed = JSON.parse(raw || "{}");
       if (parsed && Array.isArray(parsed.orders)) return parsed;
     } catch(e) {
@@ -6734,7 +6733,7 @@ setTimeout(()=>{
   function saveState(){
     try {
       if (typeof save === "function") save();
-      else localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(appState()));
+      else localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(appState()));
     } catch(e) {
     }
   }
@@ -7476,7 +7475,7 @@ setTimeout(()=>{
   function saveState(){
     try {
       if (typeof save === "function") save();
-      else localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(S()));
+      else localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(S()));
     } catch(e) {
     }
   }
@@ -7957,7 +7956,7 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(S()));
     } catch(e) {
     }
   }
@@ -8130,7 +8129,7 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      var keys = ['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'];
+      var keys = ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'];
       for (var i=0; i<keys.length; i++) {
         var raw = localStorage.getItem(keys[i]);
         if (raw) {
@@ -10310,7 +10309,7 @@ setTimeout(()=>{
     }
     try {
       var s = S();
-      if (s) localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      if (s) localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch (e) {
     }
   }
@@ -10688,7 +10687,7 @@ setTimeout(()=>{
     }
     try {
       var s = getState();
-      if (s) localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      if (s) localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch (e) {
     }
   }
@@ -11161,7 +11160,7 @@ setTimeout(()=>{
     try {
       var s = getState();
       if (s) {
-        localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+        localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
       }
     } catch (e) {
     }
@@ -11444,7 +11443,7 @@ setTimeout(()=>{
     }
     try{
       var s=st();
-      if(s)localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(s))
+      if(s)localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(s))
     } catch(e){
     }
   }
@@ -11755,7 +11754,7 @@ setTimeout(()=>{
     }
     try {
       var s = getState();
-      if (s) localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      if (s) localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch (e) {
     }
   }
@@ -12854,7 +12853,7 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e){
     }
   }
@@ -12996,7 +12995,7 @@ setTimeout(()=>{
     }
     try {
       var s = stateNow();
-      if (s) localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      if (s) localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e){
     }
   }
@@ -13170,7 +13169,7 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      return JSON.parse(localStorage.getItem("event-planner-pro-rental-v1") || "{}");
+      return JSON.parse(localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") || "{}");
     } catch(e) {
     }
     return {
@@ -17543,8 +17542,8 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(ensure()));
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(ensure()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(ensure()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(ensure()));
     } catch(e){
     }
   }
@@ -18558,19 +18557,19 @@ setTimeout(()=>{
   }
   function persist(){
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
@@ -19124,19 +19123,19 @@ setTimeout(()=>{
   }
   function saveLocal(){
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
-      localStorage.setItem("event-planner-pro-rental-v1",JSON.stringify(S()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1",JSON.stringify(S()));
     } catch(e){
     }
     try{
@@ -19840,23 +19839,23 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(s));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(s));
     } catch(e) {
     }
   }
@@ -20352,7 +20351,7 @@ setTimeout(()=>{
       }
     } catch(e){
     }
-    ['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'].forEach(function(k){
+    ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'].forEach(function(k){
       try{
         localStorage.setItem(k,JSON.stringify(s));
       } catch(e){
@@ -21934,7 +21933,7 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e){
     }
   }
@@ -22490,10 +22489,10 @@ setTimeout(()=>{
     if(!u && p && T(S().adminPin) && p===T(S().adminPin)) u=us.find(function(x){
       return L(x.role)==='admin';
     });
-    if(!u && p==='1111') u=us.find(function(x){
+    if(false && !u && p==='1111') u=us.find(function(x){
       return L(x.role)==='admin';
     }) || {
-      id:'u_admin',name:'Admin',pin:'1111',role:'Admin',rights:{
+      id:'u_admin',name:'Admin',pin:'9119',role:'Admin',rights:{
         prices:true,agenda:true,gps:true,resolve:true
       }
     };
@@ -22604,7 +22603,7 @@ setTimeout(()=>{
   'use strict';
   if (window.__bnsV85AdminMateriaalOpslagFix) return;
   window.__bnsV85AdminMateriaalOpslagFix = true;
-  var STATE_KEYS = ['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'];
+  var STATE_KEYS = ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'];
   var OVERRIDE_KEYS = ['bns_material_overrides_v72','bns_v85_material_overrides'];
   var PENDING_KEY = 'bns_v85_pending_materials';
   function E(id){
@@ -23081,7 +23080,7 @@ setTimeout(()=>{
     p=T(p);
     if(!p) return false;
     var s=S();
-    if(p==='1111') return true;
+    if(p==='1111') return false;
     if(T(s.adminPin) && p===T(s.adminPin)) return true;
     return !!users().find(function(u){
       return L(u.role)==='admin' && T(u.pin)===p && !u.deleted;
@@ -23142,7 +23141,7 @@ setTimeout(()=>{
     if(adminPinOk(p)) u=users().find(function(x){
       return L(x.role)==='admin';
     }) || {
-      id:'u_admin',name:'Admin',pin:'1111',role:'Admin',rights:{
+      id:'u_admin',name:'Admin',pin:'9119',role:'Admin',rights:{
         prices:true,agenda:true,gps:true,resolve:true
       }
     };
@@ -23612,7 +23611,7 @@ setTimeout(()=>{
       if(typeof saveState==='function') saveState();
     } catch(e){
     }
-    ['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'].forEach(function(k){
+    ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'].forEach(function(k){
       try{
         localStorage.setItem(k,JSON.stringify(s));
       } catch(e){
@@ -24266,23 +24265,23 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e) {
     }
     try {
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e) {
     }
     try {
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e) {
     }
     try {
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e) {
     }
     try {
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S()));
     } catch(e) {
     }
   }
@@ -24606,10 +24605,10 @@ setTimeout(()=>{
     try{
       var s=S();
       if(s){
-        localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s));
-        localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s));
-        localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s));
-        localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s));
+        localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s));
+        localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s));
+        localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s));
+        localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s));
       }
     } catch(e){
     }
@@ -25185,10 +25184,10 @@ setTimeout(()=>{
 ========================================================= */
 (function bnsV173AutoDailyBackup(){
   "use strict";
-  var LOCAL_DATE_KEY = "event-planner-pro-rental-v1-local-date";
-  var FIREBASE_DATE_KEY = "event-planner-pro-rental-v1-firebase-date";
-  var LOCAL_JSON_KEY = "event-planner-pro-rental-v1";
-  var LOCAL_STATUS_KEY = "event-planner-pro-rental-v1-status";
+  var LOCAL_DATE_KEY = "event-planner-pro-amsterdam-verhuur-v1-local-date";
+  var FIREBASE_DATE_KEY = "event-planner-pro-amsterdam-verhuur-v1-firebase-date";
+  var LOCAL_JSON_KEY = "event-planner-pro-amsterdam-verhuur-v1";
+  var LOCAL_STATUS_KEY = "event-planner-pro-amsterdam-verhuur-v1-status";
   var CHUNK_SIZE = 650000;
   // ruim onder Firestore doclimiet
   window.BNS = window.BNS || {
@@ -25212,7 +25211,7 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      var raw = localStorage.getItem("event-planner-pro-rental-v1");
+      var raw = localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1");
       if(raw) return JSON.parse(raw);
     } catch(e){
     }
@@ -25479,11 +25478,11 @@ setTimeout(()=>{
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(ensure()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(ensure()));
     } catch(e) {
     }
     try {
-      localStorage.setItem("event-planner-pro-rental-v1", JSON.stringify(ensure()));
+      localStorage.setItem("event-planner-pro-amsterdam-verhuur-v1", JSON.stringify(ensure()));
     } catch(e) {
     }
   }
@@ -25789,8 +25788,8 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(ensure()));
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(ensure()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(ensure()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(ensure()));
     } catch(e){
     }
   }
@@ -26966,7 +26965,7 @@ setTimeout(()=>{
     } catch(e){
     }
     try{
-      localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(appState()));
+      localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(appState()));
     } catch(e){
     }
   }
@@ -30003,7 +30002,7 @@ setTimeout(()=>{
   function _getOrders() {
     try {
       if (window.state && Array.isArray(window.state.orders)) return window.state.orders;
-      var raw = localStorage.getItem('event-planner-pro-rental-v1')
+      var raw = localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')
       || localStorage.getItem('eventPlannerState')
       || localStorage.getItem('state') || '{}';
       var p = JSON.parse(raw);
@@ -30327,7 +30326,7 @@ setTimeout(()=>{
   function saveSt() {
     var s=S(); if(!s) return;
     try{ if(typeof save==='function') save(); }catch(e){}
-    try{ localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(s)); }catch(e){}
+    try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(s)); }catch(e){}
   }
   function syncO(o) {
     try{
@@ -32236,7 +32235,7 @@ setTimeout(()=>{
     if(/optie\s*14|optie14/i.test(o.status) && !o.optionCreatedAt) o.optionCreatedAt=new Date().toISOString().slice(0,10);
     upsertCust(o.customer); upsertLoc(o.location);
     if(idx>=0) s.orders[idx]=Object.assign({},old,o); else s.orders.push(o);
-    try{ if(typeof save==='function') save(); else localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(s)); }catch(e){}
+    try{ if(typeof save==='function') save(); else localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(s)); }catch(e){}
     try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     try{ if(typeof toastMsg==='function') toastMsg('Opdracht opgeslagen'); }catch(e){ alert('Opdracht opgeslagen'); }
     try{ editing=null; }catch(e){} window.editing='';
@@ -35140,7 +35139,7 @@ setTimeout(()=>{
     try{ if(typeof save==='function') save(); }catch(e){}
     try{ if(typeof saveState==='function') saveState(); }catch(e){}
     try{ if(typeof saveBns==='function') saveBns(); }catch(e){}
-    try{ var s=S(); if(s){ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); } }catch(e){}
+    try{ var s=S(); if(s){ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); } }catch(e){}
   }
   function syncOrder(o){
     try{ if(window.BNS && window.BNS.fs && window.BNS.db && window.BNS.fs.setDoc && window.BNS.fs.doc && o && (o.id||o.number)){
@@ -35473,7 +35472,7 @@ setTimeout(()=>{
     try{ if(typeof save === 'function') save(); }catch(e){}
     try{ if(typeof saveState === 'function') saveState(); }catch(e){}
     try{ if(typeof saveBns === 'function') saveBns(); }catch(e){}
-    try{ var s=S(); if(s){ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(s)); } }catch(e){}
+    try{ var s=S(); if(s){ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(s)); } }catch(e){}
   }
   function fbSet(coll,id,obj){
     try{
@@ -35763,7 +35762,7 @@ setTimeout(()=>{
   function editingId(){ try{ return T(editing); }catch(e){} return T(window.editing||''); }
   function makeId(){ try{ return id(); }catch(e){ return 'ord_'+Date.now()+'_'+Math.floor(Math.random()*9999); } }
   function clone(x){ try{return JSON.parse(JSON.stringify(x));}catch(e){return Object.assign({},x||{});} }
-  function saveState(){ try{ if(typeof save === 'function') save(); else localStorage.setItem('event-planner-pro-rental-v1',JSON.stringify(S())); }catch(e){} }
+  function saveState(){ try{ if(typeof save === 'function') save(); else localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1',JSON.stringify(S())); }catch(e){} }
   function toast(msg){ try{ if(typeof toastMsg==='function') toastMsg(msg); else window.bnsAlert?window.bnsAlert(msg,'Opgeslagen'):alert(msg); }catch(e){} }
   function currentStatusRaw(){
     var sel=E('orderStatus');
@@ -37842,7 +37841,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function stateObj(){
     try{ if(typeof state !== "undefined" && state) return state; }catch(e){}
     try{ if(window.state) return window.state; }catch(e){}
-    try{ return JSON.parse(localStorage.getItem("event-planner-pro-rental-v1") || "{}"); }catch(e){}
+    try{ return JSON.parse(localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") || "{}"); }catch(e){}
     return {};
   }
   function orders(){ var s=stateObj(); return Array.isArray(s.orders)?s.orders:[]; }
@@ -38161,7 +38160,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function stateObj(){
     try{ if(typeof state !== "undefined" && state) return state; }catch(e){}
     try{ if(window.state) return window.state; }catch(e){}
-    try{ return JSON.parse(localStorage.getItem("event-planner-pro-rental-v1") || "{}"); }catch(e){}
+    try{ return JSON.parse(localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") || "{}"); }catch(e){}
     return {};
   }
   function orders(){
@@ -38328,7 +38327,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function stateObj(){
     try{ if(typeof state !== "undefined" && state) return state; }catch(e){}
     try{ if(window.state) return window.state; }catch(e){}
-    try{ return JSON.parse(localStorage.getItem("event-planner-pro-rental-v1") || "{}"); }catch(e){}
+    try{ return JSON.parse(localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") || "{}"); }catch(e){}
     return {};
   }
   function orders(){ var s=stateObj(); return Array.isArray(s.orders)?s.orders:[]; }
@@ -38542,7 +38541,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   document.addEventListener("bns:firebase-updated", function(){ setTimeout(keepScrollRefresh,100); });
   document.addEventListener("bns:phone-media-updated", function(){ setTimeout(keepScrollRefresh,100); setTimeout(keepScrollRefresh,900); });
   window.addEventListener("storage", function(e){
-    if(!e || /bns_phone_media_ping|event-planner-pro-rental-v1/.test(String(e.key||""))) setTimeout(keepScrollRefresh,150);
+    if(!e || /bns_phone_media_ping|event-planner-pro-amsterdam-verhuur-v1/.test(String(e.key||""))) setTimeout(keepScrollRefresh,150);
   });
 
   setInterval(function(){
@@ -38564,7 +38563,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
 
   // Ruim base64 op uit localStorage
   function cleanup(){
-    var KEYS=["event-planner-pro-rental-v1","event-planner-pro-rental-v1","event-planner-pro-rental-v1","event-planner-pro-rental-v1"];
+    var KEYS=["event-planner-pro-amsterdam-verhuur-v1","event-planner-pro-amsterdam-verhuur-v1","event-planner-pro-amsterdam-verhuur-v1","event-planner-pro-amsterdam-verhuur-v1"];
     var BIG=['photoData','photo','image','signatureData','signature','data','customerSignature'];
     KEYS.forEach(function(k){
       try{
@@ -38986,7 +38985,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     wrap.__bns525=true; window.TW300_AU_openAccounting=wrap;
   }
   window.TW300_AU_openDoc=function(id,type){ var o=findOrder(id); if(!o){ alert('Geen opdracht gevonden voor document: '+T(id)); return false; } return openOrderDoc(o,type||'factuur'); };
-  function saveNow(){ try{ if(typeof save==='function') save(); }catch(e){} try{ if(typeof saveState==='function') saveState(); }catch(e){} try{ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S())); }catch(e){} }
+  function saveNow(){ try{ if(typeof save==='function') save(); }catch(e){} try{ if(typeof saveState==='function') saveState(); }catch(e){} try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S())); }catch(e){} }
   function syncOrder(o){ try{ if(window.BNS&&typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){} try{ if(typeof syncDoc==='function') syncDoc('orders', o.id, o); }catch(e){} }
   window.TW300_AU_setPaid=function(id,yes){
     var o=findOrder(id); if(!o){ alert('Geen opdracht gevonden om betaling te wijzigen: '+T(id)); return false; }
@@ -39103,7 +39102,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function persist(){
     try{ if(typeof save==='function') save(); }catch(e){}
     try{ if(typeof saveState==='function') saveState(); }catch(e){}
-    try{ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S())); }catch(e){}
+    try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S())); }catch(e){}
   }
   function applyRemovedAccountingKeys(){
     var a=acc();
@@ -39308,7 +39307,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function persistAndSync(o){
     try{ if(typeof save === 'function') save(); }catch(e){}
-    try{ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S())); }catch(e){}
+    try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S())); }catch(e){}
     try{ if(o && window.BNS && typeof window.BNS.syncOrder === 'function') window.BNS.syncOrder(o); }catch(e){}
     try{ if(o && typeof syncDoc === 'function') syncDoc('orders', o.id, o); }catch(e){}
   }
@@ -39508,7 +39507,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     return (a.removedKeys||[]).indexOf(k)>=0 || (a.removedKeys||[]).indexOf(nr)>=0 || (a.removedKeys||[]).indexOf(orderNo(o))>=0 || (a.removedKeys||[]).indexOf(invoiceNo(o))>=0;
   }
   function findOrder(id){ id=T(id); return orders().find(function(o){ return [T(o.id),orderNo(o),invoiceNo(o),T(o.invoiceNumber),T(o.factuurNr)].indexOf(id)>=0; }) || null; }
-  function saveNow(){ try{ if(typeof save==='function') save(); }catch(e){} try{ if(typeof saveState==='function') saveState(); }catch(e){} try{ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S())); }catch(e){} }
+  function saveNow(){ try{ if(typeof save==='function') save(); }catch(e){} try{ if(typeof saveState==='function') saveState(); }catch(e){} try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S())); }catch(e){} }
   function syncOrder(o){ try{ if(window.BNS&&typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){} try{ if(typeof syncDoc==='function') syncDoc('orders', o.id, o); }catch(e){} }
 
   function invoiceRows(){
@@ -39999,7 +39998,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function S(){
     try{ if(typeof state !== "undefined" && state) return state; }catch(e){}
     try{ if(window.state) return window.state; }catch(e){}
-    try{ return JSON.parse(localStorage.getItem("event-planner-pro-rental-v1") || "{}"); }catch(e){}
+    try{ return JSON.parse(localStorage.getItem("event-planner-pro-amsterdam-verhuur-v1") || "{}"); }catch(e){}
     return { orders: [] };
   }
   function orders(){ var s=S(); return Array.isArray(s.orders) ? s.orders : []; }
@@ -40459,7 +40458,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   if(window.__BNS600_FIREBASE_BOOTSTRAP_ONCE__) return;
   window.__BNS600_FIREBASE_BOOTSTRAP_ONCE__ = true;
 
-  var KEY = 'event-planner-pro-rental-v1';
+  var KEY = 'event-planner-pro-amsterdam-verhuur-v1';
   var tools = null;
   var busy = false;
   var lastSig = '';
@@ -40941,7 +40940,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   if(window.__BNS600B_ADMIN_MATERIALS_FIREBASE_SAVE__) return;
   window.__BNS600B_ADMIN_MATERIALS_FIREBASE_SAVE__ = true;
 
-  var KEY = 'event-planner-pro-rental-v1';
+  var KEY = 'event-planner-pro-amsterdam-verhuur-v1';
   var tools = null;
   var timer = null;
   var busy = false;
@@ -41133,7 +41132,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     try{ if(typeof state !== 'undefined' && state && Array.isArray(state.orders)) return state; }catch(e){}
     try{ if(window.state && Array.isArray(window.state.orders)) return window.state; }catch(e){}
     try{ if(typeof S === 'function'){ var s=S(); if(s && Array.isArray(s.orders)) return s; } }catch(e){}
-    var keys=['event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1','event-planner-pro-rental-v1'];
+    var keys=['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1'];
     for(var i=0;i<keys.length;i++){
       try{ var raw=localStorage.getItem(keys[i]); if(raw){ var p=JSON.parse(raw); if(p && Array.isArray(p.orders)) return p; } }catch(e){}
     }
@@ -41289,7 +41288,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
    - state.materials
    - window.state.materials
    - INITIAL_STATE.materials
-   - localStorage event-planner-pro-rental-v1
+   - localStorage event-planner-pro-amsterdam-verhuur-v1
    Schrijft niets naar Firebase. Raakt driver/opdrachten/reserveren niet aan.
 ========================================================= */
 (function(){
@@ -41297,7 +41296,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   if(window.__BNS608_FIREBASE_MATERIALS_LEADING__) return;
   window.__BNS608_FIREBASE_MATERIALS_LEADING__ = true;
 
-  var KEY='event-planner-pro-rental-v1';
+  var KEY='event-planner-pro-amsterdam-verhuur-v1';
   var tools=null, loading=false, lastSig='';
 
   function log(t){ try{ console.info('[BNS 608] '+t); }catch(e){} }
@@ -41449,7 +41448,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   if(window.__BNS609_MATERIAL_CATEGORY_FIX__) return;
   window.__BNS609_MATERIAL_CATEGORY_FIX__ = true;
 
-  var KEY='event-planner-pro-rental-v1';
+  var KEY='event-planner-pro-amsterdam-verhuur-v1';
   var GENERIC={TW:1,TO:1,KW:1,EXTRA:1};
   function A(v){ return Array.isArray(v)?v:[]; }
   function T(v){ return String(v==null?'':v).trim(); }
@@ -42629,7 +42628,7 @@ try{ console.info('[BNS 615] 611 rubriekbehoud bij gereserveerd klik actief'); }
   if(window.__BNS637_ADMIN_DELETE_FIREBASE_DIRECT__) return;
   window.__BNS637_ADMIN_DELETE_FIREBASE_DIRECT__ = true;
 
-  var KEY='event-planner-pro-rental-v1';
+  var KEY='event-planner-pro-amsterdam-verhuur-v1';
   var TOMBSTONE_KEY='bns637_deleted_material_tombstones_v1';
   var selected={id:'', code:'', at:0};
   var pending=null;
@@ -42937,7 +42936,7 @@ try{ console.info('[BNS 615] 611 rubriekbehoud bij gereserveerd klik actief'); }
   function saveNow(){
     try{ if(typeof save==='function') save(); }catch(e){}
     try{ if(typeof saveState==='function') saveState(); }catch(e){}
-    try{ localStorage.setItem('event-planner-pro-rental-v1', JSON.stringify(S())); }catch(e){}
+    try{ localStorage.setItem('event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(S())); }catch(e){}
   }
   function syncOrderHard(o){
     try{ if(window.BNS&&typeof window.BNS.syncOrder==='function') Promise.resolve(window.BNS.syncOrder(o)).catch(function(){}); }catch(e){}
@@ -43188,7 +43187,7 @@ try{ console.info('[BNS 615] 611 rubriekbehoud bij gereserveerd klik actief'); }
   function H(v){ return T(v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function euro(n){ return '€ '+N(n).toFixed(2).replace('.',','); }
   function clone(v){ try{return JSON.parse(JSON.stringify(v||[]));}catch(e){return [];} }
-  function stateObj(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} try{ if(window.state) return window.state; }catch(e){} try{return JSON.parse(localStorage.getItem('event-planner-pro-rental-v1')||'{}');}catch(e){} return {}; }
+  function stateObj(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} try{ if(window.state) return window.state; }catch(e){} try{return JSON.parse(localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||'{}');}catch(e){} return {}; }
   function orders(){ var s=stateObj(); return Array.isArray(s.orders) ? s.orders : []; }
   function lineTotal(l){ return (N(l && l.qty) || 1) * N(l && l.price); }
   function isServiceLine(l){ var t=L(l&&l.type), n=L(l&&l.name); return t==='service'||t==='servicekosten'||t==='bijzonderheid'||/service|schoonmaak|reinig|montage|demontage|aansluiten|borg correctie|kosten/.test(n); }
@@ -43430,7 +43429,7 @@ try{ console.info('[BNS 615] 611 rubriekbehoud bij gereserveerd klik actief'); }
   function N(v){ var n=Number(String(v==null?'':v).replace(',','.').replace(/[^0-9.-]/g,'')); return isFinite(n)?n:0; }
   function euro(n){ return '€ '+N(n).toFixed(2).replace('.',','); }
   function clone(v){ try{return JSON.parse(JSON.stringify(v||[]));}catch(e){return [];} }
-  function stateObj(){ try{ if(typeof state!=='undefined' && state) return state; }catch(e){} try{ if(window.state) return window.state; }catch(e){} try{return JSON.parse(localStorage.getItem('event-planner-pro-rental-v1')||'{}');}catch(e){} return {}; }
+  function stateObj(){ try{ if(typeof state!=='undefined' && state) return state; }catch(e){} try{ if(window.state) return window.state; }catch(e){} try{return JSON.parse(localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1')||'{}');}catch(e){} return {}; }
   function orders(){ var s=stateObj(); return Array.isArray(s.orders)?s.orders:[]; }
   function orderNo(o){ return T(o&&(o.number||o.orderNumber||o.orderNo||o.opdrachtNr)); }
   function orderId(o){ return T(o&&(o.id||o.orderId||o.docId)); }
@@ -45531,10 +45530,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var REMOTE_PATH = 'customers/rental/appState';
   var CONFIG = Object.freeze({
     apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '912386697606',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
@@ -45720,10 +45719,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var REMOTE_PATH = 'customers/rental/appState';
   var CONFIG = Object.freeze({
     apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '912386697606',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
@@ -45869,10 +45868,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var REMOTE_PATH = 'customers/rental/appState';
   var CONFIG = Object.freeze({
     apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '912386697606',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
@@ -46083,10 +46082,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var REMOTE_PATH = 'customers/rental/appState';
   var CONFIG = Object.freeze({
     apiKey: 'AIzaSyDNljlI1sMu55XALk_6_4Mjt-jS45iBTP8',
-    authDomain: 'event-planner-pro-rental-22e00.firebaseapp.com',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId: 'event-planner-pro-rental-22e00',
-    storageBucket: 'event-planner-pro-rental-22e00.firebasestorage.app',
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '912386697606',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
@@ -46202,7 +46201,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return {
       version:'event-planner-pro-rental-v848-auto-pin',
       seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || '1111') || '1111',
+      adminPin: T(remote.adminPin || raw.adminPin || '9119') || '9119',
       users: users,
       materials: materials,
       orders: orders,
@@ -46420,24 +46419,4 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setInterval(cleanLogin,1000); cleanLogin(); });
   else { setInterval(cleanLogin,1000); cleanLogin(); }
-})();
-
-
-// ===== AMSTERDAM HARD PIN GUARD - 1111 NOOIT TOESTAAN =====
-(function(){
-  if(window.__AMS_PIN_GUARD_V29__) return; window.__AMS_PIN_GUARD_V29__=true;
-  function E(id){return document.getElementById(id);}
-  function clean(){try{ if(window.state){ state.adminPin='9119'; state.users=(state.users||[]).filter(function(u){return String(u&&u.pin)!=='1111';}); } }catch(e){}}
-  clean(); setInterval(clean,800);
-  document.addEventListener('click',function(ev){
-    var b=ev.target && ev.target.closest && ev.target.closest('button');
-    if(!b) return;
-    var ap=E('adminPin');
-    if(ap && String(ap.value).trim()==='1111'){
-      ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-      ap.value='';
-      try{ if(typeof toastMsg==='function') toastMsg('Deze PIN is niet geldig.'); else alert('Deze PIN is niet geldig.'); }catch(e){}
-      return false;
-    }
-  },true);
 })();
