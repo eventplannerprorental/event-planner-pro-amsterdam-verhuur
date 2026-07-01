@@ -1,4 +1,4 @@
-// ===== EPP AMSTERDAM v24 CLEAN: minimale klantconfig laag =====
+// ===== EPP AMSTERDAM v25 SAFE: originele rental app.js + minimale klantlaag =====
 (function(){
   var cfg = window.EVENT_PLANNER_CUSTOMER || window.EPP_CUSTOMER_CONFIG || {};
   var fb = cfg.firebaseConfig || {
@@ -45725,7 +45725,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.__EPP_RENTAL_V842_FIREBASE_DEBUG__ = true;
 
   var FIREBASE_VERSION = '10.12.5';
-  var APP_NAME = 'epp-rental-v842';
+  var APP_NAME = 'epp-amsterdam-v842';
   var REMOTE_PATH = 'customers/amsterdam-verhuur/appState';
   var CONFIG = Object.freeze({
     apiKey: 'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
@@ -45867,7 +45867,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 // - Firebase blijft de enige leidende online bron.
 // - Geen lokale/standaarddata die Firebase overschrijft bij starten.
 // - Als Firebase leeg is, wordt NIET automatisch een lege database geupload.
-// - Na login worden gewone app-saves online opgeslagen naar customers/amsterdam-verhuur/appState.
+// - Na login worden gewone app-saves online opgeslagen naar customers/rental/appState.
 (function(){
   'use strict';
   if(window.__EPP_RENTAL_V844_FIREBASE_LEADING_SAFE__) return;
@@ -45957,7 +45957,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(!ready || !signedIn || !auth || !auth.currentUser || applyingRemote) return false;
     var payload={
       version:'v844',
-      customerId:'amsterdam-verhuur',
+      customerId:'rental',
       mode:'firebase-leading',
       updatedAt:new Date().toISOString(),
       updatedBy:(auth.currentUser && auth.currentUser.email) || '',
@@ -46068,10 +46068,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }catch(e){}
   }
   function cleanVisibleTitles(){
-    try{ document.title='Event Planner PRO Amsterdam verhuur'; }catch(e){}
+    try{ document.title='Event Planner PRO Rental'; }catch(e){}
     try{
       var hs=document.querySelectorAll('h1,h2,.brand,.app-title,.title');
-      hs.forEach(function(el){ if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Amsterdam verhuur'); });
+      hs.forEach(function(el){ if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental'); });
     }catch(e){}
   }
   function boot(){ installSaveHook(); installPanel(); installStatusButton(); cleanVisibleTitles(); }
@@ -46186,8 +46186,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     st=clone(st||{});
     var out={};
     ['catColors','categoryColors','dashboardLayout','theme','layout','driverReportTypes'].forEach(function(k){ if(st[k] != null) out[k]=st[k]; });
-    out.productName='Event Planner PRO Amsterdam verhuur';
-    out.customerId='amsterdam-verhuur';
+    out.productName='Event Planner PRO Rental';
+    out.customerId='rental';
     out.rentalClean=true;
     out.firebaseProjectId=CONFIG.projectId;
     return out;
@@ -46211,7 +46211,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return {
       version:'event-planner-pro-rental-v848-auto-pin',
       seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || '9119') || '9119',
+      adminPin: T(remote.adminPin || raw.adminPin || '1111') || '1111',
       users: users,
       materials: materials,
       orders: orders,
@@ -46227,7 +46227,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     applyingRemote=true;
     try{
       var base = (typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : {};
-      if(base && base.settings){ base.settings.customerId='amsterdam-verhuur'; base.settings.productName='Event Planner PRO Amsterdam verhuur'; }
+      if(base && base.settings){ base.settings.customerId='rental'; base.settings.productName='Event Planner PRO Rental'; }
       var merged = Object.assign(base, clean);
       setState(merged);
       try{ if(typeof ensure === 'function') ensure(); }catch(e){}
@@ -46254,7 +46254,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(!ready || !signedIn || !auth || !auth.currentUser || applyingRemote) return false;
     preserveVisibleStoredStatus();
     var payload = {
-      version:'v848', customerId:'amsterdam-verhuur', mode:'firebase-leading-anonymous-pin',
+      version:'v848', customerId:'rental', mode:'firebase-leading-anonymous-pin',
       updatedAt:now(), updatedBy:(auth.currentUser && auth.currentUser.email)||'', reason:reason||'save',
       state:cleanStateForFirebase(getState())
     };
@@ -46320,15 +46320,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }
   }
   function cleanVisible(){
-    try{ document.title='Event Planner PRO Amsterdam verhuur'; }catch(e){}
+    try{ document.title='Event Planner PRO Rental'; }catch(e){}
     try{
       Array.prototype.slice.call(document.querySelectorAll('h1,h2,.brand,.app-title,.title')).forEach(function(el){
-        if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Amsterdam verhuur');
+        if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental');
       });
     }catch(e){}
     try{
       if(typeof INITIAL_STATE !== 'undefined' && INITIAL_STATE && INITIAL_STATE.settings){
-        INITIAL_STATE.settings.customerId='amsterdam-verhuur'; INITIAL_STATE.settings.productName='Event Planner PRO Amsterdam verhuur'; delete INITIAL_STATE.settings.source;
+        INITIAL_STATE.settings.customerId='rental'; INITIAL_STATE.settings.productName='Event Planner PRO Rental'; delete INITIAL_STATE.settings.source;
       }
     }catch(e){}
   }
@@ -46417,7 +46417,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 // ===== EPP RENTAL v848: UI opschonen login =====
 (function(){
   function cleanLogin(){
-    try{ document.title='Event Planner PRO Amsterdam verhuur'; }catch(e){}
+    try{ document.title='Event Planner PRO Rental'; }catch(e){}
     try{
       var card=document.querySelector('#login .login-card')||document.getElementById('login');
       if(card){ var p=card.querySelector('p'); if(p) p.textContent='Powered by tapwagen.nl'; }
