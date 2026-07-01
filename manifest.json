@@ -1,0 +1,9 @@
+{
+  "name": "Event Planner PRO Rental",
+  "short_name": "EP PRO Rental",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#0756b7",
+  "icons": []
+}

@@ -1,0 +1,176 @@
+/* material-fix.css - extra stijl voor materiaalkaarten */
+.material-status-legend{
+  display:flex !important;
+  align-items:center !important;
+  flex-wrap:wrap !important;
+  gap:12px !important;
+  margin:12px 0 18px !important;
+}
+.material-status-legend strong{
+  margin-right:8px !important;
+}
+/* COMPACTE MATERIALEN LIJST */
+#materialList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* kaart zelf */
+.material-card,
+.material-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 6px 10px;      /* 🔥 kleiner */
+  border-radius: 10px;
+  background: #fff;
+  border-left: 6px solid #2b6cb0;
+
+  font-size: 13px;        /* 🔥 kleiner */
+  line-height: 1.1;
+}
+
+/* linkerkant (code + naam) */
+.material-info {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  align-items: center;
+}
+
+/* code */
+.material-code {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* naam */
+.material-name {
+  color: #444;
+  font-size: 13px;
+}
+
+/* prijs kleiner */
+.material-price {
+  font-size: 12px;
+  color: #888;
+}
+
+/* status rechts */
+.material-status {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+}
+.material-row .catbar{
+  width:8px !important;
+  align-self:stretch !important;
+  border-radius:99px !important;
+  background:var(--cat-color, var(--mat-cat-color, #1683d8)) !important;
+}
+.material-row .mat-text b{
+  font-weight:900 !important;
+  color:#172033 !important;
+}
+.material-row .mat-text small{
+  color:#64748b !important;
+  font-weight:700 !important;
+}
+.badge{
+  display:inline-flex !important;
+  align-items:center !important;
+  gap:7px !important;
+  padding:8px 12px !important;
+  border-radius:999px !important;
+  font-weight:900 !important;
+  white-space:nowrap !important;
+}
+.badge i{
+  width:10px !important;
+  height:10px !important;
+  border-radius:50% !important;
+  display:inline-block !important;
+}
+.status-free{background:#dcfce7 !important;color:#166534 !important;}
+.status-free i{background:#15803d !important;}
+.status-reserved{background:#fee2e2 !important;color:#991b1b !important;}
+.status-reserved i{background:#b91c1c !important;}
+.status-defect{background:#fee2e2 !important;color:#991b1b !important;animation:bnsBlink .45s infinite alternate !important;}
+.status-defect i{background:#dc2626 !important;}
+.status-inactive{background:#e2e8f0 !important;color:#334155 !important;}
+.status-inactive i{background:#64748b !important;}
+@keyframes bnsBlink{from{opacity:.45}to{opacity:1}}
+/* compacte tekst materiaalregels */
+.material-row {
+  min-height: 42px !important;
+  padding: 6px 10px !important;
+  display: grid !important;
+  grid-template-columns: 8px 1fr auto !important;
+}
+
+.material-row .mat-text {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.15 !important;
+}
+
+.material-row .mat-text br {
+  display: none !important;
+}
+
+.material-row .mat-text small {
+  margin-left: 8px !important;
+  font-size: 12px !important;
+}
+
+.material-row .badge {
+  font-size: 12px !important;
+  padding: 4px 8px !important;
+}
+/* ===== FORCE COMPACT MATERIALEN ===== */
+
+#materialList .material-row {
+  height: 46px !important;
+  min-height: 46px !important;
+  max-height: 46px !important;
+  padding: 6px 10px !important;
+  display: grid !important;
+  grid-template-columns: 8px 1fr auto !important;
+  gap: 10px !important;
+  background: #fff !important;
+  overflow: hidden !important;
+}
+
+#materialList .material-row .mat-text {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1 !important;
+}
+
+#materialList .material-row .mat-text br {
+  display: none !important;
+}
+
+#materialList .material-row .mat-text b,
+#materialList .material-row .mat-text small {
+  display: inline !important;
+  white-space: nowrap !important;
+}
+
+#materialList .material-row .mat-text small {
+  margin-left: 8px !important;
+  font-size: 12px !important;
+}
+
+#materialList .material-row .badge {
+  font-size: 12px !important;
+  padding: 3px 8px !important;
+}
