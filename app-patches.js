@@ -1,11 +1,11 @@
-/* Event Planner PRO Amsterdam v25 SAFE patches
-   Basis: originele rental app.js blijft leidend.
-   Deze file doet alleen gerichte fixes en raakt materiaalbeheer NIET aan.
+/* Event Planner PRO Amsterdam v26 SAFE patches
+   Basis: app.js is de door gebruiker aangeleverde werkende copy.
+   Deze file raakt admin materiaalbeheer NIET aan.
 */
 (function(){
   'use strict';
-  if(window.__EPP_AMS_V25_SAFE_PATCHES__) return;
-  window.__EPP_AMS_V25_SAFE_PATCHES__ = true;
+  if(window.__EPP_AMS_V26_SAFE_PATCHES__) return;
+  window.__EPP_AMS_V26_SAFE_PATCHES__ = true;
 
   function E(id){ return document.getElementById(id); }
   function A(sel,root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
@@ -21,7 +21,6 @@
     return d.toISOString().slice(0,10);
   }
 
-  // PIN 1111 mag niet meer werken. Geen mastercode tonen in popup.
   function block1111(){
     document.addEventListener('click', function(ev){
       var b=ev.target && ev.target.closest && ev.target.closest('button,a');
@@ -36,27 +35,28 @@
     }, true);
   }
 
-  // Einddatum +/- hard overrulen. Oude handlers krijgen geen kans om de waarde terug te zetten.
-  function patchEndDateButtons(){
-    ['endMinus','endPlus','startMinus','startPlus'].forEach(function(id){
-      var b=E(id); if(!b || b.dataset.eppV25DateFixed) return;
-      b.dataset.eppV25DateFixed='1';
+  function patchDateButtons(){
+    var map={startMinus:['dateStart',-1],startPlus:['dateStart',1],endMinus:['dateEnd',-1],endPlus:['dateEnd',1]};
+    Object.keys(map).forEach(function(id){
+      var b=E(id); if(!b) return;
+      // Oude onclicks uit de rental-copy blijven anders de einddatum terugzetten.
+      b.onclick = null;
+      if(b.dataset.eppV26DateFixed) return;
+      b.dataset.eppV26DateFixed='1';
       b.addEventListener('click', function(ev){
         var ds=E('dateStart'), de=E('dateEnd');
         if(!ds || !de) return;
         ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
         if(!ds.value) ds.value=isoToday();
         if(!de.value) de.value=ds.value;
-        if(id==='startMinus') ds.value=addDaysISO(ds.value,-1);
-        if(id==='startPlus') ds.value=addDaysISO(ds.value,1);
-        if(id==='endMinus') de.value=addDaysISO(de.value,-1);
-        if(id==='endPlus') de.value=addDaysISO(de.value,1);
-        // Einddatum mag terug tot startdatum, niet daarvóór.
+        var target=map[id][0], delta=map[id][1];
+        var input=E(target);
+        input.value=addDaysISO(input.value || (target==='dateEnd'?de.value:ds.value) || isoToday(), delta);
         if(de.value < ds.value) de.value = ds.value;
         de.dataset.eppManual='1';
-        try{ ds.dispatchEvent(new Event('input',{bubbles:true})); ds.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
-        try{ de.dispatchEvent(new Event('input',{bubbles:true})); de.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
+        // Geen change-event terugsturen: oude app handlers forceren dan opnieuw +3 dagen.
         try{ if(typeof window.summaryRender==='function') window.summaryRender(); }catch(e){}
+        setTimeout(function(){ if(de.value < ds.value) de.value=ds.value; },0);
         return false;
       }, true);
     });
@@ -82,7 +82,8 @@
           if(key && typeof window.BNS_V493_SHOW==='function') return window.BNS_V493_SHOW(key);
           if(key && typeof window.BNS_V128_SHOW_ORDER_OVERVIEW==='function') return window.BNS_V128_SHOW_ORDER_OVERVIEW(key);
           if(typeof window.BNS_V821_OPEN==='function') return window.BNS_V821_OPEN(key);
-        }catch(e){ console.warn('[v25] overzicht fallback fout', e); }
+          if(typeof window.openOverview==='function') return window.openOverview();
+        }catch(e){ console.warn('[v26] overzicht fallback fout', e); }
       },80);
     }, true);
   }
@@ -110,8 +111,8 @@
       if(!nm || !pn) return;
       ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
       var s=readState(); s.users=Array.isArray(s.users)?s.users:[];
-      var id='u_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);
-      s.users.push({id:id, name:nm, pin:pn, role:rl, active:true, rights:{}});
+      var uid='u_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);
+      s.users.push({id:uid, name:nm, pin:pn, role:rl, active:true, rights:{}});
       name.value=''; pin.value='';
       persistState(s);
       alert('Gebruiker opgeslagen.');
@@ -119,7 +120,6 @@
     }, true);
   }
 
-  function loop(){ patchEndDateButtons(); }
-  block1111(); patchOverview(); patchUsers(); loop(); setInterval(loop,750);
-  console.info('[Amsterdam v25 SAFE] originele materiaalbeheer uit copy + datum/personeel/overzicht/1111 patches actief.');
+  block1111(); patchOverview(); patchUsers(); patchDateButtons(); setInterval(patchDateButtons,500);
+  console.info('[Amsterdam v26 SAFE] app.js uit juiste copy + datum/personeel/overzicht/1111 patches actief. Materiaalbeheer niet gepatcht.');
 })();
