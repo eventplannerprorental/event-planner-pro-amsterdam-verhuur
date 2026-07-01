@@ -239,8 +239,8 @@ ensure();
 try{
   state.users = Array.isArray(state.users) ? state.users.filter(function(u){ return String(u && u.pin) !== '1111'; }) : [];
   state.adminPin = '9119';
-  if(!state.users.some(function(u){return String(u.pin)==='3330';})) state.users.push({id:'ams_user_3330', name:'Gebruiker', pin:'3330', role:'Planner', active:true});
-  if(!state.users.some(function(u){return String(u.pin)==='9119';})) state.users.push({id:'ams_admin_9119', name:'Admin', pin:'9119', role:'Admin', active:true});
+  if(!state.users.some(function(u){return String(u.pin)==='3330';})) state.users.push({id:'ams_admin_3330', name:'Admin', pin:'3330', role:'Admin', active:true});
+  state.users = state.users.filter(function(u){ return String(u && u.pin) !== '9119'; });
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
 }catch(e){}
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
