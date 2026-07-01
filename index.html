@@ -380,9 +380,9 @@
    </div>
   </div>
 
-  <!-- Amsterdam klant-build v19: licentie eerst via REST + SDK fallback, app.js daarna. -->
-  <script src="customer-config.js?v=19"></script>
-  <script src="firebase-config.js?v=19"></script>
+  <!-- Amsterdam klant-build v20: licentie eerst via anonymous auth + REST token, daarna pas app.js. -->
+  <script src="customer-config.js?v=20"></script>
+  <script src="firebase-config.js?v=20"></script>
   <script>
   (function(){
     'use strict';
@@ -392,9 +392,9 @@
     var VERSION = '10.12.5';
     var PUBLIC_MSG = 'Controleer uw licentie en neem contact op met 0900-123 1234.';
     var overlay = document.createElement('div');
-    overlay.id = 'eppLicenseHardGateV19';
+    overlay.id = 'eppLicenseHardGateV20';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0f172a;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-family:Arial,sans-serif;padding:24px;';
-    overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #334155;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:42px;margin-bottom:10px">⏳</div><h1 style="margin:0 0 12px;font-size:28px">Licentie controleren</h1><p style="font-size:18px;line-height:1.5;margin:0">De planner start pas nadat de licentie is goedgekeurd.</p><p style="opacity:.7;margin-top:18px;font-size:13px">Event Planner PRO · '+customerId+' · v19</p></div>';
+    overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #334155;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:42px;margin-bottom:10px">⏳</div><h1 style="margin:0 0 12px;font-size:28px">Licentie controleren</h1><p style="font-size:18px;line-height:1.5;margin:0">De planner start pas nadat de licentie is goedgekeurd.</p><p style="opacity:.7;margin-top:18px;font-size:13px">Event Planner PRO · '+customerId+' · v20</p></div>';
     document.documentElement.appendChild(overlay);
     window.EPP_LICENSE_BLOCKED = true;
     window.EPP_LICENSE_CHECK_DONE = false;
@@ -406,14 +406,11 @@
       window.EPP_LICENSE_REASON = reason || 'blocked';
       console.warn('EPP licentie geblokkeerd:', reason || 'blocked');
       overlay.style.display='flex';
-      overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #7f1d1d;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:44px;margin-bottom:10px">🔒</div><h1 style="margin:0 0 12px;font-size:30px">Licentie niet actief</h1><p style="font-size:18px;line-height:1.5;margin:0">'+esc(msg || PUBLIC_MSG)+'</p><p style="opacity:.7;margin-top:18px;font-size:13px">'+esc(customerId)+' · v19 licentiecontrole</p></div>';
+      overlay.innerHTML = '<div style="max-width:650px;background:#111827;border:1px solid #7f1d1d;border-radius:22px;padding:30px;box-shadow:0 20px 80px rgba(0,0,0,.55)"><div style="font-size:44px;margin-bottom:10px">🔒</div><h1 style="margin:0 0 12px;font-size:30px">Licentie niet actief</h1><p style="font-size:18px;line-height:1.5;margin:0">'+esc(msg || PUBLIC_MSG)+'</p><p style="opacity:.7;margin-top:18px;font-size:13px">'+esc(customerId)+' · v20 licentiecontrole</p></div>';
     }
     function todayLocal(){
       var d = new Date();
-      var y = d.getFullYear();
-      var m = String(d.getMonth()+1).padStart(2,'0');
-      var day = String(d.getDate()).padStart(2,'0');
-      return y+'-'+m+'-'+day;
+      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
     }
     function normalizeDate(v){
       var s = String(v || '').trim();
@@ -429,11 +426,11 @@
     function evaluateLicense(lic){
       if(!lic || typeof lic !== 'object') return {ok:false, reason:'license_missing'};
       var status = String(lic.status || '').toLowerCase();
-      var until = normalizeDate(lic.validUntil || lic.paidUntil || '');
+      var until = normalizeDate(lic.validUntil || '');
       var blocked = lic.blocked === true || lic.active === false || status === 'blocked' || status === 'inactive';
       var paidFalse = lic.paid === false;
       var today = todayLocal();
-      console.log('EPP licentie check', {customerId:customerId, today:today, validUntil:until, blocked:blocked, paid:lic.paid, status:status});
+      console.log('EPP licentie check v20', {customerId:customerId, today:today, validUntil:until, blocked:blocked, paid:lic.paid, paidUntil:lic.paidUntil, status:status, raw:lic});
       if(blocked) return {ok:false, reason:'blocked'};
       if(paidFalse) return {ok:false, reason:'not_paid'};
       if(until && until < today) return {ok:false, reason:'expired', until:until, today:today};
@@ -448,45 +445,39 @@
       window.EPP_LICENSE_BLOCKED = false;
       window.EPP_LICENSE_CHECK_DONE = true;
       if(overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      await load('bns-preloader.js?v=19');
-      await load('app.js?v=19_license_first');
-      await load('app-patches.js?v=19');
+      await load('bns-preloader.js?v=20');
+      await load('app.js?v=20_license_first');
+      await load('app-patches.js?v=20');
     }
-    async function getLicenseViaRest(){
-      if(!fb || !fb.databaseURL) throw new Error('missing_database_url');
-      var url = String(fb.databaseURL).replace(/\/$/,'') + '/' + encodeURIComponent(customerId) + '/license.json?cb=' + Date.now();
+    async function authAndFetchLicense(){
+      if(!fb || !fb.databaseURL || !fb.apiKey) throw new Error('missing_firebase_config');
+      var appMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
+      var authMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
+      var appName='epp-license-v20-'+customerId;
+      var existing = appMod.getApps().find(function(a){return a.name===appName;});
+      var app = existing || appMod.initializeApp(fb, appName);
+      var auth = authMod.getAuth(app);
+      var cred = auth.currentUser ? {user:auth.currentUser} : await authMod.signInAnonymously(auth);
+      var token = await cred.user.getIdToken(true);
+      var url = String(fb.databaseURL).replace(/\/$/,'') + '/' + encodeURIComponent(customerId) + '/license.json?auth=' + encodeURIComponent(token) + '&cb=' + Date.now();
       var res = await fetch(url, {cache:'no-store'});
       var txt = await res.text();
       var data = null;
-      try{ data = txt ? JSON.parse(txt) : null; }catch(e){ throw new Error('rest_bad_json'); }
+      try{ data = txt ? JSON.parse(txt) : null; }catch(e){ throw new Error('bad_json'); }
       if(!res.ok || (data && data.error)) throw new Error('rest_'+res.status+'_'+(data && data.error ? data.error : 'error'));
       return data;
     }
-    async function getLicenseViaSdk(){
-      var appMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
-      var authMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
-      var dbMod = await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-database.js');
-      var appName='epp-license-v19-'+customerId;
-      var existing = appMod.getApps().find(function(a){return a.name===appName;});
-      var app = existing || appMod.initializeApp(fb, appName);
-      try{ var auth = authMod.getAuth(app); if(!auth.currentUser) await authMod.signInAnonymously(auth); }catch(e){ console.warn('EPP anonymous auth niet gelukt, probeer database toch', e); }
-      var db = dbMod.getDatabase(app);
-      var snap = await dbMod.get(dbMod.ref(db, customerId + '/license'));
-      return snap.exists() ? snap.val() : null;
-    }
     async function run(){
       await cleanupOldCache();
-      if(!fb || !fb.apiKey){ block(PUBLIC_MSG, 'missing_firebase_config'); return; }
-      var lic = null;
-      try { lic = await getLicenseViaRest(); }
-      catch(restErr){
-        console.warn('EPP REST licentie lezen mislukt, probeer SDK', restErr);
-        try { lic = await getLicenseViaSdk(); }
-        catch(sdkErr){ console.error('EPP SDK licentie lezen mislukt', sdkErr); block(PUBLIC_MSG, 'read_failed'); return; }
+      try{
+        var lic = await authAndFetchLicense();
+        var check = evaluateLicense(lic);
+        if(!check.ok){ block(PUBLIC_MSG, check.reason); return; }
+        await startApp();
+      }catch(e){
+        console.error('EPP licentie lezen/controleren mislukt v20', e);
+        block(PUBLIC_MSG, 'read_failed');
       }
-      var check = evaluateLicense(lic);
-      if(!check.ok){ block(PUBLIC_MSG, check.reason); return; }
-      await startApp();
     }
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', run); else run();
   })();
