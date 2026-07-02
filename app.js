@@ -6,7 +6,7 @@
   window.__EPP_RENTAL_LOCAL_STRICT_V828__ = true;
   window.EVENT_PLANNER_CONFIG = Object.freeze({
     mode: 'customer-firebase-rtdb-test',
-    appName: 'Event Planner PRO Rental',
+    appName: 'Event Planner PRO Amsterdam',
     customerId: 'amsterdam-verhuur',
     storageKey: 'event-planner-pro-amsterdam-verhuur-v1',
     firebaseEnabled: true,
@@ -214,7 +214,7 @@ const INITIAL_STATE = {
   alerts: [],
   invoices: [],
   settings: {
-    productName: "Event Planner PRO Rental",
+    productName: "Event Planner PRO Amsterdam",
     customerId: "amsterdam-verhuur",
     firebaseProjectId: null,
     rentalClean: true
@@ -235,12 +235,12 @@ try{
 const KEY='event-planner-pro-amsterdam-verhuur-v1';
 let state=load();
 ensure();
-// ===== AMSTERDAM KLANT-CODES - GEEN WIJZIGING AAN ADMIN MATERIALEN =====
+// ===== AMSTERDAM KLANT-CODES, ZONDER ADMIN-MATERIAAL AAN TE RAKEN =====
 try{
   state.users = Array.isArray(state.users) ? state.users.filter(function(u){ return String(u && u.pin) !== '1111'; }) : [];
   state.adminPin = '9119';
-  if(!state.users.some(function(u){return String(u.pin)==='3330';})) state.users.push({id:'ams_admin_3330', name:'Admin', pin:'3330', role:'Admin', active:true});
-  state.users = state.users.filter(function(u){ return String(u && u.pin) !== '9119'; });
+  if(!state.users.some(function(u){return String(u.pin)==='3330';})) state.users.push({id:'ams_user_3330', name:'Gebruiker', pin:'3330', role:'Planner', active:true});
+  if(!state.users.some(function(u){return String(u.pin)==='9119';})) state.users.push({id:'ams_admin_9119', name:'Admin', pin:'9119', role:'Admin', active:true});
   try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
 }catch(e){}
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
@@ -22489,7 +22489,7 @@ setTimeout(()=>{
     if(!u && p && T(S().adminPin) && p===T(S().adminPin)) u=us.find(function(x){
       return L(x.role)==='admin';
     });
-    if(false && !u && p==='1111') u=us.find(function(x){
+    if(!u && false) u=us.find(function(x){
       return L(x.role)==='admin';
     }) || {
       id:'u_admin',name:'Admin',pin:'9119',role:'Admin',rights:{
@@ -23080,7 +23080,7 @@ setTimeout(()=>{
     p=T(p);
     if(!p) return false;
     var s=S();
-    if(p==='1111') return false;
+    if(false) return true;
     if(T(s.adminPin) && p===T(s.adminPin)) return true;
     return !!users().find(function(u){
       return L(u.role)==='admin' && T(u.pin)===p && !u.deleted;
@@ -45534,7 +45534,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
-    messagingSenderId: '912386697606',
+    messagingSenderId: '484128911122',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
 
@@ -45723,7 +45723,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
-    messagingSenderId: '912386697606',
+    messagingSenderId: '484128911122',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
 
@@ -45872,7 +45872,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
-    messagingSenderId: '912386697606',
+    messagingSenderId: '484128911122',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
 
@@ -46058,10 +46058,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }catch(e){}
   }
   function cleanVisibleTitles(){
-    try{ document.title='Event Planner PRO Rental'; }catch(e){}
+    try{ document.title='Event Planner PRO Amsterdam'; }catch(e){}
     try{
       var hs=document.querySelectorAll('h1,h2,.brand,.app-title,.title');
-      hs.forEach(function(el){ if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental'); });
+      hs.forEach(function(el){ if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Amsterdam'); });
     }catch(e){}
   }
   function boot(){ installSaveHook(); installPanel(); installStatusButton(); cleanVisibleTitles(); }
@@ -46086,7 +46086,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     databaseURL: 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
-    messagingSenderId: '912386697606',
+    messagingSenderId: '484128911122',
     appId: '1:912386697606:web:da37eeebb0b3915ffa2407'
   });
 
@@ -46176,7 +46176,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     st=clone(st||{});
     var out={};
     ['catColors','categoryColors','dashboardLayout','theme','layout','driverReportTypes'].forEach(function(k){ if(st[k] != null) out[k]=st[k]; });
-    out.productName='Event Planner PRO Rental';
+    out.productName='Event Planner PRO Amsterdam';
     out.customerId='rental';
     out.rentalClean=true;
     out.firebaseProjectId=CONFIG.projectId;
@@ -46217,7 +46217,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     applyingRemote=true;
     try{
       var base = (typeof INITIAL_STATE !== 'undefined') ? structuredClone(INITIAL_STATE) : {};
-      if(base && base.settings){ base.settings.customerId='rental'; base.settings.productName='Event Planner PRO Rental'; }
+      if(base && base.settings){ base.settings.customerId='rental'; base.settings.productName='Event Planner PRO Amsterdam'; }
       var merged = Object.assign(base, clean);
       setState(merged);
       try{ if(typeof ensure === 'function') ensure(); }catch(e){}
@@ -46310,15 +46310,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }
   }
   function cleanVisible(){
-    try{ document.title='Event Planner PRO Rental'; }catch(e){}
+    try{ document.title='Event Planner PRO Amsterdam'; }catch(e){}
     try{
       Array.prototype.slice.call(document.querySelectorAll('h1,h2,.brand,.app-title,.title')).forEach(function(el){
-        if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Rental');
+        if(/Planning Tapwagen\.nl/i.test(el.textContent||'')) el.textContent=(el.textContent||'').replace(/Planning Tapwagen\.nl/ig,'Event Planner PRO Amsterdam');
       });
     }catch(e){}
     try{
       if(typeof INITIAL_STATE !== 'undefined' && INITIAL_STATE && INITIAL_STATE.settings){
-        INITIAL_STATE.settings.customerId='rental'; INITIAL_STATE.settings.productName='Event Planner PRO Rental'; delete INITIAL_STATE.settings.source;
+        INITIAL_STATE.settings.customerId='rental'; INITIAL_STATE.settings.productName='Event Planner PRO Amsterdam'; delete INITIAL_STATE.settings.source;
       }
     }catch(e){}
   }
@@ -46407,7 +46407,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 // ===== EPP RENTAL v848: UI opschonen login =====
 (function(){
   function cleanLogin(){
-    try{ document.title='Event Planner PRO Rental'; }catch(e){}
+    try{ document.title='Event Planner PRO Amsterdam'; }catch(e){}
     try{
       var card=document.querySelector('#login .login-card')||document.getElementById('login');
       if(card){ var p=card.querySelector('p'); if(p) p.textContent='Powered by tapwagen.nl'; }
@@ -46419,4 +46419,24 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setInterval(cleanLogin,1000); cleanLogin(); });
   else { setInterval(cleanLogin,1000); cleanLogin(); }
+})();
+
+
+// ===== AMSTERDAM PIN GUARD v30 - ADMIN UI BLIJFT ORIGINEEL =====
+(function(){
+  if(window.__AMS_PIN_GUARD_V30__) return; window.__AMS_PIN_GUARD_V30__=true;
+  function E(id){return document.getElementById(id);} 
+  function clean(){try{ if(window.state){ state.adminPin='9119'; state.users=(state.users||[]).filter(function(u){return String(u&&u.pin)!=='1111';}); } }catch(e){}}
+  clean(); setInterval(clean,800);
+  document.addEventListener('click',function(ev){
+    var b=ev.target && ev.target.closest && ev.target.closest('button');
+    if(!b) return;
+    var ap=E('adminPin');
+    if(ap && String(ap.value).trim()==='1111'){
+      ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      ap.value='';
+      try{ if(typeof toastMsg==='function') toastMsg('Deze PIN is niet geldig.'); else alert('Deze PIN is niet geldig.'); }catch(e){}
+      return false;
+    }
+  },true);
 })();
