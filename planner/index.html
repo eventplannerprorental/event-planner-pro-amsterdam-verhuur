@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Amsterdam verhuur - Planner</title>
+  <link rel="manifest" href="manifest.json?v=370">
+  <link rel="stylesheet" href="planner.css?v=370">
+</head>
+<body>
+  <header class="top">
+    <div><h1>Planner</h1><small id="who">Amsterdam verhuur</small></div>
+    <button id="logoutBtn" class="ghost hidden" type="button">Uitloggen</button>
+  </header>
+  <main class="wrap">
+    <div id="status" class="statusbar">Starten...</div>
+    <section id="loginBox" class="card login-card">
+      <h2>Inloggen</h2>
+      <p class="help">Planner/Admin login.</p>
+      <div class="login-grid">
+        <label>Naam</label>
+        <select id="loginName"></select>
+        <label>PIN</label>
+        <input id="loginPin" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="PIN">
+        <button id="loginBtn" type="button" class="btn-full">Inloggen</button>
+      </div>
+    </section>
+    <section id="appBox" class="hidden">
+      <div class="toolbar">
+        <input id="searchBox" class="search" placeholder="Zoek opdracht / klant / adres / bezorger">
+        <button id="refreshBtn" type="button">Verversen</button>
+        <button id="clearSearchBtn" class="btn-dark" type="button">Leeg</button>
+      </div>
+      <h2>Opdrachten</h2>
+      <div id="orders"></div>
+      <h2>Meldingen bezorger</h2>
+      <div id="alerts"></div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="../customer-config.js?v=370"></script>
+  <script src="planner.js?v=370"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js?v=370').catch(function(){});
+    }
+  </script>
+</body>
+</html>
