@@ -380,32 +380,19 @@
    </div>
   </div>
 
-  <style id="eppLicenseGateStyle">
-    #eppLicenseGate{position:fixed;inset:0;z-index:2147483646;background:#0f172a;color:white;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif}
-    #eppLicenseGate .box{max-width:560px;border:2px solid #ef4444;border-radius:20px;padding:28px;text-align:center;background:#111827;box-shadow:0 20px 70px rgba(0,0,0,.35)}
-    #eppLicenseGate h1{font-size:28px;margin:10px 0}.eppSmall{font-size:12px;opacity:.85;margin-top:14px}
-  </style>
-  <div id="eppLicenseGate"><div class="box"><div style="font-size:38px">🔒</div><h1>Licentie controleren</h1><p>Een moment geduld.</p><div class="eppSmall">amsterdam-verhuur · v30 licentiecontrole</div></div></div>
-  <script src="customer-config.js?v=30"></script>
-  <script>
-  (function(){
-    var VERSION='10.12.4';
-    var cfg=window.EPP_CUSTOMER_CONFIG||{};
-    var fb=cfg.firebaseConfig||{};
-    var customerId=cfg.customerId||'amsterdam-verhuur';
-    var PUBLIC_MSG='Controleer uw licentie en neem contact op met 0900-123 1234.';
-    function gate(){return document.getElementById('eppLicenseGate');}
-    function block(msg,small){var g=gate(); if(g) g.innerHTML='<div class="box"><div style="font-size:42px">🔒</div><h1>Licentie niet actief</h1><p><b>'+(msg||PUBLIC_MSG)+'</b></p><div class="eppSmall">'+customerId+' · v30 licentiecontrole'+(small?' · '+String(small).replace(/[<>&]/g,''):'')+'</div></div>';}
-    function today(){var d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10);}
-    function norm(v){var s=String(v||'').trim(); var m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if(m)return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0'); m=s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/); if(m)return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0'); return s.slice(0,10);}
-    function ok(lic){if(!lic||typeof lic!=='object')return false; var st=String(lic.status||'').toLowerCase(); if(lic.blocked===true||lic.active===false||st==='blocked'||st==='inactive')return false; if(lic.paid===false)return false; var u=norm(lic.validUntil||''); return !u || u>=today();}
-    function load(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=function(){rej(new Error(src));};document.body.appendChild(s);});}
-    function pathList(){return ['customers/'+encodeURIComponent(customerId)+'/license.json', encodeURIComponent(customerId)+'/license.json'];}
-    async function readDirect(){var base=String(fb.databaseURL||'').replace(/\/$/,''); if(!base)throw new Error('geen_databaseURL'); var ps=pathList(), errs=[]; for(var i=0;i<ps.length;i++){try{var r=await fetch(base+'/'+ps[i]+'?cb='+Date.now(),{cache:'no-store'});var t=await r.text();var d=t?JSON.parse(t):null;if(d&&typeof d==='object')return d;errs.push(ps[i]+':null');}catch(e){errs.push(e.message||String(e));}} throw new Error(errs.join(' | '));}
-    async function start(){window.EPP_LICENSE_CHECK_DONE=true;window.EPP_LICENSE_BLOCKED=false;var g=gate();if(g)g.remove(); await load('bns-preloader.js?v=30'); await load('app.js?v=30_exact_copy_consistent'); await load('app-patches.js?v=30'); setTimeout(function(){try{ if(window.BNS_V391_ADMIN_MATERIAL_FULL) window.BNS_V391_ADMIN_MATERIAL_FULL.install(); }catch(e){}},900);}
-    async function run(){try{var lic=await readDirect(); if(!ok(lic)){block(PUBLIC_MSG,'ongeldig');return;} await start();}catch(e){console.error('licentie v30 fout',e); block(PUBLIC_MSG,'leesfout');}}
-    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
-  })();
-  </script>
-</body>
+  <!--
+    SCRIPT VOLGORDE — DIT MAG NIET VERANDERD WORDEN:
+    1. bns-preloader   — patchts MutationObserver + alert/confirm VOOR app.js
+    2. app.js          — hoofdapplicatie
+    3. material-fix.js — materiaalweergave fix (was eerder niet geladen!)
+    4. firebase-config — Firebase sleutels
+    5. firebase-sync   — Firebase synchronisatie
+    6. bns-stabilizer  — opruimen na alles: Wis knop, boekhouding mappen, intervals
+  -->
+  <script src="bns-preloader.js"></script>
+  <script src="app.js?v=847_auto_firebase_pin_only"></script>
+  <!-- v840: Firebase RTDB/Auth zit veilig in app.js via EPP-config; oude BNS_FIREBASE_CONFIG blijft geblokkeerd. -->
+  <!-- v840: firebase-sync.js blijft UIT om oude Firestore-sync niet te starten. -->
+
+ </body>
 </html>
