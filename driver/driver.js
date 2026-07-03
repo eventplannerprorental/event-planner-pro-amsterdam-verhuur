@@ -1,5 +1,5 @@
-/* Event Planner PRO Amsterdam verhuur - driver v47
-   Layout/knoppen in Tapwagen-stijl, maar alle data naar Amsterdam RTDB:
+/* Event Planner PRO Amsterdam verhuur - driver v48
+   Volledige bezorgtelefoon in Tapwagen-stijl met rubrieken, maar alle data naar Amsterdam RTDB:
    customers/amsterdam-verhuur/users, orders, alerts en customerFiles.
 */
 (function(){
@@ -18,7 +18,7 @@
   var app, db;
   var users = [], orders = [];
   var currentUser = null;
-  var LS_USER = 'epp-amsterdam-driver-user-v47';
+  var LS_USER = 'epp-amsterdam-driver-user-v48';
 
   function E(id){ return document.getElementById(id); }
   function T(v){ return String(v == null ? '' : v).trim(); }
@@ -41,9 +41,9 @@
   }
 
   function injectCss(){
-    if(document.getElementById('eppDriverV47Css')) return;
-    var css=document.createElement('style'); css.id='eppDriverV47Css';
-    css.textContent = '\nbody{background:#eef4fb!important;font-family:system-ui,-apple-system,Segoe UI,sans-serif!important;color:#102033}.hero{background:linear-gradient(135deg,#0b74d1,#074e93)!important;color:#fff!important;padding:22px 16px!important;border-radius:0 0 24px 24px!important;box-shadow:0 10px 28px rgba(5,57,107,.22)}.hero h1{margin:0;font-size:26px}.hero p{margin:4px 0 0;opacity:.9}.wrap{max-width:760px;margin:14px auto;padding:0 12px}.card{background:#fff!important;border-radius:20px!important;padding:16px!important;margin:14px 0!important;box-shadow:0 10px 30px rgba(15,23,42,.13)!important;border:1px solid #dbe7f5}.status{margin:12px 0;padding:10px 14px;border-radius:14px;background:#dbeafe;font-weight:800}.status.bad{background:#fee2e2;color:#991b1b}.status.ok{background:#dcfce7;color:#14532d}.hidden{display:none!important}label{font-weight:800;margin-top:10px;display:block}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:12px;padding:12px;font-size:16px;margin:6px 0 12px}.primary,.secondary,button{border:0;border-radius:14px;padding:12px 14px;font-weight:900;font-size:15px}.primary{background:#0b74d1;color:#fff}.secondary{background:#334155;color:#fff}.order{border-left:8px solid #16a34a}.order-head{display:flex;gap:12px;align-items:flex-start}.datebox{background:#111827;color:#fff;border-radius:16px;padding:12px;font-weight:900;text-align:center;min-width:72px}.order-main{flex:1}.badge{display:inline-block;border-radius:999px;background:#dcfce7;color:#166534;font-weight:900;padding:5px 10px;font-size:13px}.muted{color:#64748b}.btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.btn-grid button{color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.12)}.btn-waze{background:#16a34a}.btn-call{background:#0284c7}.btn-photo{background:#7c3aed}.btn-sign{background:#f97316}.btn-done{background:#16a34a;grid-column:1/-1}.btn-alert{background:#dc2626}.btn-overview{background:#2563eb;grid-column:1/-1}.media-list{background:#f8fafc;border-radius:14px;padding:10px;margin-top:10px}.media-item{border-bottom:1px solid #e5e7eb;padding:8px 0}.media-item:last-child{border-bottom:0}.small-actions{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}.small-actions button{padding:7px 10px;font-size:13px}.delete{background:#475569;color:#fff}.share{background:#0ea5e9;color:#fff}.modal{position:fixed;inset:0;background:rgba(15,23,42,.62);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px}.modal-card{background:#fff;border-radius:18px;padding:16px;width:min(680px,96vw);max-height:88vh;overflow:auto}.sig{border:2px dashed #94a3b8;border-radius:14px;width:100%;height:220px;touch-action:none;background:#fff}.toprow{display:flex;justify-content:space-between;gap:12px;align-items:center}@media(max-width:520px){.btn-grid{grid-template-columns:1fr}.order-head{align-items:stretch}.datebox{min-width:58px}}';
+    if(document.getElementById('eppDriverV48Css')) return;
+    var css=document.createElement('style'); css.id='eppDriverV48Css';
+    css.textContent = '\nbody{background:#eef4fb!important;font-family:system-ui,-apple-system,Segoe UI,sans-serif!important;color:#102033}.hero{background:linear-gradient(135deg,#0b74d1,#074e93)!important;color:#fff!important;padding:22px 16px!important;border-radius:0 0 24px 24px!important;box-shadow:0 10px 28px rgba(5,57,107,.22)}.hero h1{margin:0;font-size:26px}.hero p{margin:4px 0 0;opacity:.9}.wrap{max-width:760px;margin:14px auto;padding:0 12px}.card{background:#fff!important;border-radius:20px!important;padding:16px!important;margin:14px 0!important;box-shadow:0 10px 30px rgba(15,23,42,.13)!important;border:1px solid #dbe7f5}.status{margin:12px 0;padding:10px 14px;border-radius:14px;background:#dbeafe;font-weight:800}.status.bad{background:#fee2e2;color:#991b1b}.status.ok{background:#dcfce7;color:#14532d}.hidden{display:none!important}label{font-weight:800;margin-top:10px;display:block}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:12px;padding:12px;font-size:16px;margin:6px 0 12px}.primary,.secondary,button{border:0;border-radius:14px;padding:12px 14px;font-weight:900;font-size:15px}.primary{background:#0b74d1;color:#fff}.secondary{background:#334155;color:#fff}.order{border-left:8px solid #16a34a}.order-head{display:flex;gap:12px;align-items:flex-start}.datebox{background:#111827;color:#fff;border-radius:16px;padding:12px;font-weight:900;text-align:center;min-width:72px}.order-main{flex:1}.badge{display:inline-block;border-radius:999px;background:#dcfce7;color:#166534;font-weight:900;padding:5px 10px;font-size:13px}.muted{color:#64748b}.btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.btn-grid button{color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.12)}.btn-waze{background:#16a34a}.btn-call{background:#0284c7}.btn-photo{background:#7c3aed}.btn-sign{background:#f97316}.btn-done{background:#16a34a;grid-column:1/-1}.btn-alert{background:#dc2626}.btn-overview{background:#2563eb;grid-column:1/-1}.driver-sections{margin-top:14px;display:grid;gap:12px}.driver-group{border:1px solid #dbe7f5;border-radius:18px;padding:12px;background:#f8fbff}.driver-group h4{margin:0 0 6px;font-size:16px}.group-alert{border-color:#fecaca;background:#fff7f7}.group-media{border-color:#ddd6fe;background:#faf7ff}.group-route{border-color:#bbf7d0;background:#f7fff9}.group-overview{border-color:#bfdbfe;background:#f8fbff}.driver-group .muted{font-size:13px;margin:0 0 8px}.media-list{background:#f8fafc;border-radius:14px;padding:10px;margin-top:10px}.media-item{border-bottom:1px solid #e5e7eb;padding:8px 0}.media-item:last-child{border-bottom:0}.small-actions{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}.small-actions button{padding:7px 10px;font-size:13px}.delete{background:#475569;color:#fff}.share{background:#0ea5e9;color:#fff}.modal{position:fixed;inset:0;background:rgba(15,23,42,.62);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px}.modal-card{background:#fff;border-radius:18px;padding:16px;width:min(680px,96vw);max-height:88vh;overflow:auto}.sig{border:2px dashed #94a3b8;border-radius:14px;width:100%;height:220px;touch-action:none;background:#fff}.toprow{display:flex;justify-content:space-between;gap:12px;align-items:center}@media(max-width:520px){.btn-grid{grid-template-columns:1fr}.order-head{align-items:stretch}.datebox{min-width:58px}}';
     document.head.appendChild(css);
   }
 
@@ -114,17 +114,25 @@
       '<h3>'+esc(orderTitle(o))+'</h3><div><b>Klant:</b> '+esc((o.customer||{}).name)+'</div><div><b>Locatie:</b> '+esc(addr)+'</div><div><b>Materialen:</b> '+mats+'</div>'+
       (extra?'<div><b>Bijzonderheden:</b> '+esc(extra)+'</div>':'')+
       '<div class="muted">Totaal: '+esc(o.pricing&&o.pricing.grand?money(o.pricing.grand):'')+'</div></div></div>'+
-      '<div class="btn-grid">'+
-      '<button class="btn-waze" data-act="waze">Waze</button>'+
+      '<div class="driver-sections">'+
+      '<section class="driver-group group-route"><h4>Route en contact</h4><div class="btn-grid">'+
+      '<button class="btn-waze" data-act="waze">Waze / route</button>'+
       '<button class="btn-call" data-act="call" '+(!tel?'disabled':'')+'>Klant bellen</button>'+
+      '</div></section>'+ 
+      '<section class="driver-group group-media"><h4>Foto\'s en handtekening</h4><p class="muted">Gaat naar klantmap / overzicht bestelling, zonder systeemmelding.</p><div class="btn-grid">'+
       '<button class="btn-photo" data-act="photo-before">Foto voor levering</button>'+
       '<button class="btn-photo" data-act="photo-after">Foto na levering</button>'+ 
       '<button class="btn-sign" data-act="signature">Handtekening klant</button>'+ 
+      '</div></section>'+ 
+      '<section class="driver-group group-alert"><h4>Meldingen</h4><p class="muted">Schade, vermissing en defect gaan naar de planner als rode systeemmelding.</p><div class="btn-grid">'+
       '<button class="btn-alert" data-act="schade">Schade melden</button>'+ 
       '<button class="btn-alert" data-act="vermissing">Vermissing melden</button>'+ 
-      '<button class="btn-alert" data-act="defect">Defect melden</button>'+ 
-      '<button class="btn-overview" data-act="overview">Overzicht bestelling</button>'+ 
+      '<button class="btn-alert" data-act="defect">Defect / storing melden</button>'+ 
+      '</div></section>'+ 
+      '<section class="driver-group group-overview"><h4>Overzicht bestelling</h4><div class="btn-grid">'+
+      '<button class="btn-overview" data-act="overview">Overzicht bestelling / klantmap</button>'+ 
       '<button class="btn-done" data-act="done">Afmelden / uitgevoerd</button>'+ 
+      '</div></section>'+ 
       '</div></section>';
   }
   function findOrderFromBtn(btn){ var card=btn.closest('[data-order]'); var k=card&&card.getAttribute('data-order'); return orders.find(function(o){ return String(o._key)===String(k) || String(key(o.id||o.number))===String(k); }); }

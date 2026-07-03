@@ -1,9 +1,1 @@
-{
-  "name": "Bezorger Amsterdam verhuur",
-  "short_name": "Amsterdam Driver",
-  "start_url": "./index.html",
-  "display": "standalone",
-  "background_color": "#f3f7fb",
-  "theme_color": "#0b74d1",
-  "icons": []
-}
+{"name":"Bezorger Amsterdam verhuur","short_name":"Bezorger","start_url":"./index.html?v=480","display":"standalone","theme_color":"#0b74d1","background_color":"#eef4fb"}

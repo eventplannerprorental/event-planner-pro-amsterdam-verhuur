@@ -4,9 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b74d1">
-  <title>Bezorger Amsterdam verhuur</title>
-  <link rel="manifest" href="manifest.json?v=320">
-  <link rel="stylesheet" href="driver.css?v=320">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Bezorger Amsterdam verhuur v48</title>
+  <link rel="manifest" href="manifest.json?v=480">
+  <link rel="stylesheet" href="driver.css?v=480">
 </head>
 <body>
   <header class="hero">
@@ -23,9 +26,7 @@
 
       <div id="nameBlock" class="field-block">
         <label for="driverSelect">Naam</label>
-        <select id="driverSelect">
-          <option value="">Laden...</option>
-        </select>
+        <select id="driverSelect"><option value="">Laden...</option></select>
         <small>Na inloggen blijft deze telefoon/browser vast gekoppeld aan deze naam.</small>
       </div>
 
@@ -53,9 +54,15 @@
     </section>
   </main>
 
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
-  <script src="driver.js?v=320"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ r.unregister(); }); });
+      if (window.caches) caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
+    }
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js?v=480"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js?v=480"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js?v=480"></script>
+  <script src="driver.js?v=480"></script>
 </body>
 </html>
