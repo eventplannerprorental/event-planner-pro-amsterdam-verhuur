@@ -46844,7 +46844,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 })();
 
 /* ============================================================
-   AMSTERDAM v45 - HARDE RTDB SYNC + PERSONEEL FIX
+   AMSTERDAM v46 - HARDE RTDB SYNC + PERSONEEL/ORDER FIX
    - Geen index wijziging
    - Schrijft users/orders hard naar customers/amsterdam-verhuur
    - Verwijdert handmatige oude Firebase-test users zodra sync slaagt
@@ -46852,8 +46852,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ============================================================ */
 (function(){
   'use strict';
-  if(window.__EPP_AMS_V45_HARD_SYNC__) return;
-  window.__EPP_AMS_V45_HARD_SYNC__ = true;
+  if(window.__EPP_AMS_V46_HARD_SYNC__) return;
+  window.__EPP_AMS_V46_HARD_SYNC__ = true;
 
   var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE = 'customers/amsterdam-verhuur';
@@ -46865,7 +46865,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:v45-hard-rtdb-sync'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   };
   var appMod, authMod, app, auth, tokenPromise;
 
@@ -46973,9 +46973,41 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return out;
   }
 
+
+  function captureAdminFormIntoState(){
+    var s = S();
+    if(!s) return null;
+    s.users = Array.isArray(s.users) ? s.users : [];
+    // De handmatig aangemaakte test-bezorger uit Firebase mag niet lokaal blijven hangen.
+    s.users = s.users.filter(function(u){
+      var txt = (T(u && u.id) + ' ' + T(u && u.name)).toLowerCase();
+      return txt.indexOf('test-bezorger') < 0 && txt.indexOf('test bezorger') < 0;
+    });
+    var nameEl = E('adminUserName'), pinEl = E('adminUserPin'), roleEl = E('adminUserRole');
+    var name = T(nameEl && nameEl.value);
+    var pin = T(pinEl && pinEl.value);
+    var role = T(roleEl && roleEl.value) || 'Bezorger';
+    if(name && pin && /^\d{4}$/.test(pin)){
+      if(!(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119'))){
+        var existing = s.users.find(function(u){ return T(u.name).toLowerCase() === name.toLowerCase() || T(u.pin) === pin; });
+        if(!existing){
+          existing = {id:'user-' + safeKey(pin + '-' + name), rights:{}};
+          s.users.push(existing);
+        }
+        existing.name = name;
+        existing.pin = pin;
+        existing.role = role;
+        existing.active = true;
+        existing.rights = Object.assign({}, existing.rights || {});
+      }
+    }
+    return s;
+  }
+
   async function hardSync(reason){
     var s = S();
     if(!s) throw new Error('Geen lokale state gevonden');
+    captureAdminFormIntoState();
     var users = userMap(s.users || []);
     var orders = orderMap(s.orders || []);
     await put(BASE + '/users', users);
@@ -46985,7 +47017,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       reason: reason || 'manual',
       usersCount: Object.keys(users).length,
       ordersCount: Object.keys(orders).length,
-      version: 'v45'
+      version: 'v46'
     });
     status('Firebase: ok', false);
     return {users:Object.keys(users).length, orders:Object.keys(orders).length};
@@ -47005,10 +47037,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function wrapSave(){
-    if(window.__EPP_V45_SAVE_WRAPPED__) return;
+    if(window.__EPP_V46_SAVE_WRAPPED__) return;
     if(typeof save !== 'function') return;
     var old = save;
-    window.__EPP_V45_SAVE_WRAPPED__ = true;
+    window.__EPP_V46_SAVE_WRAPPED__ = true;
     save = function(){
       var r = old.apply(this, arguments);
       schedule('save');
@@ -47022,12 +47054,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     b.__eppV45Bound = true;
     b.addEventListener('click', function(){
       toast('Firebase sync starten...');
-      hardSync('button').then(function(res){ toast('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+      hardSync('button').then(function(res){ alert('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
         .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
     }, true);
     b.addEventListener('dblclick', function(){
       toast('Firebase sync starten...');
-      hardSync('doubleclick').then(function(res){ toast('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+      hardSync('doubleclick').then(function(res){ alert('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
         .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
     }, true);
   }
@@ -47065,7 +47097,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     localSave();
     updateDriverSelect();
     try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
-    schedule('admin-user');
+    hardSync('admin-user').then(function(res){ toast('Gebruiker opgeslagen + Firebase ok: ' + res.users + ' gebruikers'); }).catch(function(e){ console.error(e); alert('Gebruiker lokaal opgeslagen, maar Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
     toast('Gebruiker opgeslagen: ' + name);
     return false;
   }
@@ -47088,4 +47120,121 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setTimeout(install, 500);
   setTimeout(install, 1500);
   setTimeout(install, 3500);
+})();
+
+/* ============================================================
+   AMSTERDAM v47 - PLANNER MELDINGEN + RODE SYSTEEMKNOP
+   - Leest driver-meldingen uit customers/amsterdam-verhuur/alerts
+   - Rode systeemknop alleen voor schade/vermissing/defect/storing
+   - Foto/handtekening blijven klantdossier zonder systeemmelding
+   - Geen index/admin/layout wijziging
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V47_PLANNER_ALERTS__) return;
+  window.__EPP_AMS_V47_PLANNER_ALERTS__ = true;
+
+  var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE = 'customers/amsterdam-verhuur';
+  var lastAlerts = {};
+
+  function E(id){ return document.getElementById(id); }
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function esc(s){ return T(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function objVals(o){ return o && typeof o === 'object' ? Object.keys(o).map(function(k){ var v=o[k]; if(v && typeof v==='object' && !v.id) v.id=k; return v; }) : []; }
+  function isOpen(a){ return a && a.resolved !== true && a.deleted !== true && String(a.status||'open').toLowerCase() !== 'resolved'; }
+  function isSystem(a){ return /schade|vermissing|defect|storing|probleem/i.test([a && a.type, a && a.title, a && a.message].join(' ')); }
+  function niceTime(v){ try{ return v ? new Date(v).toLocaleString('nl-NL') : ''; }catch(e){ return v || ''; } }
+
+  async function get(path){
+    var r = await fetch(DB + '/' + path + '.json?ts=' + Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('GET ' + path + ' HTTP ' + r.status + ' ' + await r.text().catch(function(){return '';}));
+    return r.json();
+  }
+  async function patch(path, data){
+    var r = await fetch(DB + '/' + path + '.json', {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(!r.ok) throw new Error('PATCH ' + path + ' HTTP ' + r.status + ' ' + await r.text().catch(function(){return '';}));
+    return r.json().catch(function(){return null;});
+  }
+
+  function setButton(){
+    var btn = E('alertsBtn');
+    var list = objVals(lastAlerts).filter(function(a){ return isOpen(a) && isSystem(a); });
+    if(!btn) return;
+    btn.textContent = 'Systeemmeldingen (' + list.length + ')';
+    btn.style.background = list.length ? '#dc2626' : '#16a34a';
+    btn.style.color = '#fff';
+    btn.style.fontWeight = '900';
+    btn.title = list.length ? 'Open meldingen van bezorgtelefoon' : 'Geen open systeemmeldingen';
+  }
+
+  function syncLocalState(){
+    try{
+      if(typeof state !== 'undefined' && state){
+        state.alerts = state.alerts || [];
+        var remote = objVals(lastAlerts).filter(isSystem);
+        remote.forEach(function(a){
+          if(!state.alerts.some(function(x){ return String(x.id||'') === String(a.id||''); })){
+            state.alerts.push({
+              id:a.id,
+              title:a.title || 'Systeemmelding',
+              note:a.message || a.note || '',
+              time:a.createdAt || a.time || new Date().toISOString(),
+              resolved:!isOpen(a),
+              source:'bezorgtelefoon',
+              orderId:a.orderId || ''
+            });
+          }
+        });
+      }
+    }catch(e){}
+  }
+
+  async function pullAlerts(){
+    try{
+      lastAlerts = await get(BASE + '/alerts') || {};
+      syncLocalState();
+      setButton();
+    }catch(e){
+      console.warn('[EPP v47] meldingen ophalen fout', e);
+    }
+  }
+
+  function showAlerts(){
+    var list = objVals(lastAlerts).filter(function(a){ return isOpen(a) && isSystem(a); })
+      .sort(function(a,b){ return String(b.createdAt||'').localeCompare(String(a.createdAt||'')); });
+    var old = document.getElementById('eppV47AlertsModal');
+    if(old) old.remove();
+    var wrap = document.createElement('div');
+    wrap.id = 'eppV47AlertsModal';
+    wrap.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999999;display:flex;align-items:center;justify-content:center;padding:18px';
+    wrap.innerHTML = '<div style="width:min(760px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'+
+      '<h2 style="margin:0 0 10px;color:#111827">Systeemmeldingen bezorgtelefoon</h2>'+
+      (list.length ? list.map(function(a){
+        return '<div style="border:1px solid #e5e7eb;border-left:8px solid #dc2626;border-radius:14px;padding:12px;margin:12px 0;background:#fff7f7">'+
+          '<b>'+esc(a.title || 'Systeemmelding')+'</b><br>'+esc(a.message || a.note || '')+
+          '<div style="font-size:13px;color:#6b7280;margin-top:6px">Opdracht: '+esc(a.orderNumber || a.orderId || '-')+' | '+esc(niceTime(a.createdAt || a.time))+'</div>'+ 
+          '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button data-resolve="'+esc(a.id)+'" style="background:#16a34a;color:white;border:0;border-radius:10px;padding:8px 12px;font-weight:800">Afmelden</button>'+ 
+          '<button data-delete="'+esc(a.id)+'" style="background:#374151;color:white;border:0;border-radius:10px;padding:8px 12px;font-weight:800">Wis</button>'+ 
+          '</div></div>';
+      }).join('') : '<p>Geen open systeemmeldingen.</p>')+
+      '<button id="eppV47AlertClose" style="background:#111827;color:#fff;border:0;border-radius:12px;padding:10px 16px;font-weight:900;margin-top:8px">Sluiten</button></div>';
+    document.body.appendChild(wrap);
+    wrap.querySelector('#eppV47AlertClose').onclick = function(){ wrap.remove(); };
+    wrap.querySelectorAll('[data-resolve]').forEach(function(b){ b.onclick = async function(){ await patch(BASE + '/alerts/' + b.getAttribute('data-resolve'), {resolved:true,resolvedAt:new Date().toISOString()}); await pullAlerts(); wrap.remove(); showAlerts(); }; });
+    wrap.querySelectorAll('[data-delete]').forEach(function(b){ b.onclick = async function(){ await patch(BASE + '/alerts/' + b.getAttribute('data-delete'), {deleted:true,deletedAt:new Date().toISOString(),resolved:true}); await pullAlerts(); wrap.remove(); showAlerts(); }; });
+  }
+
+  function bind(){
+    var btn = E('alertsBtn');
+    if(btn && !btn.__eppV47Alerts){
+      btn.__eppV47Alerts = true;
+      btn.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); showAlerts(); }, true);
+    }
+  }
+  function boot(){ bind(); pullAlerts(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+  setTimeout(boot, 1000);
+  setInterval(function(){ bind(); pullAlerts(); }, 10000);
 })();
