@@ -47238,3 +47238,58 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setTimeout(boot, 1000);
   setInterval(function(){ bind(); pullAlerts(); }, 10000);
 })();
+
+// ===== AMSTERDAM v50: alleen eigen systeemmeldingen + rood alarm =====
+(function(){
+  if(window.__AMS_V50_OWN_SYSTEM_ALERTS__) return;
+  window.__AMS_V50_OWN_SYSTEM_ALERTS__ = true;
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  function text(v){ return String(v==null?'':v); }
+  function isGithubAlert(a){
+    var s=JSON.stringify(a||{}).toLowerCase();
+    return /github|git hub|gitup|deploy|pages|repository|repo/.test(s);
+  }
+  function isOwnAlert(a){
+    if(!a || typeof a!=='object') return false;
+    if(isGithubAlert(a)) return false;
+    var src=text(a.source).toLowerCase();
+    return !src || src==='eigen-systeem' || src==='bezorgtelefoon' || src==='systeem' || src==='driver';
+  }
+  function vals(o){
+    return o&&typeof o==='object'?Object.keys(o).map(function(k){var v=o[k]; if(v&&typeof v==='object'&&!v.id)v.id=k; return v;}):[];
+  }
+  function renderOwnAlerts(list){
+    var btn=document.getElementById('alertsBtn');
+    if(!btn) return;
+    var open=list.filter(function(a){return !a.resolved;});
+    btn.textContent='Systeemmeldingen ('+open.length+')';
+    btn.style.background=open.length?'#dc2626':'';
+    btn.style.color=open.length?'#fff':'';
+    btn.onclick=function(){
+      if(!open.length){ alert('Geen open systeemmeldingen'); return; }
+      alert(open.map(function(a,i){
+        return (i+1)+'. '+(a.title||'Melding')+'\nOpdracht: '+(a.orderNumber||'')+'\n'+(a.message||a.text||'')+'\n'+(a.driverName||'');
+      }).join('\n\n'));
+    };
+  }
+  async function loadOwnAlerts(){
+    try{
+      var r=await fetch(DB+'/'+BASE+'/alerts.json?cb='+Date.now(),{cache:'no-store'});
+      var data=await r.json();
+      var list=vals(data).filter(isOwnAlert);
+      try{
+        if(typeof state==='object' && state){ state.alerts=list; }
+      }catch(e){}
+      renderOwnAlerts(list);
+    }catch(e){}
+  }
+  var oldRenderAll = (typeof renderAll==='function') ? renderAll : null;
+  if(oldRenderAll && !oldRenderAll.__amsV50OwnAlerts){
+    var patched=function(){ var r=oldRenderAll.apply(this,arguments); setTimeout(loadOwnAlerts,0); return r; };
+    patched.__amsV50OwnAlerts=true;
+    try{ renderAll=patched; window.renderAll=patched; }catch(e){}
+  }
+  setTimeout(loadOwnAlerts,1000);
+  setInterval(loadOwnAlerts,15000);
+})();
