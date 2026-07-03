@@ -46803,3 +46803,171 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }
   }, true);
 })();
+
+// ===== AMSTERDAM v37 HARD REST SYNC + DATE FIX =====
+// Doel: geen index/driver/admin-layout aanpassen. Alleen hoofd-app app.js.
+// Schrijft na elke opslag rechtstreeks naar Firebase REST zodat /driver/ opdrachten kan lezen.
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V37_HARD_REST__) return;
+  window.__EPP_AMS_V37_HARD_REST__ = true;
+
+  var CUSTOMER_ID = 'amsterdam-verhuur';
+  var BASE_PATH = 'customers/' + CUSTOMER_ID;
+  var DB_URL = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var STORAGE_KEY = 'event-planner-pro-amsterdam-verhuur-v1';
+  var syncTimer = null;
+  var lastError = '';
+
+  function E(id){ return document.getElementById(id); }
+  function S(v){ return String(v == null ? '' : v).trim(); }
+  function clone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ return Array.isArray(v) ? [] : {}; } }
+  function toast(t){ try{ if(typeof toastMsg === 'function') toastMsg(t); else console.info(t); }catch(e){ console.info(t); } }
+  function todayISO(){ var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+  function addDaysISO(v,n){ var s=S(v); var d=s?new Date(s+'T00:00:00'):new Date(); if(isNaN(d.getTime())) d=new Date(); d.setDate(d.getDate()+Number(n||0)); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); }
+  function keyOf(v,fallback){ var s=S(v || fallback || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); return s || ('id-' + Math.random().toString(36).slice(2,10)); }
+  function getState(){
+    try{ if(typeof state !== 'undefined' && state && typeof state === 'object') return state; }catch(e){}
+    try{ if(window.state && typeof window.state === 'object') return window.state; }catch(e){}
+    try{ var raw = localStorage.getItem(STORAGE_KEY); if(raw) return JSON.parse(raw); }catch(e){}
+    return {orders:[],users:[],materials:[],customers:[],locations:[],alerts:[],settings:{}};
+  }
+  function stripLarge(obj){
+    var big={photoData:1,photo:1,image:1,signatureData:1,signature:1,data:1,customerSignature:1};
+    function walk(x){
+      if(!x || typeof x !== 'object') return;
+      if(Array.isArray(x)){ x.forEach(walk); return; }
+      Object.keys(x).forEach(function(k){
+        if(big[k] && String(x[k] || '').length > 200){ delete x[k]; return; }
+        walk(x[k]);
+      });
+    }
+    walk(obj); return obj;
+  }
+  function driverName(o){ return S(o && (o.driverName || o.driver || o.bezorger || o.chauffeur || o.driverNaam || o.bezorgerNaam || o.assignedTo)); }
+  function orderDate(o){ return S(o && (o.start || o.dateStart || o.startDate || o.date || o.datum || o.begin)); }
+  function normalizeOrder(o,i){
+    o = clone(o || {});
+    var nr = S(o.number || o.orderNumber || o.opdrachtNummer || o.nr || o.id || ('order-' + i));
+    var d = driverName(o);
+    var cust = S((o.customer && o.customer.name) || o.customerName || o.klant || '');
+    var loc = o.location || {};
+    var addr = S(o.address || o.adres || [loc.name,loc.street,loc.zip,loc.city].filter(Boolean).join(' '));
+    o.id = S(o.id || nr || ('order-' + i));
+    o.number = S(o.number || nr);
+    o.orderNumber = S(o.orderNumber || nr);
+    o.title = S(o.title || o.naam || cust || 'Opdracht');
+    o.customerName = cust;
+    o.klant = cust;
+    o.address = addr;
+    o.date = orderDate(o);
+    o.dateStart = S(o.dateStart || o.startDate || o.start || o.date);
+    o.startDate = S(o.startDate || o.dateStart || o.start || o.date);
+    o.start = S(o.start || o.dateStart || o.startDate || o.date);
+    o.end = S(o.end || o.dateEnd || o.endDate || o.start || o.date);
+    o.driver = d;
+    o.driverName = d;
+    o.bezorger = d;
+    o.chauffeur = d;
+    o.extra = S(o.extra || o.bijzonderheden || o.notes || '');
+    o.updatedAt = new Date().toISOString();
+    return stripLarge(o);
+  }
+  function makeState(){
+    var s = clone(getState() || {});
+    s.customerId = CUSTOMER_ID;
+    s.updatedAt = new Date().toISOString();
+    s.__v37 = true;
+    s.orders = Array.isArray(s.orders) ? s.orders.map(normalizeOrder) : [];
+    s.users = Array.isArray(s.users) ? s.users.map(function(u){ return stripLarge(clone(u || {})); }) : [];
+    s.materials = Array.isArray(s.materials) ? stripLarge(clone(s.materials)) : [];
+    s.customers = Array.isArray(s.customers) ? stripLarge(clone(s.customers)) : [];
+    s.locations = Array.isArray(s.locations) ? stripLarge(clone(s.locations)) : [];
+    s.alerts = Array.isArray(s.alerts) ? stripLarge(clone(s.alerts)) : [];
+    return stripLarge(s);
+  }
+  function ordersObject(s){ var out={}; (s.orders||[]).forEach(function(o,i){ out[keyOf(o.id || o.number || o.orderNumber, 'order-'+i)] = o; }); return out; }
+  function usersObject(s){
+    var out={};
+    (s.users||[]).forEach(function(u,i){
+      var name=S(u.name || u.naam || u.displayName || u.fullName || u.driverName || u.bezorger || u.chauffeur || ('gebruiker-' + i));
+      if(!name) return;
+      out[keyOf(u.id || name, 'user-'+i)] = Object.assign({}, u, {name:name});
+    });
+    return out;
+  }
+  async function putJson(path,value){
+    var url = DB_URL.replace(/\/$/,'') + '/' + path.replace(/^\//,'') + '.json';
+    var r = await fetch(url, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)});
+    if(!r.ok){ var txt=''; try{ txt=await r.text(); }catch(e){} throw new Error('Firebase write fout ' + r.status + ' ' + txt); }
+    return true;
+  }
+  async function hardSync(reason){
+    try{
+      var s = makeState();
+      await putJson(BASE_PATH + '/appState', s);
+      await putJson(BASE_PATH + '/orders', ordersObject(s));
+      await putJson(BASE_PATH + '/lastMainSync', {at:new Date().toISOString(), reason:reason || 'save', version:'v37-rest'});
+      var users = usersObject(s);
+      var names = Object.keys(users);
+      for(var i=0;i<names.length;i++) await putJson(BASE_PATH + '/users/' + names[i], users[names[i]]);
+      lastError='';
+      window.EPP_AMS_V37_SYNC = {ok:true, at:new Date().toISOString(), path:BASE_PATH, orders:(s.orders||[]).length, users:(s.users||[]).length};
+      try{ var b=E('syncBtn'); if(b) b.textContent='Firebase: opgeslagen'; }catch(e){}
+      console.info('[EPP AMS v37] Firebase geschreven', window.EPP_AMS_V37_SYNC);
+      return true;
+    }catch(e){
+      lastError = String((e && e.message) || e || 'sync fout');
+      window.EPP_AMS_V37_SYNC = {ok:false, error:lastError, path:BASE_PATH};
+      try{ var b2=E('syncBtn'); if(b2) b2.textContent='Firebase: fout'; }catch(_e){}
+      console.warn('[EPP AMS v37] Firebase sync fout', e);
+      return false;
+    }
+  }
+  function schedule(reason){ clearTimeout(syncTimer); syncTimer=setTimeout(function(){ hardSync(reason); },700); }
+  window.EPP_AMS_FORCE_SYNC = function(){ return hardSync('handmatig'); };
+
+  function installSync(){
+    try{
+      if(typeof save === 'function' && !save.__amsV37){
+        var oldSave=save;
+        save=function(){ var r=oldSave.apply(this,arguments); schedule('save'); return r; };
+        save.__amsV37=true; window.save=save;
+      }
+    }catch(e){}
+    try{
+      if(typeof saveCurrentOrder === 'function' && !saveCurrentOrder.__amsV37){
+        var oldOrder=saveCurrentOrder;
+        saveCurrentOrder=function(){ var r=oldOrder.apply(this,arguments); schedule('saveCurrentOrder'); setTimeout(function(){hardSync('saveCurrentOrder-direct');},1600); return r; };
+        saveCurrentOrder.__amsV37=true; window.saveCurrentOrder=saveCurrentOrder;
+      }
+      var so=E('saveOrder'); if(so && !so.__amsV37){ so.__amsV37=true; so.onclick=saveCurrentOrder; }
+      var sf=E('saveFromOverviewBtn'); if(sf && !sf.__amsV37){ sf.__amsV37=true; sf.onclick=saveCurrentOrder; }
+      var sb=E('syncBtn'); if(sb && !sb.__amsV37){
+        sb.__amsV37=true;
+        sb.addEventListener('click', function(ev){
+          ev.preventDefault(); ev.stopPropagation();
+          hardSync('knop').then(function(ok){ if(ok) toast('Firebase opgeslagen'); else alert('Firebase sync fout: ' + lastError); });
+        }, true);
+      }
+    }catch(e){}
+  }
+
+  function installDateFix(){
+    function replace(id, fn){
+      var old=E(id); if(!old || old.__amsV37Date) return;
+      var n=old.cloneNode(true); n.__amsV37Date=true; old.parentNode.replaceChild(n, old); n.onclick=fn; return n;
+    }
+    var ds=E('dateStart'), de=E('dateEnd');
+    if(ds && !ds.value) ds.value=todayISO();
+    if(de && !de.value && ds) de.value=ds.value;
+    replace('startMinus', function(){ ds=E('dateStart'); de=E('dateEnd'); var base=(ds&&ds.value)||todayISO(); if(ds) ds.value=addDaysISO(base,-1); if(de && ds && (!de.value || de.value<ds.value)) de.value=ds.value; });
+    replace('startPlus', function(){ ds=E('dateStart'); de=E('dateEnd'); var base=(ds&&ds.value)||todayISO(); if(ds) ds.value=addDaysISO(base,1); if(de && ds && (!de.value || de.value<ds.value)) de.value=ds.value; });
+    replace('endMinus', function(){ ds=E('dateStart'); de=E('dateEnd'); var base=(de&&de.value)||(ds&&ds.value)||todayISO(); if(de) de.value=addDaysISO(base,-1); if(de && ds && de.value<ds.value) de.value=ds.value; });
+    replace('endPlus', function(){ ds=E('dateStart'); de=E('dateEnd'); var base=(de&&de.value)||(ds&&ds.value)||todayISO(); if(de) de.value=addDaysISO(base,1); });
+    var e3=E('endPlus3'); if(e3){ e3.style.display='none'; e3.onclick=function(){ ds=E('dateStart'); de=E('dateEnd'); if(de) de.value=(ds&&ds.value)||todayISO(); }; }
+  }
+  function boot(){ installSync(); installDateFix(); }
+  [100,600,1500,3000,6000].forEach(function(ms){ setTimeout(boot, ms); });
+  document.addEventListener('click', function(){ setTimeout(boot,80); }, true);
+})();
