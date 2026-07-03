@@ -46420,102 +46420,161 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   else { setInterval(cleanLogin,1000); cleanLogin(); }
 })();
 
-
-// ===== AMSTERDAM v38 MINIMALE PATCH - Firebase sync zonder opslaan te veranderen + einddatum fix =====
+/* ============================================================
+   AMSTERDAM v40 - MINIMALE VEILIGE PATCH
+   Doel:
+   1) NIET de bestaande app/state/opslag herschrijven.
+   2) Alleen na een normale opslaan een kleine, schone driver-export
+      naar Firebase schrijven: customers/amsterdam-verhuur/orders/{id}
+   3) Gebruikers/bezorgers als kleine veilige records naar Firebase users schrijven.
+   4) Einddatum + en - stabiel maken zonder automatisch +3 terugval.
+   ============================================================ */
 (function(){
   'use strict';
-  if(window.__AMS_V38_MIN_PATCH__) return;
-  window.__AMS_V38_MIN_PATCH__ = true;
+  if(window.__EPP_AMS_V40_MIN_SAFE__) return;
+  window.__EPP_AMS_V40_MIN_SAFE__ = true;
 
-  var CUSTOMER_ID = 'amsterdam-verhuur';
   var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
-  var KEY = 'event-planner-pro-amsterdam-verhuur-v1';
+  var BASE = 'customers/amsterdam-verhuur';
 
-  function safeJsonClone(v){
-    try { return JSON.parse(JSON.stringify(v)); } catch(e){ return v; }
+  function byId(id){ return document.getElementById(id); }
+  function val(id){ var el = byId(id); return el ? String(el.value || '').trim() : ''; }
+  function txt(v){ return v == null ? '' : String(v); }
+  function bool(v){ return v === true; }
+  function safeKey(v){
+    var s = txt(v).trim();
+    if(!s) s = 'id_' + Date.now();
+    s = s.replace(/[.$#[\]\/]/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-');
+    if(!s || s === '-') s = 'id_' + Date.now();
+    return s.slice(0,120);
   }
-  function getState(){
-    try { if(typeof state !== 'undefined' && state) return state; } catch(e){}
-    try {
-      var raw = localStorage.getItem(KEY);
-      if(raw) return JSON.parse(raw);
-    } catch(e){}
-    return null;
+  function getState(){ try{ return (typeof state !== 'undefined') ? state : (window.state || null); }catch(e){ return window.state || null; } }
+  function toast(t){ try{ if(typeof toastMsg === 'function') toastMsg(t); }catch(e){} }
+  function setFirebaseStatus(ok, text){
+    try{
+      var btn = byId('syncBtn');
+      if(!btn) return;
+      btn.textContent = ok ? (text || 'Firebase: ok') : (text || 'Firebase: fout');
+      btn.style.background = ok ? '#16a34a' : '#dc2626';
+      btn.style.color = '#fff';
+    }catch(e){}
   }
-  function put(path, value){
-    return fetch(DB + '/' + path + '.json', {
+  async function put(path, obj){
+    var res = await fetch(DB + '/' + path + '.json', {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(value)
+      body: JSON.stringify(obj == null ? null : obj)
     });
-  }
-  function patchOrderForDriver(o){
-    if(!o || typeof o !== 'object') return o;
-    var d = o.driver || o.driverName || o.bezorger || o.assignedDriver || '';
-    if(Array.isArray(o.drivers) && o.drivers.length){
-      try{
-        var first = o.drivers.find(function(x){ return x && (x.checked !== false); }) || o.drivers[0];
-        d = d || first.name || first.driverName || first.id || '';
-      }catch(e){}
+    if(!res.ok){
+      var body = '';
+      try{ body = await res.text(); }catch(e){}
+      throw new Error('Firebase write fout ' + res.status + (body ? ': ' + body : ''));
     }
-    if(d){
-      o.driver = o.driver || d;
-      o.driverName = o.driverName || d;
-      o.bezorger = o.bezorger || d;
-      o.assignedDriver = o.assignedDriver || d;
-    }
-    return o;
+    return res.json().catch(function(){ return null; });
   }
-  function syncToFirebase(reason){
+  function normalizeDriverName(o){
+    return txt(o && (o.driverName || o.driver || o.bezorger || o.driverNaam || o.bezorgerNaam));
+  }
+  function makeOrderExport(o){
+    o = o || {};
+    var customer = o.customer || {};
+    var location = o.location || {};
+    var materials = Array.isArray(o.materials) ? o.materials : [];
+    var pricing = o.pricing || {};
+    var driverName = normalizeDriverName(o);
+    return {
+      id: txt(o.id || o.number || ('order_' + Date.now())),
+      number: txt(o.number || ''),
+      title: txt(o.title || o.name || 'Opdracht'),
+      status: txt(o.status || ''),
+      start: txt(o.start || o.dateStart || o.begin || o.date || ''),
+      end: txt(o.end || o.dateEnd || o.einde || ''),
+      driver: driverName,
+      driverName: driverName,
+      bezorger: driverName,
+      customerName: txt(customer.name || o.customerName || ''),
+      customerPhone: txt(customer.phone || o.customerPhone || ''),
+      locationName: txt(location.name || o.locationName || ''),
+      address: [location.street, location.zip, location.city].filter(Boolean).join(' '),
+      materialsText: materials.map(function(m){ return [m.qty || m.aantal || '', m.code || '', m.name || m.naam || ''].filter(Boolean).join(' '); }).join(', '),
+      total: Number(pricing.grand || pricing.total || pricing.materials || 0) || 0,
+      deposit: Number(pricing.deposit || 0) || 0,
+      extra: txt(o.extra || o.note || o.bijzonderheden || ''),
+      updatedAt: txt(o.updatedAt || new Date().toISOString())
+    };
+  }
+  function findOrderForExport(captured){
     var s = getState();
-    if(!s || typeof s !== 'object') return Promise.resolve(false);
-    var copy = safeJsonClone(s) || {};
-    copy.orders = Array.isArray(copy.orders) ? copy.orders.map(patchOrderForDriver) : [];
-    copy.users = Array.isArray(copy.users) ? copy.users : [];
-    copy.materials = Array.isArray(copy.materials) ? copy.materials : [];
-    copy.customers = Array.isArray(copy.customers) ? copy.customers : [];
-    copy.locations = Array.isArray(copy.locations) ? copy.locations : [];
-    copy.alerts = Array.isArray(copy.alerts) ? copy.alerts : [];
-    copy.__lastMainSync = { at:new Date().toISOString(), reason:reason || 'save' };
-
-    return Promise.all([
-      put('customers/' + CUSTOMER_ID + '/appState', copy),
-      put('customers/' + CUSTOMER_ID + '/orders', copy.orders),
-      put('customers/' + CUSTOMER_ID + '/users', copy.users),
-      put('customers/' + CUSTOMER_ID + '/lastMainSync', copy.__lastMainSync)
-    ]).then(function(){
-      console.info('[Amsterdam v38] Firebase sync gelukt:', reason || 'save');
-      return true;
-    }).catch(function(err){
-      console.warn('[Amsterdam v38] Firebase sync fout:', err);
-      try{ if(typeof toastMsg === 'function') toastMsg('Firebase sync fout - zie console'); }catch(e){}
-      return false;
-    });
+    var orders = s && Array.isArray(s.orders) ? s.orders : [];
+    if(captured && captured.id){
+      var byIdOrder = orders.find(function(o){ return txt(o && o.id) === txt(captured.id); });
+      if(byIdOrder) return byIdOrder;
+    }
+    if(captured && captured.number){
+      var byNumber = orders.find(function(o){ return txt(o && o.number) === txt(captured.number); });
+      if(byNumber) return byNumber;
+    }
+    return orders.length ? orders[orders.length - 1] : null;
+  }
+  function exportUsers(){
+    var s = getState();
+    var users = s && Array.isArray(s.users) ? s.users : [];
+    return Promise.all(users.map(function(u){
+      if(!u) return Promise.resolve();
+      var name = txt(u.name || u.naam || u.displayName || '');
+      var pin = txt(u.pin || u.PIN || u.pincode || '');
+      if(!name && !pin) return Promise.resolve();
+      var role = txt(u.role || u.rol || u.type || '');
+      var key = safeKey(u.id || name || pin);
+      return put(BASE + '/users/' + key, {
+        id: key,
+        name: name,
+        pin: pin,
+        role: role,
+        active: u.active === false ? false : true,
+        driver: /bezorg|driver|chauffeur/i.test(role) || u.driver === true || u.bezorger === true || u.chauffeur === true,
+        updatedAt: new Date().toISOString()
+      });
+    }));
+  }
+  async function exportOrder(captured){
+    var o = findOrderForExport(captured);
+    if(!o) return;
+    var clean = makeOrderExport(o);
+    var key = safeKey(clean.id || clean.number || Date.now());
+    await put(BASE + '/orders/' + key, clean);
+    await put(BASE + '/lastMainSync', {ok:true, at:new Date().toISOString(), order:key, source:'main-v40-safe-export'});
+    try{ await exportUsers(); }catch(e){ console.warn('[EPP v40] users export fout', e); }
+    setFirebaseStatus(true, 'Firebase: ok');
   }
 
-  // Belangrijk: originele saveCurrentOrder blijft intact. We vervangen alleen save() met een extra sync erachter.
-  try{
-    if(typeof save === 'function' && !save.__amsV38Wrapped){
-      var oldSave = save;
-      save = function(){
-        var r = oldSave.apply(this, arguments);
-        try{ setTimeout(function(){ syncToFirebase('save'); }, 100); }catch(e){}
-        return r;
-      };
-      save.__amsV38Wrapped = true;
-    }
-  }catch(e){ console.warn('[Amsterdam v38] save wrapper niet geplaatst', e); }
+  function captureBeforeSave(){
+    var editingId = '';
+    try{ editingId = (typeof editing !== 'undefined' && editing) ? editing : ''; }catch(e){}
+    return {
+      id: editingId,
+      number: val('orderNumber'),
+      driver: val('orderDriver')
+    };
+  }
 
-  // Extra handmatige sync onder Systeem status, zonder bestaande knop kapot te maken.
-  function bindSyncButton(){
-    var btn = document.getElementById('syncBtn');
-    if(!btn || btn.__amsV38SyncBound) return;
-    btn.__amsV38SyncBound = true;
-    btn.addEventListener('click', function(){
-      syncToFirebase('manual').then(function(ok){
-        try{ if(typeof toastMsg === 'function') toastMsg(ok ? 'Firebase sync gelukt' : 'Firebase sync fout'); }catch(e){}
-      });
-    }, false);
+  function wrapSave(){
+    if(typeof window.__EPP_V40_SAVE_WRAPPED__ !== 'undefined') return;
+    if(typeof saveCurrentOrder !== 'function') return;
+    var original = saveCurrentOrder;
+    window.__EPP_V40_SAVE_WRAPPED__ = true;
+    saveCurrentOrder = function(){
+      var captured = captureBeforeSave();
+      var result = original.apply(this, arguments);
+      setTimeout(function(){
+        exportOrder(captured).catch(function(err){
+          console.error('[EPP v40] Firebase sync fout:', err);
+          setFirebaseStatus(false, 'Firebase: fout');
+          toast('Firebase sync fout: ' + (err && err.message ? err.message : err));
+        });
+      }, 300);
+      return result;
+    };
   }
 
   function isoToday(){
@@ -46523,68 +46582,50 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0,10);
   }
-  function addDays(dateStr, days){
-    var base = dateStr || '';
-    var d = base ? new Date(base + 'T00:00:00') : new Date();
-    if(isNaN(d.getTime())) d = new Date();
-    d.setDate(d.getDate() + Number(days || 0));
+  function addDays(v, n){
+    var d = v ? new Date(v + 'T00:00:00') : new Date();
+    if(isNaN(d)) d = new Date();
+    d.setDate(d.getDate() + Number(n || 0));
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0,10);
   }
   function bindDateFix(){
-    var ds = document.getElementById('dateStart');
-    var de = document.getElementById('dateEnd');
-    var sm = document.getElementById('startMinus');
-    var sp = document.getElementById('startPlus');
-    var em = document.getElementById('endMinus');
-    var ep = document.getElementById('endPlus');
-    if(!ds || !de) return;
-
-    function ensureStart(){ if(!ds.value) ds.value = isoToday(); }
-    function ensureEnd(){ if(!de.value) de.value = ds.value || isoToday(); }
-    function trigger(el){
-      try{ el.dispatchEvent(new Event('input', {bubbles:true})); }catch(e){}
-      try{ el.dispatchEvent(new Event('change', {bubbles:true})); }catch(e){}
-      try{ if(typeof summaryRender === 'function') summaryRender(); }catch(e){}
+    var ds = byId('dateStart');
+    var de = byId('dateEnd');
+    var sp = byId('startPlus');
+    var sm = byId('startMinus');
+    var ep = byId('endPlus');
+    var em = byId('endMinus');
+    if(ds && !ds.value) ds.value = isoToday();
+    if(de && !de.value && ds && ds.value) de.value = ds.value;
+    function ensure(){
+      if(ds && !ds.value) ds.value = isoToday();
+      if(de && !de.value) de.value = (ds && ds.value) ? ds.value : isoToday();
     }
-    function setBtn(btn, fn){
-      if(!btn) return;
-      btn.onclick = function(ev){
-        if(ev){ try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){} }
-        fn();
-        return false;
-      };
-    }
-    setBtn(sm, function(){
-      ensureStart();
-      ds.value = addDays(ds.value, -1);
-      if(de.value && de.value < ds.value) de.value = ds.value;
-      trigger(ds); trigger(de);
-    });
-    setBtn(sp, function(){
-      ensureStart();
-      ds.value = addDays(ds.value, 1);
-      if(!de.value || de.value < ds.value) de.value = ds.value;
-      trigger(ds); trigger(de);
-    });
-    setBtn(em, function(){
-      ensureStart(); ensureEnd();
-      de.value = addDays(de.value || ds.value, -1);
-      if(de.value < ds.value) de.value = ds.value;
-      trigger(de);
-    });
-    setBtn(ep, function(){
-      ensureStart(); ensureEnd();
-      de.value = addDays(de.value || ds.value, 1);
-      trigger(de);
-    });
+    if(sp) sp.onclick = function(){ ensure(); ds.value = addDays(ds.value, 1); if(de && de.value < ds.value) de.value = ds.value; };
+    if(sm) sm.onclick = function(){ ensure(); ds.value = addDays(ds.value, -1); if(de && de.value < ds.value) de.value = ds.value; };
+    if(ep) ep.onclick = function(){ ensure(); de.value = addDays(de.value || (ds && ds.value) || isoToday(), 1); };
+    if(em) em.onclick = function(){ ensure(); de.value = addDays(de.value || (ds && ds.value) || isoToday(), -1); if(ds && de.value < ds.value) de.value = ds.value; };
   }
 
-  function initV38(){
-    bindSyncButton();
-    // Laat alle oude code eerst binden; zet daarna onze datumknoppen erbovenop.
-    [0,250,750,1500].forEach(function(ms){ setTimeout(bindDateFix, ms); });
+  function install(){
+    wrapSave();
+    bindDateFix();
+    var sync = byId('syncBtn');
+    if(sync && !sync.__eppV40ManualSync){
+      sync.__eppV40ManualSync = true;
+      sync.addEventListener('click', function(){
+        exportOrder({number:val('orderNumber')}).then(function(){ toast('Firebase handmatig bijgewerkt'); }).catch(function(err){
+          console.error('[EPP v40] handmatige sync fout:', err);
+          setFirebaseStatus(false, 'Firebase: fout');
+          toast('Firebase sync fout: ' + (err && err.message ? err.message : err));
+        });
+      }, true);
+    }
   }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initV38);
-  else initV38();
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
+  setTimeout(install, 1000);
+  setTimeout(install, 2500);
 })();
