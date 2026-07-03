@@ -46420,90 +46420,34 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   else { setInterval(cleanLogin,1000); cleanLogin(); }
 })();
 
+
 /* ============================================================
-   AMSTERDAM v40 - MINIMALE VEILIGE PATCH
+   AMSTERDAM v41 - VEILIGE PATCH (vervangt v40)
    Doel:
-   1) NIET de bestaande app/state/opslag herschrijven.
-   2) Alleen na een normale opslaan een kleine, schone driver-export
-      naar Firebase schrijven: customers/amsterdam-verhuur/orders/{id}
-   3) Gebruikers/bezorgers als kleine veilige records naar Firebase users schrijven.
-   4) Einddatum + en - stabiel maken zonder automatisch +3 terugval.
+   1) Firebase: schrijft nu naar dezelfde Firestore die de bezorgtelefoon
+      ook uitleest (via de bestaande window.BNS.syncOrder), in plaats van
+      een apart/fout Realtime Database pad dat de telefoon nooit ziet.
+   2) Bijzonderheden: het vrije tekstveld (orderExtra) wordt gegarandeerd
+      getoond op factuur, opdrachtbevestiging EN het "Overzicht bestelling"
+      -scherm, ook als een van de oudere/dubbele documentfuncties dat zelf
+      niet doet. Werkt bovenop de bestaande code, verandert niets daaraan.
+   3) Bezorgtelefoon-schermen tonen "Bezorger Amsterdam verhuur" i.p.v.
+      "Bezorger Tapwagen.nl". Overige Tapwagen-teksten (Powered by, licentie)
+      blijven bewust ongewijzigd staan.
    ============================================================ */
 (function(){
   'use strict';
-  if(window.__EPP_AMS_V40_MIN_SAFE__) return;
-  window.__EPP_AMS_V40_MIN_SAFE__ = true;
-
-  var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
-  var BASE = 'customers/amsterdam-verhuur';
+  if(window.__EPP_AMS_V41_MIN_SAFE__) return;
+  window.__EPP_AMS_V41_MIN_SAFE__ = true;
 
   function byId(id){ return document.getElementById(id); }
-  function val(id){ var el = byId(id); return el ? String(el.value || '').trim() : ''; }
   function txt(v){ return v == null ? '' : String(v); }
-  function bool(v){ return v === true; }
-  function safeKey(v){
-    var s = txt(v).trim();
-    if(!s) s = 'id_' + Date.now();
-    s = s.replace(/[.$#[\]\/]/g, '-').replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-');
-    if(!s || s === '-') s = 'id_' + Date.now();
-    return s.slice(0,120);
-  }
   function getState(){ try{ return (typeof state !== 'undefined') ? state : (window.state || null); }catch(e){ return window.state || null; } }
   function toast(t){ try{ if(typeof toastMsg === 'function') toastMsg(t); }catch(e){} }
-  function setFirebaseStatus(ok, text){
-    try{
-      var btn = byId('syncBtn');
-      if(!btn) return;
-      btn.textContent = ok ? (text || 'Firebase: ok') : (text || 'Firebase: fout');
-      btn.style.background = ok ? '#16a34a' : '#dc2626';
-      btn.style.color = '#fff';
-    }catch(e){}
-  }
-  async function put(path, obj){
-    var res = await fetch(DB + '/' + path + '.json', {
-      method: 'PUT',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(obj == null ? null : obj)
-    });
-    if(!res.ok){
-      var body = '';
-      try{ body = await res.text(); }catch(e){}
-      throw new Error('Firebase write fout ' + res.status + (body ? ': ' + body : ''));
-    }
-    return res.json().catch(function(){ return null; });
-  }
-  function normalizeDriverName(o){
-    return txt(o && (o.driverName || o.driver || o.bezorger || o.driverNaam || o.bezorgerNaam));
-  }
-  function makeOrderExport(o){
-    o = o || {};
-    var customer = o.customer || {};
-    var location = o.location || {};
-    var materials = Array.isArray(o.materials) ? o.materials : [];
-    var pricing = o.pricing || {};
-    var driverName = normalizeDriverName(o);
-    return {
-      id: txt(o.id || o.number || ('order_' + Date.now())),
-      number: txt(o.number || ''),
-      title: txt(o.title || o.name || 'Opdracht'),
-      status: txt(o.status || ''),
-      start: txt(o.start || o.dateStart || o.begin || o.date || ''),
-      end: txt(o.end || o.dateEnd || o.einde || ''),
-      driver: driverName,
-      driverName: driverName,
-      bezorger: driverName,
-      customerName: txt(customer.name || o.customerName || ''),
-      customerPhone: txt(customer.phone || o.customerPhone || ''),
-      locationName: txt(location.name || o.locationName || ''),
-      address: [location.street, location.zip, location.city].filter(Boolean).join(' '),
-      materialsText: materials.map(function(m){ return [m.qty || m.aantal || '', m.code || '', m.name || m.naam || ''].filter(Boolean).join(' '); }).join(', '),
-      total: Number(pricing.grand || pricing.total || pricing.materials || 0) || 0,
-      deposit: Number(pricing.deposit || 0) || 0,
-      extra: txt(o.extra || o.note || o.bijzonderheden || ''),
-      updatedAt: txt(o.updatedAt || new Date().toISOString())
-    };
-  }
-  function findOrderForExport(captured){
+  function esc(s){ return txt(s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+
+  /* ---------- 1) FIREBASE: gebruik de bestaande, juiste Firestore-sync ---------- */
+  function findOrderForSync(captured){
     var s = getState();
     var orders = s && Array.isArray(s.orders) ? s.orders : [];
     if(captured && captured.id){
@@ -46516,116 +46460,180 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }
     return orders.length ? orders[orders.length - 1] : null;
   }
-  function exportUsers(){
-    var s = getState();
-    var users = s && Array.isArray(s.users) ? s.users : [];
-    return Promise.all(users.map(function(u){
-      if(!u) return Promise.resolve();
-      var name = txt(u.name || u.naam || u.displayName || '');
-      var pin = txt(u.pin || u.PIN || u.pincode || '');
-      if(!name && !pin) return Promise.resolve();
-      var role = txt(u.role || u.rol || u.type || '');
-      var key = safeKey(u.id || name || pin);
-      return put(BASE + '/users/' + key, {
-        id: key,
-        name: name,
-        pin: pin,
-        role: role,
-        active: u.active === false ? false : true,
-        driver: /bezorg|driver|chauffeur/i.test(role) || u.driver === true || u.bezorger === true || u.chauffeur === true,
-        updatedAt: new Date().toISOString()
-      });
-    }));
-  }
-  async function exportOrder(captured){
-    var o = findOrderForExport(captured);
-    if(!o) return;
-    var clean = makeOrderExport(o);
-    var key = safeKey(clean.id || clean.number || Date.now());
-    await put(BASE + '/orders/' + key, clean);
-    await put(BASE + '/lastMainSync', {ok:true, at:new Date().toISOString(), order:key, source:'main-v40-safe-export'});
-    try{ await exportUsers(); }catch(e){ console.warn('[EPP v40] users export fout', e); }
-    setFirebaseStatus(true, 'Firebase: ok');
-  }
-
   function captureBeforeSave(){
     var editingId = '';
     try{ editingId = (typeof editing !== 'undefined' && editing) ? editing : ''; }catch(e){}
     return {
       id: editingId,
-      number: val('orderNumber'),
-      driver: val('orderDriver')
+      number: byId('orderNumber') ? byId('orderNumber').value : ''
     };
   }
-
-  function wrapSave(){
-    if(typeof window.__EPP_V40_SAVE_WRAPPED__ !== 'undefined') return;
-    if(typeof saveCurrentOrder !== 'function') return;
-    var original = saveCurrentOrder;
-    window.__EPP_V40_SAVE_WRAPPED__ = true;
-    saveCurrentOrder = function(){
-      var captured = captureBeforeSave();
-      var result = original.apply(this, arguments);
-      setTimeout(function(){
-        exportOrder(captured).catch(function(err){
-          console.error('[EPP v40] Firebase sync fout:', err);
+  function setFirebaseStatus(ok, text){
+    try{
+      var btn = byId('syncBtn');
+      if(!btn) return;
+      btn.textContent = ok ? (text || 'Firebase: ok') : (text || 'Firebase: fout');
+      btn.style.background = ok ? '#16a34a' : '#dc2626';
+      btn.style.color = '#fff';
+    }catch(e){}
+  }
+  function syncViaFirestore(captured){
+    var o = findOrderForSync(captured);
+    if(!o) return;
+    try{
+      if(window.BNS && typeof window.BNS.syncOrder === 'function'){
+        Promise.resolve(window.BNS.syncOrder(o)).then(function(){
+          setFirebaseStatus(true, 'Firebase: ok');
+        }).catch(function(err){
+          console.error('[EPP v41] Firebase sync fout:', err);
           setFirebaseStatus(false, 'Firebase: fout');
           toast('Firebase sync fout: ' + (err && err.message ? err.message : err));
         });
-      }, 300);
+      } else {
+        console.warn('[EPP v41] window.BNS.syncOrder niet beschikbaar; Firebase sync overgeslagen.');
+      }
+    }catch(err){
+      console.error('[EPP v41] Firebase sync fout:', err);
+    }
+  }
+  function wrapSave(){
+    if(window.__EPP_V41_SAVE_WRAPPED__) return;
+    if(typeof saveCurrentOrder !== 'function') return;
+    var original = saveCurrentOrder;
+    window.__EPP_V41_SAVE_WRAPPED__ = true;
+    saveCurrentOrder = function(){
+      var captured = captureBeforeSave();
+      var result = original.apply(this, arguments);
+      setTimeout(function(){ syncViaFirestore(captured); }, 300);
       return result;
     };
   }
-
-  function isoToday(){
-    var d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0,10);
-  }
-  function addDays(v, n){
-    var d = v ? new Date(v + 'T00:00:00') : new Date();
-    if(isNaN(d)) d = new Date();
-    d.setDate(d.getDate() + Number(n || 0));
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0,10);
-  }
-  function bindDateFix(){
-    var ds = byId('dateStart');
-    var de = byId('dateEnd');
-    var sp = byId('startPlus');
-    var sm = byId('startMinus');
-    var ep = byId('endPlus');
-    var em = byId('endMinus');
-    if(ds && !ds.value) ds.value = isoToday();
-    if(de && !de.value && ds && ds.value) de.value = ds.value;
-    function ensure(){
-      if(ds && !ds.value) ds.value = isoToday();
-      if(de && !de.value) de.value = (ds && ds.value) ? ds.value : isoToday();
+  function manualSyncButton(){
+    var sync = byId('syncBtn');
+    if(sync && !sync.__eppV41ManualSync){
+      sync.__eppV41ManualSync = true;
+      sync.addEventListener('dblclick', function(){
+        syncViaFirestore(captureBeforeSave());
+        toast('Firebase handmatig bijgewerkt');
+      });
     }
-    if(sp) sp.onclick = function(){ ensure(); ds.value = addDays(ds.value, 1); if(de && de.value < ds.value) de.value = ds.value; };
-    if(sm) sm.onclick = function(){ ensure(); ds.value = addDays(ds.value, -1); if(de && de.value < ds.value) de.value = ds.value; };
-    if(ep) ep.onclick = function(){ ensure(); de.value = addDays(de.value || (ds && ds.value) || isoToday(), 1); };
-    if(em) em.onclick = function(){ ensure(); de.value = addDays(de.value || (ds && ds.value) || isoToday(), -1); if(ds && de.value < ds.value) de.value = ds.value; };
+  }
+
+  /* ---------- 2) BIJZONDERHEDEN: garandeer dat orderExtra altijd zichtbaar is ---------- */
+  var lastKnownExtra = '';
+  function pollExtraField(){
+    try{
+      var el = byId('orderExtra');
+      if(el){
+        var v = txt(el.value).trim();
+        if(v) lastKnownExtra = v;
+      } else {
+        var captured = captureBeforeSave();
+        var o = findOrderForSync(captured);
+        if(o){
+          var v2 = txt(o.extra || o.notes || o.confirmationText || '').trim();
+          if(v2) lastKnownExtra = v2;
+        }
+      }
+    }catch(e){}
+  }
+
+  function injectBijzonderhedenIfMissing(doc){
+    try{
+      if(!lastKnownExtra) return;
+      var body = doc && doc.body;
+      if(!body) return;
+      var already = body.innerText || body.textContent || '';
+      if(already.indexOf(lastKnownExtra) >= 0) return; // staat er al, niets doen
+      if(doc.getElementById && doc.getElementById('__eppV41Bijzonderheden')) return;
+      var box = doc.createElement('div');
+      box.id = '__eppV41Bijzonderheden';
+      box.style.cssText = 'margin:14px 0;padding:10px;border:1px solid #ddd;border-radius:8px;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;';
+      box.innerHTML = '<b>Bijzonderheden:</b><br>' + esc(lastKnownExtra).replace(/\n/g,'<br>');
+      body.appendChild(box);
+    }catch(e){}
+  }
+
+  function hookDocumentWrite(){
+    if(window.__eppV41OpenPatched) return;
+    var oldOpen = window.open;
+    if(typeof oldOpen !== 'function') return;
+    window.__eppV41OpenPatched = true;
+    window.open = function(){
+      var w = oldOpen.apply(window, arguments);
+      try{
+        if(w && w.document && !w.document.__eppV41WritePatched){
+          w.document.__eppV41WritePatched = true;
+          var oldClose = w.document.close ? w.document.close.bind(w.document) : null;
+          if(oldClose){
+            w.document.close = function(){
+              var r = oldClose();
+              try{ injectBijzonderhedenIfMissing(w.document); }catch(e){}
+              return r;
+            };
+          }
+        }
+      }catch(e){}
+      return w;
+    };
+  }
+
+  function hookOverviewModal(){
+    try{
+      if(window.__eppV41OverviewObserverInstalled) return;
+      window.__eppV41OverviewObserverInstalled = true;
+      var mo = new MutationObserver(function(){
+        var modal = byId('bns821OrderOverviewModal');
+        if(modal && !modal.__eppV41Fixed){
+          modal.__eppV41Fixed = true;
+          var pre = modal.querySelector('.bns821-pre');
+          if(pre && lastKnownExtra && pre.textContent.indexOf(lastKnownExtra) < 0){
+            var extraBlock = document.createElement('div');
+            extraBlock.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px dashed #ccc;white-space:pre-wrap;';
+            extraBlock.textContent = lastKnownExtra;
+            pre.parentNode.insertBefore(extraBlock, pre.nextSibling);
+          }
+        }
+      });
+      mo.observe(document.body, {childList:true, subtree:true});
+    }catch(e){}
+  }
+
+  /* ---------- 3) BEZORGER TAPWAGEN.NL -> BEZORGER AMSTERDAM VERHUUR ---------- */
+  /* Alleen deze exacte combinatie wordt vervangen. "Powered by Tapwagen.nl"
+     en de licentietekst blijven bewust ongewijzigd staan. */
+  function fixDriverBranding(root){
+    try{
+      var walker = document.createTreeWalker(root || document.body, NodeFilter.SHOW_TEXT, null);
+      var node;
+      while((node = walker.nextNode())){
+        if(/Bezorger\s+Tapwagen\.nl/i.test(node.nodeValue)){
+          node.nodeValue = node.nodeValue.replace(/Bezorger\s+Tapwagen\.nl/ig, 'Bezorger Amsterdam verhuur');
+        }
+      }
+    }catch(e){}
+  }
+  function watchDriverBranding(){
+    try{
+      fixDriverBranding(document.body);
+      if(window.__eppV41DriverBrandingObserverInstalled) return;
+      window.__eppV41DriverBrandingObserverInstalled = true;
+      var mo2 = new MutationObserver(function(){ fixDriverBranding(document.body); });
+      mo2.observe(document.body, {childList:true, subtree:true});
+    }catch(e){}
   }
 
   function install(){
     wrapSave();
-    bindDateFix();
-    var sync = byId('syncBtn');
-    if(sync && !sync.__eppV40ManualSync){
-      sync.__eppV40ManualSync = true;
-      sync.addEventListener('click', function(){
-        exportOrder({number:val('orderNumber')}).then(function(){ toast('Firebase handmatig bijgewerkt'); }).catch(function(err){
-          console.error('[EPP v40] handmatige sync fout:', err);
-          setFirebaseStatus(false, 'Firebase: fout');
-          toast('Firebase sync fout: ' + (err && err.message ? err.message : err));
-        });
-      }, true);
-    }
+    manualSyncButton();
+    hookDocumentWrite();
+    hookOverviewModal();
+    watchDriverBranding();
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();
   setTimeout(install, 1000);
   setTimeout(install, 2500);
+  setInterval(pollExtraField, 400);
 })();
