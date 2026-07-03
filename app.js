@@ -46419,3 +46419,387 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setInterval(cleanLogin,1000); cleanLogin(); });
   else { setInterval(cleanLogin,1000); cleanLogin(); }
 })();
+
+// ===== AMSTERDAM v36 SAFE PATCH: licentie, Firebase orders/users sync, einddatum fix =====
+// Basis blijft v22 app.js. Geen index.html, geen admin-layout, geen driver-map.
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V36_SAFE_PATCH__) return;
+  window.__EPP_AMS_V36_SAFE_PATCH__ = true;
+
+  var CUSTOMER_ID = 'amsterdam-verhuur';
+  var CUSTOMER_NAME = 'Amsterdam verhuur';
+  var BASE_PATH = 'customers/' + CUSTOMER_ID;
+  var DB_URL = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var FIREBASE_VERSION = '10.12.5';
+  var APP_NAME = 'epp-amsterdam-v36-main-sync';
+  var CONFIG = {
+    apiKey: 'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL: DB_URL,
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId: '484128911122',
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
+  };
+
+  var fbReady = false;
+  var fbBusy = false;
+  var appMod = null, authMod = null, dbMod = null, app = null, auth = null, db = null;
+  var syncTimer = null;
+  var lastSyncAt = '';
+  var lastSyncError = '';
+
+  function el(id){ return document.getElementById(id); }
+  function str(v){ return String(v == null ? '' : v).trim(); }
+  function low(v){ return str(v).toLowerCase(); }
+  function clone(v){ try{ return JSON.parse(JSON.stringify(v)); }catch(e){ return Array.isArray(v) ? [] : {}; } }
+  function todayISO(){
+    var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function addDaysISO(value, days){
+    var s = str(value);
+    var d = s ? new Date(s + 'T00:00:00') : new Date();
+    if(isNaN(d.getTime())) d = new Date();
+    d.setDate(d.getDate() + Number(days || 0));
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function getState(){
+    try{ if(typeof state !== 'undefined' && state) return state; }catch(e){}
+    return window.state || {};
+  }
+  function safeToast(t){
+    try{ if(typeof toastMsg === 'function') toastMsg(t); else console.info(t); }catch(e){ console.info(t); }
+  }
+  function stripLarge(obj){
+    var big = {photoData:1,photo:1,image:1,signatureData:1,signature:1,data:1,customerSignature:1};
+    function walk(x){
+      if(!x || typeof x !== 'object') return;
+      if(Array.isArray(x)){ x.forEach(walk); return; }
+      Object.keys(x).forEach(function(k){
+        if(big[k] && String(x[k] || '').length > 200){ delete x[k]; return; }
+        walk(x[k]);
+      });
+    }
+    walk(obj);
+    return obj;
+  }
+  function keyOf(v, fallback){
+    var s = str(v || fallback || '').toLowerCase();
+    s = s.replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    return s || ('item-' + Math.random().toString(36).slice(2,10));
+  }
+  function orderNumber(o){ return str(o && (o.number || o.orderNumber || o.opdrachtNummer || o.nr || o.id)); }
+  function driverNameOf(o){
+    return str(o && (o.driverName || o.driverNaam || o.driver || o.bezorger || o.bezorgerNaam || o.chauffeur || o.chauffeurNaam || o.assignedTo || o.deliveryDriver || o.medewerker));
+  }
+  function orderAddress(o){
+    o = o || {};
+    var loc = o.location || {};
+    if(typeof loc === 'string') return loc;
+    return str(o.address || o.adres || o.deliveryAddress || o.bezorgAdres || [loc.name, loc.street, loc.zip, loc.city].filter(Boolean).join(' '));
+  }
+  function orderDate(o){ return str(o && (o.date || o.datum || o.dateStart || o.startDate || o.start || o.begin || o.deliveryDate)); }
+  function cleanOrder(o){
+    o = clone(o || {});
+    var nr = orderNumber(o);
+    var did = str(o.id || nr || Math.random().toString(36).slice(2,10));
+    var dname = driverNameOf(o);
+    var date = orderDate(o);
+    var customerName = str((o.customer && o.customer.name) || o.customerName || o.klant || o.clientName);
+    var title = str(o.title || o.naam || o.orderName || customerName || 'Opdracht');
+    var out = Object.assign({}, o, {
+      id: did,
+      number: nr || did,
+      orderNumber: nr || did,
+      title: title,
+      customerName: customerName,
+      klant: customerName,
+      date: date,
+      dateStart: date,
+      startDate: date,
+      start: str(o.start || date),
+      end: str(o.end || o.dateEnd || o.endDate || date),
+      address: orderAddress(o),
+      driver: dname,
+      driverName: dname,
+      bezorger: dname,
+      chauffeur: dname,
+      extra: str(o.extra || o.bijzonderheden || o.notes || ''),
+      updatedAt: new Date().toISOString()
+    });
+    return stripLarge(out);
+  }
+  function stateForFirebase(){
+    var s = clone(getState() || {});
+    s.customerId = CUSTOMER_ID;
+    s.updatedAt = new Date().toISOString();
+    s.__v36 = true;
+    s.orders = Array.isArray(s.orders) ? s.orders.map(cleanOrder) : [];
+    s.users = Array.isArray(s.users) ? s.users.map(function(u){ return stripLarge(clone(u || {})); }) : [];
+    s.materials = Array.isArray(s.materials) ? stripLarge(clone(s.materials)) : [];
+    s.customers = Array.isArray(s.customers) ? stripLarge(clone(s.customers)) : [];
+    s.locations = Array.isArray(s.locations) ? stripLarge(clone(s.locations)) : [];
+    s.alerts = Array.isArray(s.alerts) ? stripLarge(clone(s.alerts)) : [];
+    return stripLarge(s);
+  }
+  function ordersObject(s){
+    var out = {};
+    (s.orders || []).forEach(function(o, i){
+      var key = keyOf(o.id || o.number || o.orderNumber, 'order-' + i);
+      out[key] = o;
+    });
+    return out;
+  }
+  function usersObject(s){
+    var out = {};
+    (s.users || []).forEach(function(u, i){
+      var name = str(u.name || u.naam || u.displayName || u.fullName || u.driverName || u.bezorger || u.chauffeur || ('gebruiker-' + i));
+      if(!name) return;
+      var key = keyOf(u.id || name, 'user-' + i);
+      out[key] = Object.assign({}, u, {name:name});
+    });
+    return out;
+  }
+
+  async function ensureFirebase(){
+    if(fbReady) return true;
+    if(fbBusy) return new Promise(function(resolve){
+      var tries = 0;
+      var t = setInterval(function(){
+        tries++;
+        if(fbReady || tries > 80){ clearInterval(t); resolve(fbReady); }
+      },100);
+    });
+    fbBusy = true;
+    try{
+      appMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-app.js');
+      authMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-auth.js');
+      dbMod = await import('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-database.js');
+      var existing = null;
+      try{ existing = appMod.getApps().find(function(a){ return a && a.name === APP_NAME; }); }catch(e){}
+      app = existing || appMod.initializeApp(CONFIG, APP_NAME);
+      auth = authMod.getAuth(app);
+      db = dbMod.getDatabase(app);
+      try{ await authMod.setPersistence(auth, authMod.browserLocalPersistence); }catch(e){}
+      if(!auth.currentUser){ await authMod.signInAnonymously(auth); }
+      fbReady = true;
+      return true;
+    }catch(e){
+      lastSyncError = String((e && e.message) || e || 'firebase init fout');
+      console.warn('[EPP AMS v36] Firebase init fout', e);
+      return false;
+    }finally{ fbBusy = false; }
+  }
+
+  async function syncViaSdk(reason){
+    var ok = await ensureFirebase();
+    if(!ok || !dbMod || !db) return false;
+    var s = stateForFirebase();
+    var updates = {};
+    updates[BASE_PATH + '/appState'] = s;
+    updates[BASE_PATH + '/orders'] = ordersObject(s);
+    updates[BASE_PATH + '/lastMainSync'] = {at:new Date().toISOString(), reason:reason || 'save', version:'v36'};
+    var users = usersObject(s);
+    Object.keys(users).forEach(function(k){ updates[BASE_PATH + '/users/' + k] = users[k]; });
+    await dbMod.update(dbMod.ref(db), updates);
+    lastSyncAt = new Date().toISOString();
+    lastSyncError = '';
+    try{ window.EPP_AMS_V36_SYNC = {ok:true, at:lastSyncAt, path:BASE_PATH, reason:reason || 'save'}; }catch(e){}
+    return true;
+  }
+  async function syncViaRest(reason){
+    var s = stateForFirebase();
+    var base = DB_URL.replace(/\/$/,'') + '/' + BASE_PATH;
+    var jobs = [
+      fetch(base + '/appState.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(s)}),
+      fetch(base + '/orders.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(ordersObject(s))}),
+      fetch(base + '/lastMainSync.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({at:new Date().toISOString(), reason:reason || 'save', version:'v36-rest'})})
+    ];
+    var users = usersObject(s);
+    Object.keys(users).forEach(function(k){
+      jobs.push(fetch(base + '/users/' + encodeURIComponent(k) + '.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(users[k])}));
+    });
+    var res = await Promise.all(jobs);
+    if(res.some(function(r){ return !r.ok; })) throw new Error('REST Firebase write geweigerd');
+    lastSyncAt = new Date().toISOString();
+    lastSyncError = '';
+    return true;
+  }
+  async function syncNow(reason){
+    try{
+      try{ await syncViaSdk(reason); }
+      catch(e1){ console.warn('[EPP AMS v36] SDK sync fout, probeer REST', e1); await syncViaRest(reason); }
+      try{ var b = el('syncBtn'); if(b) b.textContent = 'Firebase: opgeslagen'; }catch(e){}
+      console.info('[EPP AMS v36] online sync klaar', reason || 'save');
+      return true;
+    }catch(e){
+      lastSyncError = String((e && e.message) || e || 'sync fout');
+      try{ window.EPP_AMS_V36_SYNC = {ok:false, error:lastSyncError, path:BASE_PATH}; }catch(_e){}
+      try{ var b2 = el('syncBtn'); if(b2) b2.textContent = 'Firebase: sync fout'; }catch(_e2){}
+      console.warn('[EPP AMS v36] online sync fout', e);
+      return false;
+    }
+  }
+  function scheduleSync(reason){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(function(){ syncNow(reason || 'save'); }, 450);
+  }
+  window.EPP_AMS_FORCE_SYNC = function(){ return syncNow('handmatig'); };
+
+  function installSyncHooks(){
+    try{
+      if(typeof save === 'function' && !save.__eppAmsV36Sync){
+        var oldSave = save;
+        var wrappedSave = function(){
+          var r = oldSave.apply(this, arguments);
+          scheduleSync('save');
+          return r;
+        };
+        wrappedSave.__eppAmsV36Sync = true;
+        save = wrappedSave;
+        window.save = wrappedSave;
+      }
+    }catch(e){}
+    try{
+      if(typeof saveCurrentOrder === 'function' && !saveCurrentOrder.__eppAmsV36Sync){
+        var oldOrderSave = saveCurrentOrder;
+        var wrappedOrderSave = function(){
+          var r = oldOrderSave.apply(this, arguments);
+          scheduleSync('saveCurrentOrder');
+          return r;
+        };
+        wrappedOrderSave.__eppAmsV36Sync = true;
+        saveCurrentOrder = wrappedOrderSave;
+        window.saveCurrentOrder = wrappedOrderSave;
+        var btn = el('saveOrder'); if(btn) btn.onclick = wrappedOrderSave;
+        var btn2 = el('saveFromOverviewBtn'); if(btn2) btn2.onclick = wrappedOrderSave;
+      }
+    }catch(e){}
+    try{
+      var sb = el('syncBtn');
+      if(sb && !sb.__eppAmsV36Manual){
+        sb.__eppAmsV36Manual = true;
+        sb.addEventListener('click', function(){
+          syncNow('knop').then(function(ok){
+            if(ok) safeToast('Firebase opgeslagen');
+            else alert('Firebase sync fout: ' + lastSyncError);
+          });
+        }, true);
+      }
+    }catch(e){}
+  }
+
+  function parseLicenseDate(v){
+    var s = str(v);
+    if(!s) return '';
+    if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)){
+      var p = s.split('-'); return p[0] + '-' + p[1].padStart(2,'0') + '-' + p[2].padStart(2,'0');
+    }
+    if(/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)){
+      var q = s.split('-'); return q[2] + '-' + q[1].padStart(2,'0') + '-' + q[0].padStart(2,'0');
+    }
+    return s.slice(0,10);
+  }
+  function licenseOk(lic){
+    if(!lic || typeof lic !== 'object') return false;
+    if(lic.active === false) return false;
+    if(lic.blocked === true) return false;
+    if(lic.paid === false) return false;
+    var st = low(lic.status || 'active');
+    if(st === 'blocked' || st === 'inactive' || st === 'expired') return false;
+    var until = parseLicenseDate(lic.validUntil || lic.paidUntil || '');
+    if(until && until < todayISO()) return false;
+    return true;
+  }
+  function showLicenseBlock(msg){
+    var div = document.getElementById('eppAmsLicenseBlock');
+    if(!div){
+      div = document.createElement('div');
+      div.id = 'eppAmsLicenseBlock';
+      div.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#0f172a;color:white;display:flex;align-items:center;justify-content:center;padding:24px;font-family:Arial,sans-serif;text-align:center';
+      document.body.appendChild(div);
+    }
+    div.innerHTML = '<div style="max-width:520px;background:#111827;border:1px solid #334155;border-radius:18px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,.45)"><h1 style="margin:0 0 12px;font-size:28px">Licentie niet actief</h1><p style="font-size:17px;line-height:1.5;margin:0 0 8px">' + (msg || 'Controleer de licentie in Beheer.') + '</p><small>Amsterdam verhuur · licentiecontrole v36</small></div>';
+  }
+  async function checkLicenseOnce(){
+    try{
+      var ok = await ensureFirebase();
+      var lic = null;
+      if(ok && dbMod && db){
+        var snap = await dbMod.get(dbMod.ref(db, BASE_PATH + '/license'));
+        lic = snap.exists() ? snap.val() : null;
+      }else{
+        var r = await fetch(DB_URL.replace(/\/$/,'') + '/' + BASE_PATH + '/license.json', {cache:'no-store'});
+        lic = r.ok ? await r.json() : null;
+      }
+      if(!licenseOk(lic)) showLicenseBlock('Deze klantomgeving is geblokkeerd, verlopen of niet betaald.');
+      else {
+        var div = document.getElementById('eppAmsLicenseBlock');
+        if(div) div.remove();
+      }
+    }catch(e){
+      showLicenseBlock('Licentie kon niet gecontroleerd worden. Controleer internet/Firebase.');
+    }
+  }
+
+  function installDateFix(){
+    function setEndSameAsStart(){
+      var ds = el('dateStart'), de = el('dateEnd');
+      if(ds && de) de.value = ds.value || de.value || todayISO();
+    }
+    try{ window.setEndThreeDays = setEndSameAsStart; setEndThreeDays = setEndSameAsStart; }catch(e){}
+    var ds = el('dateStart'), de = el('dateEnd');
+    var sm = el('startMinus'), sp = el('startPlus'), em = el('endMinus'), ep = el('endPlus'), e3 = el('endPlus3');
+    if(e3){ e3.style.display = 'none'; e3.onclick = setEndSameAsStart; }
+    if(ds && !ds.__eppAmsV36Date){
+      ds.__eppAmsV36Date = true;
+      ds.addEventListener('change', function(){
+        if(de && (!de.value || de.value < ds.value)) de.value = ds.value;
+      }, true);
+    }
+    if(sm) sm.onclick = function(){
+      var base = (ds && ds.value) || todayISO();
+      if(ds) ds.value = addDaysISO(base, -1);
+      if(ds && de && (!de.value || de.value < ds.value)) de.value = ds.value;
+    };
+    if(sp) sp.onclick = function(){
+      var base = (ds && ds.value) || todayISO();
+      if(ds) ds.value = addDaysISO(base, 1);
+      if(ds && de && (!de.value || de.value < ds.value)) de.value = ds.value;
+    };
+    if(em) em.onclick = function(){
+      var base = (de && de.value) || (ds && ds.value) || todayISO();
+      if(de) de.value = addDaysISO(base, -1);
+      if(ds && de && de.value < ds.value) de.value = ds.value;
+    };
+    if(ep) ep.onclick = function(){
+      var base = (de && de.value) || (ds && ds.value) || todayISO();
+      if(de) de.value = addDaysISO(base, 1);
+    };
+  }
+
+  function boot(){
+    installSyncHooks();
+    installDateFix();
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      [100,600,1600,3200].forEach(function(ms){ setTimeout(boot, ms); });
+      setTimeout(checkLicenseOnce, 350);
+    });
+  }else{
+    [100,600,1600,3200].forEach(function(ms){ setTimeout(boot, ms); });
+    setTimeout(checkLicenseOnce, 350);
+  }
+  document.addEventListener('click', function(ev){
+    var t = ev.target; if(!t) return;
+    var txt = low((t.id || '') + ' ' + (t.textContent || ''));
+    if(/nieuwe opdracht|neworder|wijzig|opslaan|overzicht|datum|eind|begin/.test(txt)){
+      setTimeout(boot, 50);
+      setTimeout(installDateFix, 300);
+    }
+  }, true);
+})();
