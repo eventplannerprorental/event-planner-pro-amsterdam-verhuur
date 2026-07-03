@@ -46842,3 +46842,250 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setTimeout(install, 3500);
   setInterval(pullAll, 15000);
 })();
+
+/* ============================================================
+   AMSTERDAM v45 - HARDE RTDB SYNC + PERSONEEL FIX
+   - Geen index wijziging
+   - Schrijft users/orders hard naar customers/amsterdam-verhuur
+   - Verwijdert handmatige oude Firebase-test users zodra sync slaagt
+   - Voorkomt dat bezorger PIN 3330/9119 gebruikt en hoofdgebruiker overschrijft
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V45_HARD_SYNC__) return;
+  window.__EPP_AMS_V45_HARD_SYNC__ = true;
+
+  var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE = 'customers/amsterdam-verhuur';
+  var FB_VER = '10.12.5';
+  var CONFIG = {
+    apiKey: 'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL: DB,
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId: '484128911122',
+    appId: '1:484128911122:web:v45-hard-rtdb-sync'
+  };
+  var appMod, authMod, app, auth, tokenPromise;
+
+  function E(id){ return document.getElementById(id); }
+  function S(){ try{ return (typeof state !== 'undefined') ? state : window.state; }catch(e){ return window.state; } }
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function safeKey(v){
+    var s = T(v).toLowerCase();
+    if(!s) s = 'id-' + Date.now();
+    s = s.replace(/[.$#\[\]\/]/g,'-').replace(/[^a-z0-9_-]/g,'-').replace(/-+/g,'-');
+    return (s || ('id-' + Date.now())).slice(0,120);
+  }
+  function toast(t){ try{ if(typeof toastMsg === 'function') toastMsg(t); else console.info(t); }catch(e){ console.info(t); } }
+  function status(txt, bad){
+    var b = E('syncBtn');
+    if(b){
+      b.textContent = txt || (bad ? 'Firebase: fout' : 'Firebase: ok');
+      b.style.background = bad ? '#dc2626' : '#16a34a';
+      b.style.color = '#fff';
+      b.title = txt || '';
+    }
+  }
+  function localSave(){ try{ if(typeof save === 'function') save(); }catch(e){} }
+  function updateDriverSelect(){
+    try{
+      var s = S();
+      var d = E('orderDriver');
+      if(!s || !d) return;
+      var cur = d.value || '';
+      d.innerHTML = '<option value="">Geen</option>' + (s.users||[]).filter(function(u){return String(u.role||'').toLowerCase()==='bezorger';}).map(function(u){return '<option>'+T(u.name)+'</option>';}).join('');
+      if(cur) d.value = cur;
+    }catch(e){}
+  }
+
+  async function getToken(){
+    if(tokenPromise) return tokenPromise;
+    tokenPromise = (async function(){
+      try{
+        appMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-app.js');
+        authMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-auth.js');
+        var existing = appMod.getApps().find(function(a){ return a && a.name === 'epp-v45-hard-sync'; });
+        app = existing || appMod.initializeApp(CONFIG, 'epp-v45-hard-sync');
+        auth = authMod.getAuth(app);
+        if(!auth.currentUser){
+          await authMod.signInAnonymously(auth);
+        }
+        return auth.currentUser ? await auth.currentUser.getIdToken(true) : '';
+      }catch(e){
+        console.warn('[EPP v45] anonieme auth niet beschikbaar, probeer zonder token:', e);
+        return '';
+      }
+    })();
+    return tokenPromise;
+  }
+
+  async function put(path, data){
+    var token = await getToken();
+    var url = DB + '/' + path + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
+    var r = await fetch(url, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    if(!r.ok){
+      var msg = await r.text().catch(function(){return '';});
+      throw new Error('PUT ' + path + ' HTTP ' + r.status + ' ' + msg);
+    }
+    return r.json().catch(function(){return null;});
+  }
+  async function patch(path, data){
+    var token = await getToken();
+    var url = DB + '/' + path + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
+    var r = await fetch(url, {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    if(!r.ok){
+      var msg = await r.text().catch(function(){return '';});
+      throw new Error('PATCH ' + path + ' HTTP ' + r.status + ' ' + msg);
+    }
+    return r.json().catch(function(){return null;});
+  }
+
+  function userMap(users){
+    var out = {};
+    (Array.isArray(users) ? users : []).forEach(function(u){
+      if(!u || !T(u.name)) return;
+      var copy = Object.assign({}, u);
+      copy.id = T(copy.id) || ('user-' + safeKey(copy.pin || copy.name));
+      copy.name = T(copy.name);
+      copy.pin = T(copy.pin);
+      copy.role = T(copy.role) || 'Bezorger';
+      copy.active = copy.active !== false;
+      out[safeKey(copy.id || copy.pin || copy.name)] = copy;
+    });
+    return out;
+  }
+  function orderMap(orders){
+    var out = {};
+    (Array.isArray(orders) ? orders : []).forEach(function(o){
+      if(!o || !(o.id || o.number)) return;
+      var copy = Object.assign({}, o);
+      copy.id = T(copy.id) || ('order-' + safeKey(copy.number));
+      copy.driverName = copy.driverName || copy.driver || copy.bezorger || '';
+      copy.driver = copy.driver || copy.driverName || copy.bezorger || '';
+      copy.bezorger = copy.bezorger || copy.driverName || copy.driver || '';
+      copy.extra = copy.extra || copy.bijzonderheden || copy.orderExtra || '';
+      copy.bijzonderheden = copy.bijzonderheden || copy.extra || '';
+      copy.updatedAt = copy.updatedAt || new Date().toISOString();
+      out[safeKey(copy.id || copy.number)] = copy;
+    });
+    return out;
+  }
+
+  async function hardSync(reason){
+    var s = S();
+    if(!s) throw new Error('Geen lokale state gevonden');
+    var users = userMap(s.users || []);
+    var orders = orderMap(s.orders || []);
+    await put(BASE + '/users', users);
+    await put(BASE + '/orders', orders);
+    await patch(BASE + '/syncDebug', {
+      lastMainSync: new Date().toISOString(),
+      reason: reason || 'manual',
+      usersCount: Object.keys(users).length,
+      ordersCount: Object.keys(orders).length,
+      version: 'v45'
+    });
+    status('Firebase: ok', false);
+    return {users:Object.keys(users).length, orders:Object.keys(orders).length};
+  }
+  window.EPP_FORCE_FIREBASE_SYNC = hardSync;
+
+  var timer = null;
+  function schedule(reason){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      hardSync(reason).catch(function(e){
+        console.error('[EPP v45] Firebase sync fout:', e);
+        status('Firebase: fout', true);
+        toast('Firebase sync fout: ' + (e && e.message ? e.message : e));
+      });
+    }, 700);
+  }
+
+  function wrapSave(){
+    if(window.__EPP_V45_SAVE_WRAPPED__) return;
+    if(typeof save !== 'function') return;
+    var old = save;
+    window.__EPP_V45_SAVE_WRAPPED__ = true;
+    save = function(){
+      var r = old.apply(this, arguments);
+      schedule('save');
+      return r;
+    };
+  }
+
+  function bindManual(){
+    var b = E('syncBtn');
+    if(!b || b.__eppV45Bound) return;
+    b.__eppV45Bound = true;
+    b.addEventListener('click', function(){
+      toast('Firebase sync starten...');
+      hardSync('button').then(function(res){ toast('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+        .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
+    }, true);
+    b.addEventListener('dblclick', function(){
+      toast('Firebase sync starten...');
+      hardSync('doubleclick').then(function(res){ toast('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+        .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
+    }, true);
+  }
+
+  function saveUserFromAdmin(ev){
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+    var s = S();
+    if(!s){ alert('Kan gebruikerslijst niet vinden'); return false; }
+    s.users = Array.isArray(s.users) ? s.users : [];
+    var nameEl = E('adminUserName'), pinEl = E('adminUserPin'), roleEl = E('adminUserRole');
+    var name = T(nameEl && nameEl.value);
+    var pin = T(pinEl && pinEl.value);
+    var role = T(roleEl && roleEl.value) || 'Bezorger';
+    if(!name || !pin){ alert('Vul naam en PIN in.'); return false; }
+    if(!/^\d{4}$/.test(pin)){ alert('PIN moet 4 cijfers zijn.'); return false; }
+    if(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119')){
+      alert('PIN ' + pin + ' is gereserveerd voor hoofd/admin. Kies voor bezorger een andere PIN, bijvoorbeeld 3331 of 1234.');
+      return false;
+    }
+    var existingSamePin = s.users.find(function(u){ return T(u.pin) === pin; });
+    if(existingSamePin && T(existingSamePin.name).toLowerCase() !== name.toLowerCase()){
+      alert('Deze PIN is al in gebruik door: ' + (existingSamePin.name || 'onbekend') + '. Kies een andere PIN.');
+      return false;
+    }
+    var existing = s.users.find(function(u){ return T(u.name).toLowerCase() === name.toLowerCase(); }) || existingSamePin;
+    if(!existing){
+      existing = {id:'user-' + safeKey(pin + '-' + name), name:name, pin:pin, role:role, active:true, rights:{}};
+      s.users.push(existing);
+    }
+    existing.name = name;
+    existing.pin = pin;
+    existing.role = role;
+    existing.active = true;
+    existing.rights = Object.assign({}, existing.rights || {});
+    localSave();
+    updateDriverSelect();
+    try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
+    schedule('admin-user');
+    toast('Gebruiker opgeslagen: ' + name);
+    return false;
+  }
+
+  function bindUserButton(){
+    var b = E('adminSaveUser');
+    if(!b || b.__eppV45UserBound) return;
+    b.__eppV45UserBound = true;
+    b.addEventListener('click', saveUserFromAdmin, true);
+  }
+
+  function install(){
+    wrapSave();
+    bindManual();
+    bindUserButton();
+    updateDriverSelect();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
+  setTimeout(install, 500);
+  setTimeout(install, 1500);
+  setTimeout(install, 3500);
+})();
