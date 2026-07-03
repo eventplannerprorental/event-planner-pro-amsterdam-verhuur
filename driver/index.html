@@ -3,54 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b74d1">
+  <meta name="theme-color" content="#00aeef">
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Bezorger Amsterdam verhuur v48</title>
-  <link rel="manifest" href="manifest.json?v=480">
-  <link rel="stylesheet" href="driver.css?v=480">
+  <title>Bezorger Amsterdam verhuur v49</title>
+  <link rel="manifest" href="manifest.json?v=490">
+  <link rel="stylesheet" href="driver.css?v=490">
 </head>
 <body>
-  <header class="hero">
-    <h1>Bezorger Amsterdam verhuur</h1>
-    <p>Mobiele opdrachten</p>
+  <header class="phone-hero">
+    <div>
+      <h1>Bezorger<br>Amsterdam verhuur</h1>
+      <p id="heroDriver">Niet ingelogd</p>
+    </div>
+    <button id="logoutBtn" class="logoutBtn" type="button">Uitloggen</button>
   </header>
 
-  <main class="wrap">
+  <main class="phone-wrap">
     <div id="status" class="status">App laden...</div>
 
-    <section id="loginCard" class="card">
+    <section id="loginCard" class="login-card">
       <h2>Inloggen</h2>
-      <p id="loginHelp" class="muted">Kies je naam eenmalig en vul je persoonlijke PIN in.</p>
-
-      <div id="nameBlock" class="field-block">
-        <label for="driverSelect">Naam</label>
-        <select id="driverSelect"><option value="">Laden...</option></select>
-        <small>Na inloggen blijft deze telefoon/browser vast gekoppeld aan deze naam.</small>
-      </div>
-
-      <div id="lockedBlock" class="locked hidden">
-        <span>Gekoppelde bezorger</span>
-        <strong id="lockedName">-</strong>
-        <button id="resetDeviceBtn" type="button" class="link-btn">Koppeling wissen</button>
-      </div>
-
-      <label for="pinInput">PIN</label>
-      <input id="pinInput" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="PIN" maxlength="8">
-      <button id="loginBtn" type="button" class="primary">Inloggen</button>
+      <label>Naam</label>
+      <select id="driverSelect"><option>Laden...</option></select>
+      <label>PIN</label>
+      <input id="pinInput" type="password" inputmode="numeric" placeholder="PIN" maxlength="8">
+      <button id="loginBtn" class="big-btn blue" type="button">Inloggen</button>
+      <button id="resetDeviceBtn" class="big-btn dark" type="button">Koppeling wissen</button>
       <div id="loginError" class="error hidden"></div>
     </section>
 
-    <section id="ordersCard" class="card hidden">
-      <div class="toprow">
-        <div>
-          <h2>Mijn opdrachten</h2>
-          <p class="muted" id="driverInfo">-</p>
-        </div>
-        <button id="logoutBtn" type="button" class="secondary">Uitloggen</button>
-      </div>
-      <div id="ordersList" class="orders"></div>
+    <section id="ordersCard" class="hidden">
+      <input id="searchInput" class="search" placeholder="Zoek opdracht / klant / adres">
+      <button id="refreshBtn" class="big-btn blue" type="button">Verversen</button>
+      <button id="clearSearchBtn" class="big-btn dark" type="button">Leeg</button>
+      <div id="ordersList"></div>
     </section>
   </main>
 
@@ -60,9 +48,9 @@
       if (window.caches) caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
     }
   </script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js?v=480"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js?v=480"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js?v=480"></script>
-  <script src="driver.js?v=480"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js?v=490"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js?v=490"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js?v=490"></script>
+  <script src="driver.js?v=490"></script>
 </body>
 </html>
