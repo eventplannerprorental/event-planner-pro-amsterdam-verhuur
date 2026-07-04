@@ -47293,3 +47293,82 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setTimeout(loadOwnAlerts,1000);
   setInterval(loadOwnAlerts,15000);
 })();
+
+
+/* ============================================================
+   AMSTERDAM v51 - eigen systeemmeldingen definitief
+   - Geen GitHub/deploy/repo meldingen in plannerknop
+   - Wis verwijdert de melding echt uit RTDB, zodat hij niet terugkomt
+   - Alleen eigen bezorgtelefoon-meldingen worden rood geteld
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__AMS_V51_OWN_ALERTS_FINAL__) return;
+  window.__AMS_V51_OWN_ALERTS_FINAL__ = true;
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  var last=[];
+  function E(id){return document.getElementById(id)}
+  function T(v){return String(v==null?'':v)}
+  function esc(s){return T(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+  function vals(o){return o&&typeof o==='object'?Object.keys(o).map(function(k){var v=o[k];if(v&&typeof v==='object'&&!v.id)v.id=k;return v;}):[]}
+  function isBadSource(a){return /github|git hub|gitup|deploy|pages|repository|repo|workflow|action/i.test(JSON.stringify(a||{}));}
+  function isOwn(a){
+    if(!a||typeof a!=='object'||isBadSource(a)) return false;
+    var src=T(a.source).toLowerCase();
+    var typ=T(a.type+' '+a.title+' '+a.message+' '+a.text).toLowerCase();
+    if(src && !/eigen-systeem|bezorgtelefoon|driver|systeem/.test(src)) return false;
+    return /melding|schade|storing|defect|vermissing|probleem|algemeen/.test(typ);
+  }
+  function isOpen(a){return isOwn(a) && a.resolved!==true && a.deleted!==true && T(a.status).toLowerCase()!=='resolved'}
+  async function rtdb(path, opt){
+    var r=await fetch(DB+'/'+path+'.json'+(opt&&opt.q?opt.q:''), opt||{cache:'no-store'});
+    if(!r.ok) throw new Error('Firebase '+r.status+' '+(await r.text().catch(function(){return '';})));
+    try{return await r.json()}catch(e){return null}
+  }
+  async function load(){
+    try{
+      var data=await rtdb(BASE+'/alerts',{cache:'no-store',q:'?v='+Date.now()});
+      last=vals(data).filter(isOpen);
+      try{ if(typeof state==='object'&&state){ state.alerts=last.slice(); } }catch(e){}
+      paint();
+    }catch(e){console.warn('[AMS v51 alerts]',e)}
+  }
+  async function removeRemote(id){
+    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'DELETE'});
+    last=last.filter(function(a){return T(a.id)!==T(id)});
+    try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
+    paint();
+  }
+  async function resolveRemote(id){
+    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,deleted:true,resolvedAt:new Date().toISOString(),deletedAt:new Date().toISOString()})});
+    last=last.filter(function(a){return T(a.id)!==T(id)});
+    try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
+    paint();
+  }
+  function paint(){
+    var b=E('alertsBtn'); if(!b) return;
+    b.textContent=last.length?'Systeemmeldingen ('+last.length+')':'Systeemmeldingen (0)';
+    b.style.background=last.length?'#dc2626':'#16a34a';
+    b.style.color='#fff'; b.style.fontWeight='900';
+  }
+  function modal(){
+    var old=E('amsV51Alerts'); if(old) old.remove();
+    var w=document.createElement('div'); w.id='amsV51Alerts';
+    w.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999999;display:flex;align-items:center;justify-content:center;padding:18px';
+    w.innerHTML='<div style="width:min(760px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.35)"><h2 style="margin-top:0">Systeemmeldingen</h2>'+
+      (last.length?last.map(function(a){return '<div style="border-left:8px solid #dc2626;background:#fff7f7;border-radius:12px;padding:12px;margin:10px 0"><b>'+esc(a.title||'Melding')+'</b><br>'+esc(a.message||a.text||a.note||'')+'<br><small>Opdracht: '+esc(a.orderNumber||a.orderId||'')+' | '+esc(a.driverName||'')+'</small><div style="margin-top:10px;display:flex;gap:8px"><button data-done="'+esc(a.id)+'" style="background:#16a34a;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:900">Afmelden</button><button data-wis="'+esc(a.id)+'" style="background:#374151;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:900">Wis</button></div></div>'}).join(''):'<p>Geen open systeemmeldingen.</p>')+
+      '<button id="amsV51Close" style="background:#111827;color:#fff;border:0;border-radius:12px;padding:10px 16px;font-weight:900">Sluiten</button></div>';
+    document.body.appendChild(w);
+    w.querySelector('#amsV51Close').onclick=function(){w.remove()};
+    w.querySelectorAll('[data-wis]').forEach(function(btn){btn.onclick=function(){removeRemote(btn.getAttribute('data-wis')).then(function(){w.remove();modal();}).catch(function(e){alert(e.message||e);});};});
+    w.querySelectorAll('[data-done]').forEach(function(btn){btn.onclick=function(){resolveRemote(btn.getAttribute('data-done')).then(function(){w.remove();modal();}).catch(function(e){alert(e.message||e);});};});
+  }
+  function bind(){
+    var b=E('alertsBtn'); if(!b) return;
+    b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();load().then(modal);return false;};
+  }
+  function tick(){bind();load();}
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
+  setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
+})();
