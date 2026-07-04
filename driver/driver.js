@@ -1,4 +1,4 @@
-/* Event Planner PRO Amsterdam verhuur - driver v50
+/* Event Planner PRO Amsterdam verhuur - driver v51
    Tapwagen-achtige compacte telefoonindeling.
    Alleen Amsterdam RTDB: customers/amsterdam-verhuur.
 */
@@ -8,7 +8,7 @@
   var BASE='customers/amsterdam-verhuur';
   var CONFIG={apiKey:'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',authDomain:'epp-amsterdam-verhuur.firebaseapp.com',databaseURL:DB,projectId:'epp-amsterdam-verhuur',storageBucket:'epp-amsterdam-verhuur.firebasestorage.app',messagingSenderId:'484128911122',appId:'1:484128911122:web:b2ba741c7a0a2511054dcb'};
   var app, db, users=[], orders=[], currentUser=null, currentSearch='';
-  var LS_USER='epp-amsterdam-driver-user-v50';
+  var LS_USER='epp-amsterdam-driver-user-v51';
   function E(id){return document.getElementById(id)}
   function T(v){return String(v==null?'':v).trim()}
   function esc(s){return T(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -63,6 +63,7 @@
     '<button class="action-btn cyan" data-act="call">Bel klant</button>'+
     '<button class="action-btn red" data-act="message-menu">Melding maken</button>'+
     '<button class="action-btn orange" data-act="offer">Offerte</button>'+
+    '<button class="action-btn green" data-act="whatsapp">WhatsApp</button>'+
     '<button class="action-btn dark" data-act="done">Afmelden pas na einddatum</button>'+
     '<button class="action-btn dark" data-act="photo-menu">Foto / bewijs</button>'+
     '<button class="action-btn purple" data-act="signature">Handtekening klant</button>'+
@@ -72,6 +73,8 @@
   function openMaps(o,maps){var q=encodeURIComponent(address(o));location.href=maps?'https://www.google.com/maps/search/?api=1&query='+q:'https://waze.com/ul?q='+q+'&navigate=yes'}
   function call(o){var p=phone(o);if(!p){alert('Geen telefoonnummer');return}location.href='tel:'+p.replace(/\s+/g,'')}
   function shareText(txt){if(navigator.share)navigator.share({text:txt}).catch(function(){});else{navigator.clipboard&&navigator.clipboard.writeText(txt);alert('Gekopieerd')}}
+  function whatsapp(o){var txt=encodeURIComponent(orderText(o));location.href='https://wa.me/?text='+txt}
+  function offer(o){var m=modal('<h2>Offerte</h2><pre>'+esc(orderText(o))+'</pre><button class="action-btn green" id="waOffer">WhatsApp</button><button class="action-btn blue" id="copyOffer">Kopieer / deel</button><button class="action-btn dark" data-close>Sluiten</button>');m.querySelector('#waOffer').onclick=function(){whatsapp(o)};m.querySelector('#copyOffer').onclick=function(){shareText(orderText(o))}}
   async function addFile(o,file){var k=orderKey(o), id='m_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);file.id=id;file.orderId=k;file.orderNumber=o.number||'';file.driverName=currentUser&&currentUser.name||'';file.createdAt=now();await updatePath('orders/'+k+'/media/'+id,file);await updatePath('customerFiles/'+k+'/media/'+id,file)}
   async function createOwnAlert(o,type,msg){var id='a_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);var names={algemeen:'Algemene melding',schade:'Schade',storing:'Storing / defect',vermissing:'Vermissing'};var alert={id:id,type:type,title:names[type]||'Melding',message:msg||'',orderId:orderKey(o),orderNumber:o.number||'',driverName:currentUser&&currentUser.name||'',createdAt:now(),resolved:false,source:'eigen-systeem'};await updatePath('alerts/'+id,alert);await addFile(o,{kind:'melding',type:type,title:alert.title,text:alert.message})}
   function askMessage(o,type){var names={algemeen:'Algemene melding',schade:'Schade',storing:'Storing / defect',vermissing:'Vermissing'};var m=modal('<h2>'+esc(names[type]||'Melding')+'</h2><textarea id="msgText" placeholder="Toelichting"></textarea><button class="action-btn red" id="sendMsg">Versturen</button><button class="action-btn dark" data-close>Annuleren</button>');m.querySelector('#sendMsg').onclick=async function(){await createOwnAlert(o,type,m.querySelector('#msgText').value||'');m.remove();setStatus('Melding verstuurd')}}
@@ -83,7 +86,7 @@
   async function overview(o){var k=orderKey(o), media=vals(await getPath('customerFiles/'+k+'/media'));var html='<h2>Overzicht bestelling</h2><pre>'+esc(orderText(o))+'</pre><h3>Klantmap</h3>'+(media.length?media.map(function(x){return '<div class="media-item"><b>'+esc(x.title||x.type||x.kind)+'</b><br><small>'+esc(x.createdAt||'')+'</small>'+(x.imageData?'<img src="'+x.imageData+'">':'')+'<div class="small-row"><button data-share="'+esc(x.id)+'">Deel</button><button data-del="'+esc(x.id)+'">Wis</button></div></div>'}).join(''):'<p>Leeg</p>')+'<button class="action-btn blue" id="shareOrder">Deel</button><button class="action-btn dark" data-close>Sluiten</button>';var m=modal(html);m.querySelector('#shareOrder').onclick=function(){shareText(orderText(o))};m.querySelectorAll('[data-share]').forEach(function(b){b.onclick=function(){shareText(orderText(o))}});m.querySelectorAll('[data-del]').forEach(function(b){b.onclick=async function(){var id=b.getAttribute('data-del');await setPath('customerFiles/'+k+'/media/'+id,null);await setPath('orders/'+k+'/media/'+id,null);m.remove();overview(o)}})}
   function openOrder(o){modal('<h2>Open opdracht</h2><pre>'+esc(orderText(o))+'</pre><button class="action-btn blue" data-close>Sluiten</button>')}
   async function done(o){var end=o.end||o.start,today=new Date().toISOString().slice(0,10);if(end&&today<end){alert('Afmelden kan pas na einddatum: '+nice(end));return}await updatePath('orders/'+orderKey(o),{status:'Uitgevoerd',driverStatus:'uitgevoerd',driverDoneAt:now(),driverDoneBy:currentUser.name});await loadData()}
-  document.addEventListener('click',function(ev){var b=ev.target.closest('[data-act]');if(!b)return;var o=findOrder(b);if(!o)return;var a=b.getAttribute('data-act');Promise.resolve().then(function(){if(a==='open')openOrder(o);else if(a==='overview')overview(o);else if(a==='waze')openMaps(o,false);else if(a==='maps')openMaps(o,true);else if(a==='call')call(o);else if(a==='message-menu')messageMenu(o);else if(a==='offer')shareText(orderText(o));else if(a==='done')done(o);else if(a==='photo-menu')photoMenu(o);else if(a==='signature')signature(o)}).catch(function(e){setStatus('Fout: '+(e.message||e),true);alert('Fout: '+(e.message||e))})});
+  document.addEventListener('click',function(ev){var b=ev.target.closest('[data-act]');if(!b)return;var o=findOrder(b);if(!o)return;var a=b.getAttribute('data-act');Promise.resolve().then(function(){if(a==='open')openOrder(o);else if(a==='overview')overview(o);else if(a==='waze')openMaps(o,false);else if(a==='maps')openMaps(o,true);else if(a==='call')call(o);else if(a==='message-menu')messageMenu(o);else if(a==='offer')offer(o);else if(a==='whatsapp')whatsapp(o);else if(a==='done')done(o);else if(a==='photo-menu')photoMenu(o);else if(a==='signature')signature(o)}).catch(function(e){setStatus('Fout: '+(e.message||e),true);alert('Fout: '+(e.message||e))})});
   function bind(){E('loginBtn')&&(E('loginBtn').onclick=doLogin);E('logoutBtn')&&(E('logoutBtn').onclick=function(){currentUser=null;localStorage.removeItem(LS_USER);location.reload()});E('resetDeviceBtn')&&(E('resetDeviceBtn').onclick=function(){currentUser=null;localStorage.removeItem(LS_USER);location.reload()});E('refreshBtn')&&(E('refreshBtn').onclick=loadData);E('clearSearchBtn')&&(E('clearSearchBtn').onclick=function(){currentSearch='';E('searchInput').value='';renderOrders()});E('searchInput')&&(E('searchInput').oninput=function(){currentSearch=this.value;renderOrders()})}
   async function boot(){bind();try{await initFirebase();await loadData();setInterval(loadData,15000)}catch(e){setStatus('Firebase fout: '+(e.message||e),true)}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
