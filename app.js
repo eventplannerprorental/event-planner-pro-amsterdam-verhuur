@@ -47296,10 +47296,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
 
 /* ============================================================
-   AMSTERDAM v51 - eigen systeemmeldingen definitief
+   AMSTERDAM v52 - systeemmelding verbergen, klantmap bewaren
    - Geen GitHub/deploy/repo meldingen in plannerknop
-   - Wis verwijdert de melding echt uit RTDB, zodat hij niet terugkomt
-   - Alleen eigen bezorgtelefoon-meldingen worden rood geteld
+   - Wis/Afmelden zet alleen plannerHide/resolved op de alert
+   - Klantmap/overzicht bestelling blijft bewaard
    ============================================================ */
 (function(){
   'use strict';
@@ -47320,7 +47320,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(src && !/eigen-systeem|bezorgtelefoon|driver|systeem/.test(src)) return false;
     return /melding|schade|storing|defect|vermissing|probleem|algemeen/.test(typ);
   }
-  function isOpen(a){return isOwn(a) && a.resolved!==true && a.deleted!==true && T(a.status).toLowerCase()!=='resolved'}
+  function isOpen(a){return isOwn(a) && a.resolved!==true && a.deleted!==true && a.hiddenFromPlanner!==true && a.plannerHidden!==true && T(a.status).toLowerCase()!=='resolved'}
   async function rtdb(path, opt){
     var r=await fetch(DB+'/'+path+'.json'+(opt&&opt.q?opt.q:''), opt||{cache:'no-store'});
     if(!r.ok) throw new Error('Firebase '+r.status+' '+(await r.text().catch(function(){return '';})));
@@ -47335,13 +47335,13 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }catch(e){console.warn('[AMS v51 alerts]',e)}
   }
   async function removeRemote(id){
-    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'DELETE'});
+    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,hiddenFromPlanner:true,plannerHidden:true,plannerClearedAt:new Date().toISOString(),plannerAction:'wis-alleen-uit-systeemmeldingen'})});
     last=last.filter(function(a){return T(a.id)!==T(id)});
     try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
     paint();
   }
   async function resolveRemote(id){
-    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,deleted:true,resolvedAt:new Date().toISOString(),deletedAt:new Date().toISOString()})});
+    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,hiddenFromPlanner:true,plannerHidden:true,resolvedAt:new Date().toISOString(),plannerAction:'afgemeld-alleen-uit-systeemmeldingen'})});
     last=last.filter(function(a){return T(a.id)!==T(id)});
     try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
     paint();
