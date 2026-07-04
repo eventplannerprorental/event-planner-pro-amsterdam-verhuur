@@ -26496,6 +26496,39 @@ setTimeout(()=>{
     } catch(e){
     }
   }
+  var V53_DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var V53_BASE='customers/amsterdam-verhuur';
+  var v53App=null, v53Auth=null, v53Ready=false;
+  async function v53EnsureAuth(){
+    if(v53Ready) return true;
+    try{
+      var appMod = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
+      var authMod = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
+      var CONFIG = {apiKey:'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',authDomain:'epp-amsterdam-verhuur.firebaseapp.com',databaseURL:V53_DB,projectId:'epp-amsterdam-verhuur',storageBucket:'epp-amsterdam-verhuur.firebasestorage.app',messagingSenderId:'484128911122',appId:'1:484128911122:web:v53-alert-writeback'};
+      var existing = appMod.getApps().find(function(a){ return a && a.name === 'epp-v53-alertwriteback'; });
+      v53App = existing || appMod.initializeApp(CONFIG, 'epp-v53-alertwriteback');
+      v53Auth = authMod.getAuth(v53App);
+      if(!v53Auth.currentUser){ try{ await authMod.signInAnonymously(v53Auth); }catch(e){} }
+      v53Ready = true;
+    }catch(e){ console.warn('[EPP v53] Firebase auth setup mislukt', e); }
+    return v53Ready;
+  }
+  async function v53WriteAlertResolved(id, deleted){
+    try{
+      await v53EnsureAuth();
+      var token = v53Auth && v53Auth.currentUser ? await v53Auth.currentUser.getIdToken(true) : '';
+      var url = V53_DB + '/' + V53_BASE + '/alerts/' + encodeURIComponent(id) + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
+      var body = {
+        resolved:true, hiddenFromPlanner:true, plannerHidden:true,
+        status: deleted ? 'verwijderd' : 'opgelost',
+        resolvedAt: new Date().toISOString(),
+        plannerAction: deleted ? 'verwijderd-door-planner' : 'afgemeld-door-planner'
+      };
+      if(deleted) body.deleted = true;
+      var res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if(!res.ok) console.warn('[EPP v53] Firebase alert write-back mislukt: HTTP ' + res.status);
+    }catch(e){ console.warn('[EPP v53] Firebase alert write-back fout', e); }
+  }
   function markLocal(id, deleted){
     var s=S();
     if(!Array.isArray(s.alerts)) return;
@@ -26514,6 +26547,10 @@ setTimeout(()=>{
       localStorage.setItem(CLOSED_IDS_KEY, JSON.stringify(ids));
     } catch(e){
     }
+    /* v53: schrijf de afhandeling ook terug naar Firebase, op exact het pad
+       waar driver.js de melding aanmaakte, zodat hij ook op andere
+       toestellen/sessies weg blijft in plaats van terug te komen. */
+    v53WriteAlertResolved(id, deleted);
   }
   function closeAll(){
     var list=openList();
