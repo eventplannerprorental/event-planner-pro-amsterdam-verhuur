@@ -47419,3 +47419,132 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
   setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
 })();
+
+/* =========================================================
+   EPP Amsterdam v54 - Bijzonderheden LIVE in factuur/opdracht, ook via latere documentroute
+   Basis: v53
+   Probleem: latere BNS528/BNS654 routes openden weer de opgeslagen order.
+   Oplossing: vlak voor document openen wordt de open formulierdata tijdelijk over de opgeslagen order gelegd.
+   Alleen app.js. Geen Firebase-pad, sync, driver of index wijziging.
+   ========================================================= */
+(function EPP_AMS_V54_LIVE_BIJZONDERHEDEN_DOCS(){
+  'use strict';
+  if(window.__EPP_AMS_V54_LIVE_BIJZONDERHEDEN_DOCS__) return;
+  window.__EPP_AMS_V54_LIVE_BIJZONDERHEDEN_DOCS__ = true;
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function S(){ try{ if(typeof state!=='undefined' && state) return state; }catch(e){} return window.state || window.appState || null; }
+  function E(id){ return document.getElementById(id); }
+  function q(sel){ try{ return document.querySelector(sel); }catch(e){ return null; } }
+  function valOf(el){ if(!el) return ''; if('value' in el) return T(el.value); return T(el.textContent||el.innerText||''); }
+  function liveValue(ids, selectors){
+    var i, el;
+    ids = ids || [];
+    for(i=0;i<ids.length;i++){ el=E(ids[i]); if(el) return {exists:true,value:valOf(el)}; }
+    selectors = selectors || [];
+    for(i=0;i<selectors.length;i++){ el=q(selectors[i]); if(el) return {exists:true,value:valOf(el)}; }
+    return {exists:false,value:''};
+  }
+  function clone(o){ try{ return JSON.parse(JSON.stringify(o||{})); }catch(e){ return Object.assign({},o||{}); } }
+  function orders(){ var s=S(); if(!s) return []; if(!Array.isArray(s.orders)) s.orders=[]; return s.orders; }
+  function orderNo(o){ return T(o&&(o.number||o.orderNumber||o.nr||o.orderNo||o.opdrachtNr||o.id)); }
+  function orderId(o){ return T(o&&(o.id||o.orderId||o.docId)); }
+  function currentEditing(){ try{ return T(window.editing || (typeof editing!=='undefined'?editing:'')); }catch(e){ return T(window.editing||''); } }
+  function currentNumber(){
+    var v=liveValue(['orderNumber','orderNo','opdrachtNr','number'],['input[name="orderNumber"]','input[name="opdrachtNr"]']);
+    return T(v.value);
+  }
+  function findIndex(key){
+    key=T(key); var ed=currentEditing(), nr=currentNumber();
+    var keys=[key,ed,nr].filter(Boolean);
+    var arr=orders();
+    for(var i=0;i<arr.length;i++){
+      var o=arr[i]; var vals=[orderId(o),orderNo(o),T(o.invoiceNumber),T(o.factuurNr)];
+      for(var j=0;j<keys.length;j++){ if(vals.indexOf(keys[j])>=0) return i; }
+    }
+    return -1;
+  }
+  function copyField(target, prop, live){ if(live && live.exists) target[prop]=live.value; }
+  function mergeLive(saved){
+    var o=clone(saved||{});
+    copyField(o,'number', liveValue(['orderNumber','orderNo','opdrachtNr','number'],['input[name="orderNumber"]','input[name="opdrachtNr"]']));
+    copyField(o,'title', liveValue(['orderTitle','title','eventTitle'],['input[name="orderTitle"]','input[name="title"]']));
+    copyField(o,'status', liveValue(['orderStatus','status'],['select[name="status"]','input[name="status"]']));
+    copyField(o,'start', liveValue(['dateStart','orderStart','startDate'],['input[name="dateStart"]','input[name="startDate"]']));
+    copyField(o,'end', liveValue(['dateEnd','orderEnd','endDate'],['input[name="dateEnd"]','input[name="endDate"]']));
+    copyField(o,'brand', liveValue(['orderBrand','brand'],['input[name="brand"]']));
+
+    var extra = liveValue(
+      ['orderExtra','extra','bijzonderheden','orderBijzonderheden'],
+      ['textarea[name="extra"]','textarea[name="bijzonderheden"]','textarea[id*="bijzonder" i]','textarea[id*="extra" i]','[contenteditable="true"][id*="bijzonder" i]']
+    );
+    if(extra.exists){ o.extra = extra.value; o.notes = extra.value; o.confirmationText = extra.value; }
+
+    o.customer = Object.assign({}, o.customer||{});
+    copyField(o.customer,'name', liveValue(['customerName'],['input[name="customerName"]']));
+    copyField(o.customer,'street', liveValue(['customerStreet'],['input[name="customerStreet"]']));
+    copyField(o.customer,'zip', liveValue(['customerZip'],['input[name="customerZip"]']));
+    copyField(o.customer,'city', liveValue(['customerCity'],['input[name="customerCity"]']));
+    copyField(o.customer,'phone', liveValue(['customerPhone'],['input[name="customerPhone"]']));
+    copyField(o.customer,'email', liveValue(['customerEmail'],['input[name="customerEmail"]']));
+
+    o.location = Object.assign({}, o.location||{});
+    copyField(o.location,'name', liveValue(['locationName'],['input[name="locationName"]']));
+    copyField(o.location,'street', liveValue(['locationStreet'],['input[name="locationStreet"]']));
+    copyField(o.location,'zip', liveValue(['locationZip'],['input[name="locationZip"]']));
+    copyField(o.location,'city', liveValue(['locationCity'],['input[name="locationCity"]']));
+    copyField(o.location,'contact', liveValue(['locationContact'],['input[name="locationContact"]']));
+    copyField(o.location,'phone', liveValue(['locationPhone'],['input[name="locationPhone"]']));
+
+    try{ if(typeof chosen!=='undefined' && Array.isArray(chosen) && chosen.length) o.materials=clone(chosen); else if(Array.isArray(window.chosen) && window.chosen.length) o.materials=clone(window.chosen); }catch(e){}
+    try{ if(typeof getLines==='function'){ var lines=getLines(); if(Array.isArray(lines)) o.transportLines=clone(lines); } }catch(e){}
+    try{ if(Array.isArray(window.__bns521TransportLines)) o.transportLines=clone(window.__bns521TransportLines); }catch(e){}
+    return o;
+  }
+  function withLiveOrder(key, fn){
+    var idx=findIndex(key); var arr=orders();
+    if(idx<0 || !arr[idx]) return fn();
+    var old=arr[idx]; var merged=mergeLive(old);
+    arr[idx]=merged;
+    try{ window.__EPP_AMS_V54_LAST_DOC_ORDER__=merged; }catch(e){}
+    try{ return fn(merged); }
+    finally{
+      setTimeout(function(){ try{ if(arr[idx]===merged) arr[idx]=old; }catch(e){} }, 1200);
+    }
+  }
+
+  function wrapNamed(name){
+    var old=window[name];
+    if(typeof old!=='function' || old.__eppAmsV54Live) return;
+    var wrapped=function(id,type){
+      return withLiveOrder(id, function(){ return old.apply(this, arguments.length ? arguments : [id,type]); }.bind(this));
+    };
+    wrapped.__eppAmsV54Live=true;
+    window[name]=wrapped;
+  }
+  function install(){
+    wrapNamed('TW300_AU_openDoc');
+    wrapNamed('BNS528_openDoc');
+  }
+  install();
+  setInterval(install,700);
+
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('button,a,[data-doc],[data-bns423-doc],[data-bns422-doc],[data-bns421-doc]');
+    if(!b) return;
+    var txt=L(b.textContent||b.value||'');
+    var attr=L((b.getAttribute&& (b.getAttribute('data-doc')||b.getAttribute('data-bns423-doc')||b.getAttribute('data-bns422-doc')||b.getAttribute('data-bns421-doc')))||'');
+    if(!(/factuur|opdrachtbevestiging|opdracht document|opdrachtdocument/.test(txt+' '+attr))) return;
+    var key=currentEditing() || currentNumber();
+    if(!key) return;
+    var idx=findIndex(key); if(idx<0) return;
+    // Zet de order al voor de oudere click-handlers tijdelijk live, zodat hun eigen documentroute de juiste tekst ziet.
+    var arr=orders(), old=arr[idx], merged=mergeLive(old);
+    arr[idx]=merged;
+    try{ window.__EPP_AMS_V54_LAST_DOC_ORDER__=merged; }catch(e){}
+    setTimeout(function(){ try{ if(arr[idx]===merged) arr[idx]=old; }catch(e){} }, 1800);
+  }, true);
+
+  console.info('[EPP Amsterdam v54] Bijzonderheden live in factuur/opdracht actief, ook via BNS528/BNS654 routes.');
+})();
