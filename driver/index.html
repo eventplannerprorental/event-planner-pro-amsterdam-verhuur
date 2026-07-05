@@ -20,10 +20,11 @@
     <div id="status" class="status">App laden...</div>
     <section id="loginCard" class="login-card">
       <h2>Inloggen</h2>
-      <label>Naam</label><select id="driverSelect"><option>Laden...</option></select>
+      <div id="driverPickerRow"><label>Naam</label><select id="driverSelect"><option>Laden...</option></select></div>
+      <div id="driverLockedRow" class="locked-driver hidden"></div>
       <label>PIN</label><input id="pinInput" type="password" inputmode="numeric" placeholder="PIN" maxlength="8">
       <button id="loginBtn" class="big-btn blue" type="button">Inloggen</button>
-      <button id="resetDeviceBtn" class="big-btn dark" type="button">Koppeling wissen</button>
+      <button id="resetDeviceBtn" class="big-btn dark" type="button">Koppeling wissen (andere bezorger)</button>
       <div id="loginError" class="error hidden"></div>
     </section>
     <section id="ordersCard" class="hidden">
