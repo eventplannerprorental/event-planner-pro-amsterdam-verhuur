@@ -35276,32 +35276,8 @@ setTimeout(()=>{
   }
   function orderData(){
     var id=''; try{id=window.editing||editing||'';}catch(e){}
-    var o=id?orderById(id):null;
-    var live={number:(E('orderNumber')||{}).value||'',status:(E('orderStatus')||{}).value||'',start:(E('dateStart')||{}).value||'',end:(E('dateEnd')||{}).value||'',title:(E('orderTitle')||{}).value||'',brand:(E('orderBrand')||{}).value||'',customer:{name:(E('customerName')||{}).value||'',street:(E('customerStreet')||{}).value||'',zip:(E('customerZip')||{}).value||'',city:(E('customerCity')||{}).value||'',phone:(E('customerPhone')||{}).value||'',email:(E('customerEmail')||{}).value||''},location:{name:(E('locationName')||{}).value||'',street:(E('locationStreet')||{}).value||'',zip:(E('locationZip')||{}).value||'',city:(E('locationCity')||{}).value||'',contact:(E('locationContact')||{}).value||'',phone:(E('locationPhone')||{}).value||''},materials:(typeof chosen!=='undefined'&&Array.isArray(chosen))?chosen:[],extra:(E('orderExtra')||{}).value||'',pricing:{grand:Number((E('priceIncl')||E('grandTotal')||{}).value||0)}};
-    if(!o) return live;
-    /* v55-fix: een reeds bestaande opdracht toonde alleen de LAATST OPGESLAGEN gegevens in
-       Factuur/Opdrachtbevestiging, ook als je net iets nieuws typte (o.a. Bijzonderheden) en
-       nog niet opnieuw had opgeslagen. Nu telt de actuele formulierwaarde altijd mee zodra die
-       niet leeg is; is een veld (nog) niet gevuld op het scherm, dan valt hij terug op de
-       opgeslagen opdracht, zodat niets ten onrechte leeg lijkt. */
-    function pick(liveVal,savedVal){ return (liveVal!=null && liveVal!=='') ? liveVal : (savedVal!=null?savedVal:''); }
-    return Object.assign({},o,{
-      number:pick(live.number,o.number), status:pick(live.status,o.status),
-      start:pick(live.start,o.start), end:pick(live.end,o.end),
-      title:pick(live.title,o.title), brand:pick(live.brand,o.brand),
-      extra:pick(live.extra,o.extra),
-      customer:{
-        name:pick(live.customer.name,o.customer&&o.customer.name), street:pick(live.customer.street,o.customer&&o.customer.street),
-        zip:pick(live.customer.zip,o.customer&&o.customer.zip), city:pick(live.customer.city,o.customer&&o.customer.city),
-        phone:pick(live.customer.phone,o.customer&&o.customer.phone), email:pick(live.customer.email,o.customer&&o.customer.email)
-      },
-      location:{
-        name:pick(live.location.name,o.location&&o.location.name), street:pick(live.location.street,o.location&&o.location.street),
-        zip:pick(live.location.zip,o.location&&o.location.zip), city:pick(live.location.city,o.location&&o.location.city),
-        contact:pick(live.location.contact,o.location&&o.location.contact), phone:pick(live.location.phone,o.location&&o.location.phone)
-      },
-      materials:(live.materials&&live.materials.length)?live.materials:(o.materials||[])
-    });
+    var o=id?orderById(id):null; if(o) return o;
+    return {number:(E('orderNumber')||{}).value||'',status:(E('orderStatus')||{}).value||'',start:(E('dateStart')||{}).value||'',end:(E('dateEnd')||{}).value||'',title:(E('orderTitle')||{}).value||'',brand:(E('orderBrand')||{}).value||'',customer:{name:(E('customerName')||{}).value||'',street:(E('customerStreet')||{}).value||'',zip:(E('customerZip')||{}).value||'',city:(E('customerCity')||{}).value||'',phone:(E('customerPhone')||{}).value||'',email:(E('customerEmail')||{}).value||''},location:{name:(E('locationName')||{}).value||'',street:(E('locationStreet')||{}).value||'',zip:(E('locationZip')||{}).value||'',city:(E('locationCity')||{}).value||'',contact:(E('locationContact')||{}).value||'',phone:(E('locationPhone')||{}).value||''},materials:(typeof chosen!=='undefined'&&Array.isArray(chosen))?chosen:[],extra:(E('orderExtra')||{}).value||'',pricing:{grand:Number((E('priceIncl')||E('grandTotal')||{}).value||0)}};
   }
   function money(v){ var n=Number(String(v||0).replace(',','.').replace(/[^0-9.-]/g,''))||0; return '€ '+n.toFixed(2).replace('.',','); }
   function rows(ms){ return (ms||[]).map(function(m,i){ return '<tr><td>'+(i+1)+'</td><td>'+H(m.qty||1)+'</td><td>'+H(m.code||'')+'</td><td>'+H(m.product||m.searchName||m.zoeknaam||m.name||'')+'<br><small>'+H(m.description||m.beschrijving||m.desc||'')+'</small></td><td>'+H(m.cat||m.rubriek||m.category||'')+'</td><td>'+H(m.linePrice||m.price||'')+'</td></tr>'; }).join(''); }
@@ -47318,198 +47294,116 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(loadOwnAlerts,15000);
 })();
 
-
-/* ============================================================
-   AMSTERDAM v52 - systeemmelding verbergen, klantmap bewaren
-   - Geen GitHub/deploy/repo meldingen in plannerknop
-   - Wis/Afmelden zet alleen plannerHide/resolved op de alert
-   - Klantmap/overzicht bestelling blijft bewaard
-   ============================================================ */
-(function(){
-  'use strict';
-  if(window.__AMS_V51_OWN_ALERTS_FINAL__) return;
-  window.__AMS_V51_OWN_ALERTS_FINAL__ = true;
-  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
-  var BASE='customers/amsterdam-verhuur';
-  var last=[];
-  function E(id){return document.getElementById(id)}
-  function T(v){return String(v==null?'':v)}
-  function esc(s){return T(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function vals(o){return o&&typeof o==='object'?Object.keys(o).map(function(k){var v=o[k];if(v&&typeof v==='object'&&!v.id)v.id=k;return v;}):[]}
-  function isBadSource(a){return /github|git hub|gitup|deploy|pages|repository|repo|workflow|action/i.test(JSON.stringify(a||{}));}
-  function isOwn(a){
-    if(!a||typeof a!=='object'||isBadSource(a)) return false;
-    var src=T(a.source).toLowerCase();
-    var typ=T(a.type+' '+a.title+' '+a.message+' '+a.text).toLowerCase();
-    if(src && !/eigen-systeem|bezorgtelefoon|driver|systeem/.test(src)) return false;
-    return /melding|schade|storing|defect|vermissing|probleem|algemeen/.test(typ);
-  }
-  function isOpen(a){return isOwn(a) && a.resolved!==true && a.deleted!==true && a.hiddenFromPlanner!==true && a.plannerHidden!==true && T(a.status).toLowerCase()!=='resolved'}
-  async function rtdb(path, opt){
-    var r=await fetch(DB+'/'+path+'.json'+(opt&&opt.q?opt.q:''), opt||{cache:'no-store'});
-    if(!r.ok) throw new Error('Firebase '+r.status+' '+(await r.text().catch(function(){return '';})));
-    try{return await r.json()}catch(e){return null}
-  }
-  async function load(){
-    try{
-      var data=await rtdb(BASE+'/alerts',{cache:'no-store',q:'?v='+Date.now()});
-      last=vals(data).filter(isOpen);
-      try{ if(typeof state==='object'&&state){ state.alerts=last.slice(); } }catch(e){}
-      paint();
-    }catch(e){console.warn('[AMS v51 alerts]',e)}
-  }
-  async function removeRemote(id){
-    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,hiddenFromPlanner:true,plannerHidden:true,plannerClearedAt:new Date().toISOString(),plannerAction:'wis-alleen-uit-systeemmeldingen'})});
-    last=last.filter(function(a){return T(a.id)!==T(id)});
-    try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
-    paint();
-  }
-  async function resolveRemote(id){
-    await rtdb(BASE+'/alerts/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolved:true,hiddenFromPlanner:true,plannerHidden:true,resolvedAt:new Date().toISOString(),plannerAction:'afgemeld-alleen-uit-systeemmeldingen'})});
-    last=last.filter(function(a){return T(a.id)!==T(id)});
-    try{ if(typeof state==='object'&&Array.isArray(state.alerts)){ state.alerts=state.alerts.filter(function(a){return T(a.id)!==T(id)}); if(typeof save==='function') save(); } }catch(e){}
-    paint();
-  }
-  function paint(){
-    var b=E('alertsBtn'); if(!b) return;
-    b.textContent=last.length?'Systeemmeldingen ('+last.length+')':'Systeemmeldingen (0)';
-    b.style.background=last.length?'#dc2626':'#16a34a';
-    b.style.color='#fff'; b.style.fontWeight='900';
-  }
-  function modal(){
-    var old=E('amsV51Alerts'); if(old) old.remove();
-    var w=document.createElement('div'); w.id='amsV51Alerts';
-    w.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999999;display:flex;align-items:center;justify-content:center;padding:18px';
-    w.innerHTML='<div style="width:min(760px,96vw);max-height:86vh;overflow:auto;background:#fff;border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.35)"><h2 style="margin-top:0">Systeemmeldingen</h2>'+
-      (last.length?last.map(function(a){return '<div style="border-left:8px solid #dc2626;background:#fff7f7;border-radius:12px;padding:12px;margin:10px 0"><b>'+esc(a.title||'Melding')+'</b><br>'+esc(a.message||a.text||a.note||'')+'<br><small>Opdracht: '+esc(a.orderNumber||a.orderId||'')+' | '+esc(a.driverName||'')+'</small><div style="margin-top:10px;display:flex;gap:8px"><button data-done="'+esc(a.id)+'" style="background:#16a34a;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:900">Afmelden</button><button data-wis="'+esc(a.id)+'" style="background:#374151;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:900">Wis</button></div></div>'}).join(''):'<p>Geen open systeemmeldingen.</p>')+
-      '<button id="amsV51Close" style="background:#111827;color:#fff;border:0;border-radius:12px;padding:10px 16px;font-weight:900">Sluiten</button></div>';
-    document.body.appendChild(w);
-    w.querySelector('#amsV51Close').onclick=function(){w.remove()};
-    w.querySelectorAll('[data-wis]').forEach(function(btn){btn.onclick=function(){removeRemote(btn.getAttribute('data-wis')).then(function(){w.remove();modal();}).catch(function(e){alert(e.message||e);});};});
-    w.querySelectorAll('[data-done]').forEach(function(btn){btn.onclick=function(){resolveRemote(btn.getAttribute('data-done')).then(function(){w.remove();modal();}).catch(function(e){alert(e.message||e);});};});
-  }
-  function bind(){
-    var b=E('alertsBtn'); if(!b) return;
-    b.onclick=function(ev){ev.preventDefault();ev.stopPropagation();if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();load().then(modal);return false;};
-  }
-  function tick(){bind();load();}
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
-  setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
-})();
-
 /* =========================================================
-   Amsterdam v56 - Bijzonderheden live in documenten
-   Basis: Amsterdam backup 5-7-26.
-   Leerregel uit Tapwagen: documentknoppen lopen via de bestaande
-   TW300_AU/document-route. Geen Tapwagen-bestanden overnemen.
-   Doel: Bijzonderheden uit open formulier tonen in factuur/opdracht
-   VOOR opslaan, zonder Firebase/driver/layout te wijzigen.
+   Amsterdam v57 - v50 basis + bijzonderheden live documentpatch
+   Basis: v50 pakket. Tapwagen app.js is alleen gebruikt als voorbeeld
+   voor de documentroute; er zijn geen Tapwagen-bestanden gekopieerd.
+   Doel: Bijzonderheden uit open formulier tonen in Factuur / Opdracht
+   VOOR opslaan.
    ========================================================= */
-(function AMS_V56_BIJZONDERHEDEN_LIVE_DOCS(){
+(function AMS_V57_FROM_V50_LIVE_BIJZONDERHEDEN(){
   'use strict';
-  if(window.__AMS_V56_BIJZONDERHEDEN_LIVE_DOCS__) return;
-  window.__AMS_V56_BIJZONDERHEDEN_LIVE_DOCS__ = true;
+  if(window.__AMS_V57_FROM_V50_LIVE_BIJZONDERHEDEN__) return;
+  window.__AMS_V57_FROM_V50_LIVE_BIJZONDERHEDEN__ = true;
 
   function E(id){ return document.getElementById(id); }
   function T(v){ return String(v == null ? '' : v).trim(); }
-  function H(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-  function stateObj(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || null; }
-  function orders(){ var s=stateObj(); return s && Array.isArray(s.orders) ? s.orders : []; }
-  function val(id){ var el=E(id); return el ? T(el.value) : ''; }
+  function H(v){ return String(v == null ? '' : v).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c];}); }
+  function getState(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || null; }
+  function orders(){ var s=getState(); return s && Array.isArray(s.orders) ? s.orders : []; }
+  function val(id){ var el=E(id); return el && 'value' in el ? T(el.value) : ''; }
   function orderNo(o){ return T(o && (o.number || o.nr || o.orderNumber || o.opdrachtNr || o.id)); }
   function invoiceNo(o){ return T(o && o.invoice && (o.invoice.invoiceNumber || o.invoice.number)) || T(o && (o.invoiceNumber || o.factuurNr || o.factuur)); }
 
-  var liveExtraCache = '';
+  var lastExtra = '';
+  var restoreQueue = [];
   var restoreTimer = null;
-  var restoreStack = [];
 
   function liveExtra(){
     var v = val('orderExtra') || val('extra') || val('bijzonderheden');
-    if(v) liveExtraCache = v;
-    return liveExtraCache;
+    if(v) lastExtra = v;
+    return lastExtra;
   }
 
-  function currentKeys(extraId){
-    var keys=[];
-    function add(v){ v=T(v); if(v && keys.indexOf(v)<0) keys.push(v); }
-    add(extraId);
+  function currentKeys(id){
+    var out=[];
+    function add(v){ v=T(v); if(v && out.indexOf(v)<0) out.push(v); }
+    add(id);
     try{ add(typeof editing !== 'undefined' ? editing : ''); }catch(e){}
     add(window.editing);
     add(val('orderId'));
     add(val('editOrderId'));
     add(val('orderNumber'));
+    add(val('opdrachtNr'));
     add(val('bnsInvoiceNumber'));
-    return keys;
-  }
-
-  function orderMatches(o, keys){
-    if(!o) return false;
-    var vals=[T(o.id), orderNo(o), invoiceNo(o), T(o.invoiceNumber), T(o.factuurNr), T(o && o.invoice && o.invoice.invoiceNumber), T(o && o.invoice && o.invoice.number)];
-    return vals.some(function(v){ return v && keys.indexOf(v)>=0; });
-  }
-
-  function findTargets(extraId){
-    var keys=currentKeys(extraId), list=orders(), out=[];
-    list.forEach(function(o){ if(orderMatches(o,keys)) out.push(o); });
-    if(!out.length && keys.length){
-      // Laatste vangnet: bij een open formulier is orderNumber meestal genoeg.
-      var nr=val('orderNumber');
-      if(nr) list.forEach(function(o){ if(orderNo(o)===nr && out.indexOf(o)<0) out.push(o); });
-    }
     return out;
   }
 
-  function applyLiveExtra(extraId){
+  function matches(o, keys){
+    if(!o) return false;
+    var vals=[T(o.id), orderNo(o), invoiceNo(o), T(o.invoiceNumber), T(o.factuurNr), T(o && o.invoice && o.invoice.invoiceNumber), T(o && o.invoice && o.invoice.number)];
+    return vals.some(function(v){ return v && keys.indexOf(v) >= 0; });
+  }
+
+  function applyToCurrentOrder(id){
     var extra = liveExtra();
     if(!extra) return [];
-    var targets = findTargets(extraId);
-    var backups=[];
+    var keys = currentKeys(id);
+    var list = orders();
+    var targets = [];
+    list.forEach(function(o){ if(matches(o,keys)) targets.push(o); });
+    // Vangnet: als alleen opdrachtnummer in het formulier staat.
+    var nr = val('orderNumber') || val('opdrachtNr');
+    if(!targets.length && nr){
+      list.forEach(function(o){ if(orderNo(o) === nr) targets.push(o); });
+    }
     targets.forEach(function(o){
-      backups.push({o:o, extra:o.extra, notes:o.notes, confirmationText:o.confirmationText});
+      restoreQueue.push({o:o, extra:o.extra, notes:o.notes, confirmationText:o.confirmationText, bijzonderheden:o.bijzonderheden});
       o.extra = extra;
-      // Sommige documentroutes kijken naar notes/confirmationText.
+      o.bijzonderheden = extra;
       if(!T(o.notes)) o.notes = extra;
       if(!T(o.confirmationText)) o.confirmationText = extra;
     });
-    if(backups.length){
-      restoreStack = restoreStack.concat(backups);
-      clearTimeout(restoreTimer);
-      restoreTimer = setTimeout(function(){
-        var stack = restoreStack.splice(0);
-        stack.forEach(function(b){
-          try{ b.o.extra=b.extra; b.o.notes=b.notes; b.o.confirmationText=b.confirmationText; }catch(e){}
-        });
-      }, 2500);
-    }
+    clearTimeout(restoreTimer);
+    restoreTimer = setTimeout(function(){
+      var q = restoreQueue.splice(0);
+      q.forEach(function(b){
+        try{
+          b.o.extra = b.extra;
+          b.o.notes = b.notes;
+          b.o.confirmationText = b.confirmationText;
+          b.o.bijzonderheden = b.bijzonderheden;
+        }catch(e){}
+      });
+    }, 3500);
     return targets;
   }
 
   function patchHtml(html){
     var extra = liveExtra();
     if(!extra || typeof html !== 'string') return html;
-    if(html.indexOf(extra) >= 0 || html.indexOf(H(extra)) >= 0) return html;
-    var block = '<div class="card ams-v56-live-extra" style="white-space:pre-wrap;margin:10px 0;padding:10px;border:1px solid #dbe3ef;border-radius:12px;background:#fff"><b>Bijzonderheden</b><br>'+H(extra)+'</div>';
+    var escaped = H(extra);
+    if(html.indexOf(extra) >= 0 || html.indexOf(escaped) >= 0) return html;
 
-    // 1. Vervang lege vrije tekst onder label Bijzonderheden.
-    html = html.replace(/(<div[^>]*class=["'][^"']*label[^"']*["'][^>]*>\s*Bijzonderheden\s*<\/div>\s*<div[^>]*class=["'][^"']*free[^"']*["'][^>]*>)(\s*)(<\/div>)/i, '$1'+H(extra)+'$3');
-    if(html.indexOf(H(extra)) >= 0) return html;
+    // Bestaande lege vrije tekst onder label Bijzonderheden vullen.
+    html = html.replace(/(<div[^>]*class=["'][^"']*label[^"']*["'][^>]*>\s*Bijzonderheden\s*<\/div>\s*<div[^>]*class=["'][^"']*free[^"']*["'][^>]*>)(\s*)(<\/div>)/i, '$1'+escaped+'$3');
+    if(html.indexOf(escaped) >= 0) return html;
 
-    // 2. Tapwagen/BNS-documenten met kop Bijzonderheden + tabel: zet tekstblok tussen kop en tabel.
+    // Kop Bijzonderheden met direct daarna een tabel: tekstblok ertussen.
+    var block = '<div class="card ams-v57-live-extra" style="white-space:pre-wrap;margin:10px 0;padding:10px;border:1px solid #dbe3ef;border-radius:12px;background:#fff"><b>Bijzonderheden</b><br>'+escaped+'</div>';
     html = html.replace(/(<h[23][^>]*>\s*Bijzonderheden\s*<\/h[23]>\s*)(<table)/i, '$1'+block+'$2');
-    if(html.indexOf(H(extra)) >= 0) return html;
+    if(html.indexOf(escaped) >= 0) return html;
 
-    // 3. Basisdocumenten met lege card/section Bijzonderheden.
-    html = html.replace(/(<section[^>]*class=["'][^"']*card[^"']*["'][^>]*>\s*<div[^>]*class=["'][^"']*label[^"']*["'][^>]*>\s*Bijzonderheden\s*<\/div>)(\s*<\/section>)/i, '$1<div class="free" style="white-space:pre-wrap">'+H(extra)+'</div>$2');
-    if(html.indexOf(H(extra)) >= 0) return html;
-
-    // 4. Fallback: plaats voor einde body.
+    // Documenten zonder kop: zet blok voor totaal of einde body.
+    html = html.replace(/(<h2>\s*Totaal\s*)/i, block+'$1');
+    if(html.indexOf(escaped) >= 0) return html;
     return html.replace(/<\/body>/i, block+'</body>');
   }
 
-  function patchPopupWrite(w){
+  function patchPopup(w){
     try{
-      if(!w || !w.document || w.document.__AMS_V56_WRITE_PATCHED__) return;
-      w.document.__AMS_V56_WRITE_PATCHED__ = true;
+      if(!w || !w.document || w.document.__AMS_V57_PATCHED__) return;
+      w.document.__AMS_V57_PATCHED__ = true;
       var oldWrite = w.document.write ? w.document.write.bind(w.document) : null;
       if(oldWrite){
         w.document.write = function(html){
@@ -47521,29 +47415,29 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function patchWindowOpen(){
-    if(window.__AMS_V56_WINDOW_OPEN_PATCHED__) return;
-    window.__AMS_V56_WINDOW_OPEN_PATCHED__ = true;
+    if(window.__AMS_V57_OPEN_PATCHED__) return;
     var oldOpen = window.open;
     if(typeof oldOpen !== 'function') return;
+    window.__AMS_V57_OPEN_PATCHED__ = true;
     window.open = function(){
       liveExtra();
-      applyLiveExtra();
+      applyToCurrentOrder();
       var w = oldOpen.apply(window, arguments);
-      patchPopupWrite(w);
+      patchPopup(w);
       return w;
     };
   }
 
-  function wrapNamedRoute(name){
+  function wrap(name){
     var fn = window[name];
-    if(typeof fn !== 'function' || fn.__AMS_V56_WRAPPED__) return;
+    if(typeof fn !== 'function' || fn.__AMS_V57_WRAPPED__) return;
     var wrapped = function(id,type){
       liveExtra();
-      applyLiveExtra(id);
+      applyToCurrentOrder(id);
       return fn.apply(this, arguments);
     };
-    wrapped.__AMS_V56_WRAPPED__ = true;
-    wrapped.__AMS_V56_ORIG__ = fn;
+    wrapped.__AMS_V57_WRAPPED__ = true;
+    wrapped.__AMS_V57_ORIG__ = fn;
     window[name] = wrapped;
     try{ if(name === 'makeInvoice') makeInvoice = wrapped; }catch(e){}
     try{ if(name === 'makeConfirmation') makeConfirmation = wrapped; }catch(e){}
@@ -47554,27 +47448,34 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var b = el.closest('button,a');
     if(!b) return false;
     var t = T(b.textContent).toLowerCase();
-    var attrs = [b.getAttribute('data-doc'), b.getAttribute('data-bns421-doc'), b.getAttribute('data-bns422-doc'), b.getAttribute('data-bns423-doc'), b.getAttribute('onclick'), b.id, b.className].map(T).join(' ').toLowerCase();
-    return /factuur|opdrachtbevestiging|opdracht document|open factuur|open opdracht|makeinvoice|makeconfirmation|tw300_au_opendoc|bns528_opendoc/.test(t+' '+attrs);
+    var attrs = [b.id,b.className,b.getAttribute('onclick'),b.getAttribute('data-doc'),b.getAttribute('data-bns421-doc'),b.getAttribute('data-bns422-doc'),b.getAttribute('data-bns423-doc')].map(T).join(' ').toLowerCase();
+    return /factuur|opdrachtbevestiging|opdracht document|open opdracht|open factuur|offerte|makeinvoice|makeconfirmation|tw300_au_opendoc|bns528_opendoc/.test(t+' '+attrs);
   }
 
-  document.addEventListener('input', function(ev){ if(ev.target && /^(orderExtra|extra|bijzonderheden)$/i.test(ev.target.id||ev.target.name||'')) liveExtra(); }, true);
-  document.addEventListener('change', function(ev){ if(ev.target && /^(orderExtra|extra|bijzonderheden)$/i.test(ev.target.id||ev.target.name||'')) liveExtra(); }, true);
+  document.addEventListener('input', function(ev){
+    var n = ev.target && ((ev.target.id||'') + ' ' + (ev.target.name||''));
+    if(/orderExtra|extra|bijzonder/i.test(n)) liveExtra();
+  }, true);
+  document.addEventListener('change', function(ev){
+    var n = ev.target && ((ev.target.id||'') + ' ' + (ev.target.name||''));
+    if(/orderExtra|extra|bijzonder/i.test(n)) liveExtra();
+  }, true);
   document.addEventListener('click', function(ev){
     if(isDocButton(ev.target)){
       liveExtra();
-      applyLiveExtra();
+      applyToCurrentOrder();
     }
   }, true);
 
   function install(){
     patchWindowOpen();
-    ['TW300_AU_openDoc','BNS528_openDoc','BNS_V521_openDocument','BNS_V423_openDocument','BNS_V422_openDocument','BNS_V421_openDocument','makeInvoice','makeConfirmation'].forEach(wrapNamedRoute);
+    ['BNS528_openDoc','TW300_AU_openDoc','BNS_V521_openDocument','BNS_V423_openDocument','BNS_V422_openDocument','BNS_V421_openDocument','makeInvoice','makeConfirmation'].forEach(wrap);
   }
   install();
-  setTimeout(install, 500);
-  setTimeout(install, 1500);
-  setInterval(install, 3000);
+  setTimeout(install, 300);
+  setTimeout(install, 1000);
+  setInterval(install, 2500);
+  setInterval(liveExtra, 500);
 
-  console.info('[Amsterdam v56] Bijzonderheden live in factuur/opdracht via bestaande documentroute. Geen Tapwagen-bestanden gekopieerd.');
+  console.info('[Amsterdam v57] v50 basis: bijzonderheden live in factuur/opdracht voor opslaan.');
 })();
