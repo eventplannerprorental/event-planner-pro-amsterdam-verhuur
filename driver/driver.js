@@ -37,6 +37,18 @@
   async function loadData(){
     users=vals(await getPath('users')).filter(function(u){return u&&u.active!==false&&T(u.role).toLowerCase()==='bezorger'});
     orders=vals(await getPath('orders')).filter(isOpen);
+    /* Admin is leidend: is de nu ingelogde bezorger door Admin verwijderd/gedeactiveerd
+       tijdens een lopende sessie, log dan direct uit i.p.v. te wachten op een herlaad. */
+    if(currentUser){
+      var stillValid=users.some(function(u){return String(u.id||u._key)===String(currentUser.id||currentUser._key)});
+      if(!stillValid){
+        currentUser=null;
+        localStorage.removeItem(LS_USER);
+        localStorage.removeItem(LS_DEVICE_USER);
+        setStatus('Bezorger is door Admin verwijderd. Opnieuw koppelen nodig.',true);
+        renderLogin(); showLoginCard(); return;
+      }
+    }
     renderLogin(); renderOrders(); setStatus('Data geladen');
   }
   function renderLogin(){
@@ -44,6 +56,15 @@
     var pickerRow=E('driverPickerRow'), lockedRow=E('driverLockedRow');
     var deviceBoundId=localStorage.getItem(LS_DEVICE_USER);
     var boundUser=deviceBoundId?users.find(function(u){return String(u.id||u._key)===deviceBoundId}):null;
+    /* Admin is leidend: is de gekoppelde bezorger door Admin verwijderd of gedeactiveerd
+       (staat niet meer, of niet meer actief, in de actuele gebruikerslijst), dan laat het
+       toestel de koppeling automatisch los. De bezorger kan dit zelf niet forceren. */
+    if(deviceBoundId && !boundUser){
+      localStorage.removeItem(LS_DEVICE_USER);
+      localStorage.removeItem(LS_USER);
+      currentUser=null;
+      deviceBoundId=null;
+    }
     if(boundUser){
       if(pickerRow)pickerRow.classList.add('hidden');
       if(lockedRow){lockedRow.classList.remove('hidden');lockedRow.textContent='Bezorger van deze telefoon: '+boundUser.name;}
@@ -57,6 +78,7 @@
     if(!users.length)setStatus('Geen bezorger gevonden',true);
   }
   function showOrdersCard(){E('loginCard')&&E('loginCard').classList.add('hidden');E('ordersCard')&&E('ordersCard').classList.remove('hidden');E('heroDriver')&&(E('heroDriver').textContent=(currentUser&&currentUser.name||'-')+' - Bezorger');renderOrders()}
+  function showLoginCard(){E('ordersCard')&&E('ordersCard').classList.add('hidden');E('loginCard')&&E('loginCard').classList.remove('hidden');E('heroDriver')&&(E('heroDriver').textContent='Niet ingelogd')}
   function doLogin(){var deviceBoundId=localStorage.getItem(LS_DEVICE_USER);var uid=deviceBoundId||(E('driverSelect')&&E('driverSelect').value);var pin=E('pinInput')&&E('pinInput').value;var err=E('loginError');var u=users.find(function(x){return String(x.id||x._key)===String(uid)||String(x._key)===String(uid)});if(!u){err&&(err.textContent='Kies bezorger.',err.classList.remove('hidden'));return}if(T(u.pin)!==T(pin)){err&&(err.textContent='PIN klopt niet.',err.classList.remove('hidden'));return}currentUser=u;localStorage.setItem(LS_USER,String(u.id||u._key));if(!deviceBoundId)localStorage.setItem(LS_DEVICE_USER,String(u.id||u._key));showOrdersCard()}
   function mineOrders(){var q=T(currentSearch).toLowerCase();return orders.filter(function(o){return currentUser&&assignedTo(o,currentUser)}).filter(function(o){return !q||JSON.stringify(o).toLowerCase().indexOf(q)>=0}).sort(function(a,b){return String(a.start||'').localeCompare(String(b.start||''))})}
   function renderOrders(){var box=E('ordersList');if(!box)return;if(!currentUser){box.innerHTML='';return}var list=mineOrders();box.innerHTML=list.length?list.map(renderOrder).join(''):'<p class="status">Geen opdrachten</p>'}
@@ -98,7 +120,7 @@
   function openOrder(o){modal('<h2>Open opdracht</h2><pre>'+esc(orderText(o))+'</pre>')}
   async function done(o){var end=o.end||o.start,today=new Date().toISOString().slice(0,10);if(end&&today<end){alert('Afmelden kan pas na einddatum: '+nice(end));return}await updatePath('orders/'+orderKey(o),{status:'Uitgevoerd',driverStatus:'uitgevoerd',driverDoneAt:now(),driverDoneBy:currentUser.name});await loadData()}
   document.addEventListener('click',function(ev){var b=ev.target.closest('[data-act]');if(!b)return;var o=findOrder(b);if(!o)return;var a=b.getAttribute('data-act');Promise.resolve().then(function(){if(a==='open')openOrder(o);else if(a==='overview')overview(o);else if(a==='waze')openMaps(o,false);else if(a==='maps')openMaps(o,true);else if(a==='call')call(o);else if(a==='message-menu')messageMenu(o);else if(a==='offer')offer(o);else if(a==='whatsapp')whatsapp(o);else if(a==='done')done(o);else if(a==='photo-menu')photoMenu(o);else if(a==='signature')signature(o)}).catch(function(e){setStatus('Fout: '+(e.message||e),true);alert('Fout: '+(e.message||e))})});
-  function bind(){E('loginBtn')&&(E('loginBtn').onclick=doLogin);E('logoutBtn')&&(E('logoutBtn').onclick=function(){currentUser=null;localStorage.removeItem(LS_USER);location.reload()});E('resetDeviceBtn')&&(E('resetDeviceBtn').onclick=function(){if(!confirm('Weet je zeker dat je de koppeling van DEZE telefoon met de bezorger wilt wissen? Alleen doen als deze telefoon voortaan een andere bezorger krijgt.'))return;currentUser=null;localStorage.removeItem(LS_USER);localStorage.removeItem(LS_DEVICE_USER);location.reload()});E('refreshBtn')&&(E('refreshBtn').onclick=loadData);E('clearSearchBtn')&&(E('clearSearchBtn').onclick=function(){currentSearch='';E('searchInput').value='';renderOrders()});E('searchInput')&&(E('searchInput').oninput=function(){currentSearch=this.value;renderOrders()})}
+  function bind(){E('loginBtn')&&(E('loginBtn').onclick=doLogin);E('logoutBtn')&&(E('logoutBtn').onclick=function(){currentUser=null;localStorage.removeItem(LS_USER);location.reload()});E('refreshBtn')&&(E('refreshBtn').onclick=loadData);E('clearSearchBtn')&&(E('clearSearchBtn').onclick=function(){currentSearch='';E('searchInput').value='';renderOrders()});E('searchInput')&&(E('searchInput').oninput=function(){currentSearch=this.value;renderOrders()})}
   async function boot(){bind();try{await initFirebase();await loadData();setInterval(loadData,15000)}catch(e){setStatus('Firebase fout: '+(e.message||e),true)}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
