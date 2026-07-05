@@ -39037,13 +39037,36 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var key=currentEditingId() || val(['orderNumber','opdrachtNr','orderNo']);
     var saved=(key&&findOrderDirect(key)) || null;
     if(saved){
-      var formStatus=(function(){ var el=document.getElementById('orderStatus'); return el?(el.value||'').trim():''; })();
-      if(formStatus && formStatus !== saved.status){
-        var merged=JSON.parse(JSON.stringify(saved));
-        merged.status=formStatus;
-        return openOrderDoc(merged, type);
-      }
-      return openOrderDoc(saved, type);
+      // EPP Amsterdam v53: documenten moeten de live formulierdata tonen voordat de planner opslaat.
+      // Dus niet alleen status overnemen, maar ook Bijzonderheden, klant, locatie, datum, materialen en losse bijzonderhedenregels.
+      function fvLive(id){ var e=document.getElementById(id); return e?(e.value||e.textContent||'').trim():''; }
+      var merged=JSON.parse(JSON.stringify(saved));
+      merged.number = fvLive('orderNumber') || merged.number || '';
+      merged.title = fvLive('orderTitle') || merged.title || '';
+      merged.status = fvLive('orderStatus') || merged.status || 'Offerte';
+      merged.start = fvLive('dateStart') || merged.start || '';
+      merged.end = fvLive('dateEnd') || merged.end || merged.start || '';
+      merged.brand = fvLive('orderBrand') || merged.brand || '';
+      merged.extra = fvLive('orderExtra') || merged.extra || merged.notes || merged.confirmationText || '';
+      merged.customer = Object.assign({}, merged.customer||{}, {
+        name: fvLive('customerName') || (merged.customer&&merged.customer.name) || '',
+        street: fvLive('customerStreet') || (merged.customer&&merged.customer.street) || '',
+        zip: fvLive('customerZip') || (merged.customer&&merged.customer.zip) || '',
+        city: fvLive('customerCity') || (merged.customer&&merged.customer.city) || '',
+        phone: fvLive('customerPhone') || (merged.customer&&merged.customer.phone) || '',
+        email: fvLive('customerEmail') || (merged.customer&&merged.customer.email) || ''
+      });
+      merged.location = Object.assign({}, merged.location||{}, {
+        name: fvLive('locationName') || (merged.location&&merged.location.name) || '',
+        street: fvLive('locationStreet') || (merged.location&&merged.location.street) || '',
+        zip: fvLive('locationZip') || (merged.location&&merged.location.zip) || '',
+        city: fvLive('locationCity') || (merged.location&&merged.location.city) || '',
+        contact: fvLive('locationContact') || (merged.location&&merged.location.contact) || '',
+        phone: fvLive('locationPhone') || (merged.location&&merged.location.phone) || ''
+      });
+      try{ if(typeof chosen!=='undefined' && Array.isArray(chosen) && chosen.length) merged.materials=chosen; else if(Array.isArray(window.chosen) && window.chosen.length) merged.materials=window.chosen; }catch(e){}
+      try{ if(typeof getLines==='function') merged.transportLines=getLines(); }catch(e){}
+      return openOrderDoc(merged, type);
     }
     // Geen opgeslagen opdracht - lees formulierdata
     var formOrder=(function(){
