@@ -47409,3 +47409,130 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
   setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
 })();
+
+
+/* ============================================================
+   AMSTERDAM v59 - BIJZONDERHEDEN GEGARANDEERD LIVE, VOOR OPSLAAN
+   Er bleken minstens 12 verschillende, los van elkaar bestaande
+   functies te zijn die een Factuur/Opdrachtbevestiging-document
+   kunnen openen, elk via hetzelfde patroon:
+       window.open('','_blank') + w.document.write(html) + w.document.close()
+   Ondanks meerdere gerichte fixes in de onderliggende databron-
+   functies (orderData/buildOrder) bleek niet met zekerheid vast
+   te stellen welke van de 12 in de praktijk daadwerkelijk wint.
+
+   Deze patch lost dat structureel op door NIET nog een 13e
+   concurrerende functie toe te voegen, maar door window.open()
+   zelf te onderscheppen: vlak voordat het populaire venster
+   daadwerkelijk gesloten/getoond wordt, wordt gecontroleerd of
+   de "Bijzonderheden"-sectie de ACTUELE, live tekst uit het
+   formulier bevat (zowel het vrije tekstveld orderExtra als de
+   itemized regels uit "Bijzonderheden voor deze klant"/bns521).
+   Ontbreekt die live tekst nog, dan wordt hij alsnog rechtstreeks
+   in het documentvenster gezet - vóór het opslaan, zonder dat
+   daarvoor een van de 12 functies precies moet "winnen".
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V59_MIN_SAFE__) return;
+  window.__EPP_AMS_V59_MIN_SAFE__ = true;
+
+  function E(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function euro(n){ n=Number(n)||0; return '€ '+n.toFixed(2).replace('.', ','); }
+
+  function liveExtra(){
+    var el = E('orderExtra');
+    return el ? String(el.value||'').trim() : '';
+  }
+  function liveTransportLines(){
+    try{
+      if(Array.isArray(window.__bns521TransportLines)) return window.__bns521TransportLines.slice();
+    }catch(e){}
+    return [];
+  }
+  function transportLinesHtml(lines){
+    if(!lines.length) return '';
+    var rows = lines.map(function(l){
+      var qty = Number(l.qty||1);
+      var price = Number(l.price||0);
+      var total = qty*price;
+      return '<tr><td>'+esc(qty)+'</td><td>'+esc(l.name||'')+(l.note?' - '+esc(l.note):'')+'</td><td style="text-align:right">'+esc(euro(total))+'</td></tr>';
+    }).join('');
+    return '<table style="width:100%;border-collapse:collapse;margin-top:8px" cellpadding="4">'+
+      '<thead><tr><th style="text-align:left">Aantal</th><th style="text-align:left">Omschrijving</th><th style="text-align:right">Bedrag</th></tr></thead>'+
+      '<tbody>'+rows+'</tbody></table>';
+  }
+
+  function buildLiveBijzonderhedenHtml(){
+    var extra = liveExtra();
+    var lines = liveTransportLines();
+    if(!extra && !lines.length) return '';
+    var html = '<div id="__eppV59Bijzonderheden" style="margin:16px 0;padding:12px 14px;border:1px solid #ddd;border-radius:8px;font-family:Arial,Helvetica,sans-serif;">';
+    html += '<b>Bijzonderheden</b>';
+    if(extra) html += '<div style="white-space:pre-wrap;margin-top:6px">'+esc(extra)+'</div>';
+    if(lines.length) html += transportLinesHtml(lines);
+    html += '</div>';
+    return html;
+  }
+
+  function alreadyHasLiveContent(doc, extra, lines){
+    try{
+      var bodyText = (doc.body && (doc.body.innerText || doc.body.textContent)) || '';
+      if(extra && bodyText.indexOf(extra) < 0) return false;
+      if(lines.length){
+        var missing = lines.some(function(l){ return l.name && bodyText.indexOf(l.name) < 0; });
+        if(missing) return false;
+      }
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function injectIfNeeded(doc){
+    try{
+      if(!doc || !doc.body) return;
+      if(doc.getElementById && doc.getElementById('__eppV59Bijzonderheden')) return;
+      var extra = liveExtra();
+      var lines = liveTransportLines();
+      if(!extra && !lines.length) return;
+      if(alreadyHasLiveContent(doc, extra, lines)) return;
+      var html = buildLiveBijzonderhedenHtml();
+      if(!html) return;
+      var holder = doc.createElement('div');
+      holder.innerHTML = html;
+      doc.body.appendChild(holder.firstChild);
+    }catch(e){}
+  }
+
+  function hookWindowOpen(){
+    if(window.__eppV59OpenPatched) return;
+    var oldOpen = window.open;
+    if(typeof oldOpen !== 'function') return;
+    window.__eppV59OpenPatched = true;
+    window.open = function(){
+      var w = oldOpen.apply(window, arguments);
+      try{
+        if(w && w.document && !w.document.__eppV59Patched){
+          w.document.__eppV59Patched = true;
+          var oldClose = w.document.close ? w.document.close.bind(w.document) : null;
+          if(oldClose){
+            w.document.close = function(){
+              var r = oldClose();
+              try{ injectIfNeeded(w.document); }catch(e){}
+              return r;
+            };
+          }
+        }
+      }catch(e){}
+      return w;
+    };
+  }
+
+  function install(){
+    hookWindowOpen();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
+  setTimeout(install, 1000);
+  setTimeout(install, 2500);
+})();
