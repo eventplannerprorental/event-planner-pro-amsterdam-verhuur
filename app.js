@@ -26496,39 +26496,6 @@ setTimeout(()=>{
     } catch(e){
     }
   }
-  var V53_DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
-  var V53_BASE='customers/amsterdam-verhuur';
-  var v53App=null, v53Auth=null, v53Ready=false;
-  async function v53EnsureAuth(){
-    if(v53Ready) return true;
-    try{
-      var appMod = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
-      var authMod = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-      var CONFIG = {apiKey:'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',authDomain:'epp-amsterdam-verhuur.firebaseapp.com',databaseURL:V53_DB,projectId:'epp-amsterdam-verhuur',storageBucket:'epp-amsterdam-verhuur.firebasestorage.app',messagingSenderId:'484128911122',appId:'1:484128911122:web:v53-alert-writeback'};
-      var existing = appMod.getApps().find(function(a){ return a && a.name === 'epp-v53-alertwriteback'; });
-      v53App = existing || appMod.initializeApp(CONFIG, 'epp-v53-alertwriteback');
-      v53Auth = authMod.getAuth(v53App);
-      if(!v53Auth.currentUser){ try{ await authMod.signInAnonymously(v53Auth); }catch(e){} }
-      v53Ready = true;
-    }catch(e){ console.warn('[EPP v53] Firebase auth setup mislukt', e); }
-    return v53Ready;
-  }
-  async function v53WriteAlertResolved(id, deleted){
-    try{
-      await v53EnsureAuth();
-      var token = v53Auth && v53Auth.currentUser ? await v53Auth.currentUser.getIdToken(true) : '';
-      var url = V53_DB + '/' + V53_BASE + '/alerts/' + encodeURIComponent(id) + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
-      var body = {
-        resolved:true, hiddenFromPlanner:true, plannerHidden:true,
-        status: deleted ? 'verwijderd' : 'opgelost',
-        resolvedAt: new Date().toISOString(),
-        plannerAction: deleted ? 'verwijderd-door-planner' : 'afgemeld-door-planner'
-      };
-      if(deleted) body.deleted = true;
-      var res = await fetch(url, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-      if(!res.ok) console.warn('[EPP v53] Firebase alert write-back mislukt: HTTP ' + res.status);
-    }catch(e){ console.warn('[EPP v53] Firebase alert write-back fout', e); }
-  }
   function markLocal(id, deleted){
     var s=S();
     if(!Array.isArray(s.alerts)) return;
@@ -26547,10 +26514,6 @@ setTimeout(()=>{
       localStorage.setItem(CLOSED_IDS_KEY, JSON.stringify(ids));
     } catch(e){
     }
-    /* v53: schrijf de afhandeling ook terug naar Firebase, op exact het pad
-       waar driver.js de melding aanmaakte, zodat hij ook op andere
-       toestellen/sessies weg blijft in plaats van terug te komen. */
-    v53WriteAlertResolved(id, deleted);
   }
   function closeAll(){
     var list=openList();
@@ -35313,8 +35276,32 @@ setTimeout(()=>{
   }
   function orderData(){
     var id=''; try{id=window.editing||editing||'';}catch(e){}
-    var o=id?orderById(id):null; if(o) return o;
-    return {number:(E('orderNumber')||{}).value||'',status:(E('orderStatus')||{}).value||'',start:(E('dateStart')||{}).value||'',end:(E('dateEnd')||{}).value||'',title:(E('orderTitle')||{}).value||'',brand:(E('orderBrand')||{}).value||'',customer:{name:(E('customerName')||{}).value||'',street:(E('customerStreet')||{}).value||'',zip:(E('customerZip')||{}).value||'',city:(E('customerCity')||{}).value||'',phone:(E('customerPhone')||{}).value||'',email:(E('customerEmail')||{}).value||''},location:{name:(E('locationName')||{}).value||'',street:(E('locationStreet')||{}).value||'',zip:(E('locationZip')||{}).value||'',city:(E('locationCity')||{}).value||'',contact:(E('locationContact')||{}).value||'',phone:(E('locationPhone')||{}).value||''},materials:(typeof chosen!=='undefined'&&Array.isArray(chosen))?chosen:[],extra:(E('orderExtra')||{}).value||'',pricing:{grand:Number((E('priceIncl')||E('grandTotal')||{}).value||0)}};
+    var o=id?orderById(id):null;
+    var live={number:(E('orderNumber')||{}).value||'',status:(E('orderStatus')||{}).value||'',start:(E('dateStart')||{}).value||'',end:(E('dateEnd')||{}).value||'',title:(E('orderTitle')||{}).value||'',brand:(E('orderBrand')||{}).value||'',customer:{name:(E('customerName')||{}).value||'',street:(E('customerStreet')||{}).value||'',zip:(E('customerZip')||{}).value||'',city:(E('customerCity')||{}).value||'',phone:(E('customerPhone')||{}).value||'',email:(E('customerEmail')||{}).value||''},location:{name:(E('locationName')||{}).value||'',street:(E('locationStreet')||{}).value||'',zip:(E('locationZip')||{}).value||'',city:(E('locationCity')||{}).value||'',contact:(E('locationContact')||{}).value||'',phone:(E('locationPhone')||{}).value||''},materials:(typeof chosen!=='undefined'&&Array.isArray(chosen))?chosen:[],extra:(E('orderExtra')||{}).value||'',pricing:{grand:Number((E('priceIncl')||E('grandTotal')||{}).value||0)}};
+    if(!o) return live;
+    /* v55-fix: een reeds bestaande opdracht toonde alleen de LAATST OPGESLAGEN gegevens in
+       Factuur/Opdrachtbevestiging, ook als je net iets nieuws typte (o.a. Bijzonderheden) en
+       nog niet opnieuw had opgeslagen. Nu telt de actuele formulierwaarde altijd mee zodra die
+       niet leeg is; is een veld (nog) niet gevuld op het scherm, dan valt hij terug op de
+       opgeslagen opdracht, zodat niets ten onrechte leeg lijkt. */
+    function pick(liveVal,savedVal){ return (liveVal!=null && liveVal!=='') ? liveVal : (savedVal!=null?savedVal:''); }
+    return Object.assign({},o,{
+      number:pick(live.number,o.number), status:pick(live.status,o.status),
+      start:pick(live.start,o.start), end:pick(live.end,o.end),
+      title:pick(live.title,o.title), brand:pick(live.brand,o.brand),
+      extra:pick(live.extra,o.extra),
+      customer:{
+        name:pick(live.customer.name,o.customer&&o.customer.name), street:pick(live.customer.street,o.customer&&o.customer.street),
+        zip:pick(live.customer.zip,o.customer&&o.customer.zip), city:pick(live.customer.city,o.customer&&o.customer.city),
+        phone:pick(live.customer.phone,o.customer&&o.customer.phone), email:pick(live.customer.email,o.customer&&o.customer.email)
+      },
+      location:{
+        name:pick(live.location.name,o.location&&o.location.name), street:pick(live.location.street,o.location&&o.location.street),
+        zip:pick(live.location.zip,o.location&&o.location.zip), city:pick(live.location.city,o.location&&o.location.city),
+        contact:pick(live.location.contact,o.location&&o.location.contact), phone:pick(live.location.phone,o.location&&o.location.phone)
+      },
+      materials:(live.materials&&live.materials.length)?live.materials:(o.materials||[])
+    });
   }
   function money(v){ var n=Number(String(v||0).replace(',','.').replace(/[^0-9.-]/g,''))||0; return '€ '+n.toFixed(2).replace('.',','); }
   function rows(ms){ return (ms||[]).map(function(m,i){ return '<tr><td>'+(i+1)+'</td><td>'+H(m.qty||1)+'</td><td>'+H(m.code||'')+'</td><td>'+H(m.product||m.searchName||m.zoeknaam||m.name||'')+'<br><small>'+H(m.description||m.beschrijving||m.desc||'')+'</small></td><td>'+H(m.cat||m.rubriek||m.category||'')+'</td><td>'+H(m.linePrice||m.price||'')+'</td></tr>'; }).join(''); }
