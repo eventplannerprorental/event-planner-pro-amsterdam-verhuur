@@ -47471,3 +47471,254 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   try{ console.info('[BNS v906] Live Bijzonderheden-regels in nieuwe-opdracht documenten actief.'); }catch(e){}
 })();
+
+/* =========================================================
+   EPP Amsterdam v59 - Bezorger blijft staan bij opnieuw openen
+   Alleen app.js patch.
+   Probleem: verschillende delen van de app gebruiken driver/driverName/bezorger/assignedDriver.
+   Oplossing: bij openen EN opslaan alle bezorger-aliassen gelijk houden en lege select nooit laten wissen.
+   ========================================================= */
+(function(){
+  'use strict';
+  var MARK = '__EPP_AMS_V59_DRIVER_PRESERVE__';
+  if(window[MARK]) return;
+  window[MARK] = true;
+
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function E(id){ return document.getElementById(id); }
+  function clone(o){ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function orders(){
+    try{ if(typeof state === 'object' && state && Array.isArray(state.orders)) return state.orders; }catch(e){}
+    try{ if(window.state && Array.isArray(window.state.orders)) return window.state.orders; }catch(e){}
+    try{
+      var raw = localStorage.getItem((typeof KEY !== 'undefined' && KEY) ? KEY : 'event-planner-pro-amsterdam-verhuur-v1');
+      var s = raw ? JSON.parse(raw) : null;
+      if(s && Array.isArray(s.orders)) return s.orders;
+    }catch(e){}
+    return [];
+  }
+  function saveApp(){
+    try{ if(typeof save === 'function') save(); }catch(e){}
+    try{
+      if(typeof state === 'object' && state){
+        localStorage.setItem((typeof KEY !== 'undefined' && KEY) ? KEY : 'event-planner-pro-amsterdam-verhuur-v1', JSON.stringify(state));
+      }
+    }catch(e){}
+  }
+  function syncOrder(o){
+    try{ if(o && window.BNS && typeof window.BNS.syncOrder === 'function') window.BNS.syncOrder(o); }catch(e){}
+    try{ if(o && typeof syncDoc === 'function') syncDoc('orders', o.id, o); }catch(e){}
+  }
+  function editingId(){
+    try{ if(typeof editing !== 'undefined' && editing) return T(editing); }catch(e){}
+    try{ if(window.editing) return T(window.editing); }catch(e){}
+    try{ if(window.__bnsEditingOrder && window.__bnsEditingOrder !== true) return T(window.__bnsEditingOrder); }catch(e){}
+    return '';
+  }
+  function orderNumber(){ return T((E('orderNumber') || {}).value); }
+  function findOrder(idOrNumber){
+    var k = T(idOrNumber);
+    if(!k) return null;
+    var list = orders();
+    for(var i=0;i<list.length;i++){
+      var o = list[i] || {};
+      if(T(o.id) === k || T(o.number) === k || T(o.orderNumber) === k) return o;
+    }
+    return null;
+  }
+  function currentOrder(){
+    return findOrder(editingId()) || findOrder(orderNumber());
+  }
+  function driverFromOrder(o){
+    if(!o) return '';
+    var direct = T(o.driver) || T(o.driverName) || T(o.bezorger) || T(o.bezorgerName) || T(o.assignedDriver) || T(o.assignedDriverName) || T(o.driverDisplayName);
+    if(direct) return direct;
+    try{ if(o.driverUser && T(o.driverUser.name)) return T(o.driverUser.name); }catch(e){}
+    try{ if(o.bezorgerUser && T(o.bezorgerUser.name)) return T(o.bezorgerUser.name); }catch(e){}
+    try{ if(Array.isArray(o.driverNames) && T(o.driverNames[0])) return T(o.driverNames[0]); }catch(e){}
+    try{ if(Array.isArray(o.bezorgerNames) && T(o.bezorgerNames[0])) return T(o.bezorgerNames[0]); }catch(e){}
+    try{ if(Array.isArray(o.drivers) && T(o.drivers[0])) return T(o.drivers[0]); }catch(e){}
+    return '';
+  }
+  function userByName(name){
+    name = T(name).toLowerCase();
+    if(!name) return null;
+    var users = [];
+    try{ if(typeof state === 'object' && Array.isArray(state.users)) users = state.users; }catch(e){}
+    try{ if(!users.length && window.state && Array.isArray(window.state.users)) users = window.state.users; }catch(e){}
+    for(var i=0;i<users.length;i++){
+      var u = users[i] || {};
+      if(T(u.name).toLowerCase() === name) return u;
+    }
+    return null;
+  }
+  function normalizeDriverFields(o, name){
+    name = T(name) || driverFromOrder(o);
+    if(!o || !name) return o;
+    o.driver = name;
+    o.driverName = name;
+    o.bezorger = name;
+    o.bezorgerName = name;
+    o.assignedDriver = name;
+    o.assignedDriverName = name;
+    o.driverDisplayName = name;
+    o.driverNames = [name];
+    o.bezorgerNames = [name];
+    var u = userByName(name);
+    if(u){
+      o.driverId = o.driverId || u.id || u.uid || u.userId || '';
+      o.bezorgerId = o.bezorgerId || u.id || u.uid || u.userId || '';
+      o.assignedDriverId = o.assignedDriverId || u.id || u.uid || u.userId || '';
+      o.driverPin = o.driverPin || u.pin || '';
+    }
+    o.updatedAt = o.updatedAt || new Date().toISOString();
+    return o;
+  }
+  function ensureDriverOption(name){
+    name = T(name);
+    var sel = E('orderDriver');
+    if(!sel || !name) return;
+    var exists = false;
+    for(var i=0;i<sel.options.length;i++){
+      if(T(sel.options[i].value) === name || T(sel.options[i].textContent) === name){ exists = true; break; }
+    }
+    if(!exists){
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+  }
+  function setDriverSelect(name){
+    name = T(name);
+    var sel = E('orderDriver');
+    if(!sel || !name) return false;
+    ensureDriverOption(name);
+    if(T(sel.value) !== name){
+      sel.value = name;
+      try{ sel.dispatchEvent(new Event('input', {bubbles:true})); }catch(e){}
+      try{ sel.dispatchEvent(new Event('change', {bubbles:true})); }catch(e){}
+    }
+    window.__amsV59LastDriver = name;
+    try{ if(typeof summaryRender === 'function') summaryRender(); }catch(e){}
+    return true;
+  }
+  function restoreDriverFromOpenOrder(){
+    var o = currentOrder();
+    var name = driverFromOrder(o) || T(window.__amsV59LastDriver || '');
+    if(name) setDriverSelect(name);
+  }
+
+  document.addEventListener('change', function(ev){
+    if(ev.target && ev.target.id === 'orderDriver'){
+      var v = T(ev.target.value);
+      if(v) window.__amsV59LastDriver = v;
+    }
+  }, true);
+  document.addEventListener('input', function(ev){
+    if(ev.target && ev.target.id === 'orderDriver'){
+      var v = T(ev.target.value);
+      if(v) window.__amsV59LastDriver = v;
+    }
+  }, true);
+
+  function patchEdit(){
+    var old = window.editOrder || (typeof editOrder === 'function' ? editOrder : null);
+    if(typeof old !== 'function' || old.__amsV59DriverPreserve) return;
+    var wrapped = function(id){
+      var oBefore = findOrder(id);
+      var nameBefore = driverFromOrder(oBefore);
+      if(nameBefore) window.__amsV59LastDriver = nameBefore;
+      var r = old.apply(this, arguments);
+      [0,80,200,500,1000,1600].forEach(function(ms){
+        setTimeout(function(){
+          var o = findOrder(id) || currentOrder() || oBefore;
+          var name = driverFromOrder(o) || nameBefore;
+          if(name) setDriverSelect(name);
+        }, ms);
+      });
+      return r;
+    };
+    wrapped.__amsV59DriverPreserve = true;
+    window.editOrder = wrapped;
+    try{ editOrder = wrapped; }catch(e){}
+  }
+
+  function patchSave(){
+    var old = window.saveCurrentOrder || (typeof saveCurrentOrder === 'function' ? saveCurrentOrder : null);
+    if(typeof old !== 'function' || old.__amsV59DriverPreserve) return;
+    var wrapped = function(){
+      var before = currentOrder();
+      var beforeName = driverFromOrder(before);
+      var sel = E('orderDriver');
+      var formName = T(sel && sel.value);
+      var finalName = formName || beforeName || T(window.__amsV59LastDriver || '');
+
+      // Belangrijk: lege selectbox mag bestaande bezorger niet wissen.
+      if(!formName && finalName) setDriverSelect(finalName);
+
+      var currentId = editingId();
+      var currentNr = orderNumber();
+      var result = old.apply(this, arguments);
+
+      setTimeout(function(){
+        var saved = findOrder(currentId) || findOrder(currentNr) || currentOrder();
+        var savedName = T((E('orderDriver')||{}).value) || finalName || driverFromOrder(saved);
+        if(saved && savedName){
+          normalizeDriverFields(saved, savedName);
+          saveApp();
+          syncOrder(clone(saved));
+        }
+      }, 80);
+      setTimeout(function(){
+        var saved = findOrder(currentId) || findOrder(currentNr);
+        var savedName = finalName || driverFromOrder(saved);
+        if(saved && savedName){
+          normalizeDriverFields(saved, savedName);
+          saveApp();
+        }
+      }, 450);
+      return result;
+    };
+    wrapped.__amsV59DriverPreserve = true;
+    window.saveCurrentOrder = wrapped;
+    try{ saveCurrentOrder = wrapped; }catch(e){}
+  }
+
+  function patchRenderAll(){
+    var old = window.renderAll || (typeof renderAll === 'function' ? renderAll : null);
+    if(typeof old !== 'function' || old.__amsV59DriverPreserve) return;
+    var wrapped = function(){
+      var r = old.apply(this, arguments);
+      setTimeout(restoreDriverFromOpenOrder, 0);
+      setTimeout(restoreDriverFromOpenOrder, 160);
+      return r;
+    };
+    wrapped.__amsV59DriverPreserve = true;
+    window.renderAll = wrapped;
+    try{ renderAll = wrapped; }catch(e){}
+  }
+
+  function patchExistingOpenOrder(){
+    patchEdit();
+    patchSave();
+    patchRenderAll();
+    restoreDriverFromOpenOrder();
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(patchExistingOpenOrder, 60); });
+  else setTimeout(patchExistingOpenOrder, 60);
+  setTimeout(patchExistingOpenOrder, 400);
+  setTimeout(patchExistingOpenOrder, 1200);
+  setInterval(function(){
+    patchEdit(); patchSave(); patchRenderAll();
+    var o = currentOrder();
+    var sel = E('orderDriver');
+    if(o && sel && !T(sel.value)){
+      var name = driverFromOrder(o);
+      if(name) setDriverSelect(name);
+    }
+  }, 3000);
+
+  try{ console.info('[EPP Amsterdam v59] Bezorger behouden bij openen/opslaan actief.'); }catch(e){}
+})();
