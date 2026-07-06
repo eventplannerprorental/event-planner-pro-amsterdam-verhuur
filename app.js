@@ -47722,3 +47722,168 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   try{ console.info('[EPP Amsterdam v59] Bezorger behouden bij openen/opslaan actief.'); }catch(e){}
 })();
+
+/* =========================================================
+   EPP Amsterdam v60 - bezorger behouden bij bevestigen/offerte-status
+   Basis: v59 app.js
+   Probleem: bij 'Offerte -> Bevestigen/Bevestigd' kon een oude statusroute
+   de opdracht opslaan/syncen zonder driver-velden.
+   Oplossing: driver geheugen per opdracht + herstel rond confirm/status acties.
+   Raakt geen index, driver, layout of Firebase-config aan.
+   ========================================================= */
+(function EPP_AMS_V60_DRIVER_CONFIRM_PRESERVE(){
+  'use strict';
+  if(window.__EPP_AMS_V60_DRIVER_CONFIRM_PRESERVE__) return;
+  window.__EPP_AMS_V60_DRIVER_CONFIRM_PRESERVE__ = true;
+
+  var MEM_KEY = 'epp_amsterdam_v60_driver_memory';
+  function E(id){ return document.getElementById(id); }
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function stateObj(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || null; }
+  function orders(){ var s=stateObj(); return s && Array.isArray(s.orders) ? s.orders : []; }
+  function clone(o){ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function saveApp(){ try{ if(typeof save === 'function') save(); }catch(e){} }
+  function syncOrder(o){ try{ if(o && window.BNS && typeof window.BNS.syncOrder === 'function') window.BNS.syncOrder(clone(o)); }catch(e){} }
+  function editId(){ try{ if(typeof editing !== 'undefined' && editing) return T(editing); }catch(e){} return T(window.editing || ''); }
+  function formNr(){ return T((E('orderNumber')||{}).value); }
+  function formDriver(){ return T((E('orderDriver')||{}).value); }
+  function driverFromOrder(o){
+    if(!o) return '';
+    return T(o.driver) || T(o.driverName) || T(o.bezorger) || T(o.assignedDriver) || T(o.driverId) || T(o.driver_id) || T(o.chauffeur) || T(o.driverDisplayName);
+  }
+  function normalizeDriver(o, name){
+    name = T(name);
+    if(!o || !name) return false;
+    var changed = false;
+    ['driver','driverName','bezorger','assignedDriver','driverDisplayName','chauffeur'].forEach(function(k){
+      if(T(o[k]) !== name){ o[k] = name; changed = true; }
+    });
+    o.driverId = o.driverId || name;
+    o.driver_id = o.driver_id || name;
+    o.updatedAt = o.updatedAt || new Date().toISOString();
+    return changed;
+  }
+  function orderKeys(o){
+    var keys=[];
+    if(!o) return keys;
+    ['id','number','orderNumber','nr'].forEach(function(k){ var v=T(o[k]); if(v) keys.push(k+':'+v); });
+    return keys;
+  }
+  function readMem(){ try{ return JSON.parse(localStorage.getItem(MEM_KEY)||'{}') || {}; }catch(e){ return {}; } }
+  function writeMem(m){ try{ localStorage.setItem(MEM_KEY, JSON.stringify(m||{})); }catch(e){} }
+  function rememberOrder(o, name){
+    name = T(name) || driverFromOrder(o);
+    if(!o || !name) return;
+    var m=readMem();
+    orderKeys(o).forEach(function(k){ m[k]=name; });
+    writeMem(m);
+  }
+  function memoryFor(o){
+    var m=readMem();
+    var keys=orderKeys(o);
+    for(var i=0;i<keys.length;i++){ if(T(m[keys[i]])) return T(m[keys[i]]); }
+    return '';
+  }
+  function findOrder(idOrNr){
+    var k=T(idOrNr);
+    if(!k) return null;
+    return orders().find(function(o){ return T(o.id)===k || T(o.number)===k || T(o.orderNumber)===k || T(o.nr)===k; }) || null;
+  }
+  function currentOrder(){
+    return findOrder(editId()) || findOrder(formNr()) || null;
+  }
+  function ensureDriverOption(name){
+    var sel=E('orderDriver');
+    name=T(name);
+    if(!sel || !name) return;
+    var exists=false;
+    Array.prototype.slice.call(sel.options||[]).forEach(function(opt){ if(T(opt.value||opt.textContent)===name) exists=true; });
+    if(!exists){ var opt=document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt); }
+    sel.value=name;
+  }
+  function scanAndRemember(){
+    orders().forEach(function(o){ var n=driverFromOrder(o); if(n) rememberOrder(o,n); });
+    var co=currentOrder();
+    var fd=formDriver();
+    if(co && fd){ normalizeDriver(co,fd); rememberOrder(co,fd); }
+  }
+  function restoreMissing(reason){
+    var changed=false;
+    orders().forEach(function(o){
+      var existing=driverFromOrder(o);
+      if(existing){ rememberOrder(o, existing); return; }
+      var remembered=memoryFor(o);
+      if(remembered){
+        normalizeDriver(o, remembered);
+        changed=true;
+        try{ console.info('[EPP Amsterdam v60] Bezorger hersteld na '+reason+':', o.number||o.id, remembered); }catch(e){}
+        syncOrder(o);
+      }
+    });
+    var co=currentOrder();
+    var n=driverFromOrder(co) || memoryFor(co);
+    if(n) ensureDriverOption(n);
+    if(changed) saveApp();
+  }
+  function beforeConfirmClick(){
+    scanAndRemember();
+    var co=currentOrder();
+    var fd=formDriver();
+    if(co && fd){ normalizeDriver(co, fd); rememberOrder(co, fd); saveApp(); }
+  }
+  function afterConfirmClick(){
+    [80,250,700,1400,2600].forEach(function(ms){ setTimeout(function(){ restoreMissing('bevestigen/status'); }, ms); });
+  }
+  function isConfirmButtonText(el){
+    var txt=L((el && (el.textContent || el.value || el.title || el.getAttribute('aria-label'))) || '');
+    return /bevestig|bevestigd|optie bevestigd|opdrachtbevestiging|zet.*bevestigd/.test(txt) && !/document|print|factuur|mail|voorbeeld/.test(txt);
+  }
+  document.addEventListener('click', function(ev){
+    var b=ev.target && ev.target.closest && ev.target.closest('button,a,[onclick]');
+    if(!b) return;
+    var on=T(b.getAttribute && b.getAttribute('onclick'));
+    var isFn=/TW_V309_optionConfirm|BNS_V356_CONFIRM|BNS350_ok|optionConfirm|confirm/i.test(on);
+    if(isFn || isConfirmButtonText(b)){
+      beforeConfirmClick();
+      afterConfirmClick();
+    }
+  }, true);
+  document.addEventListener('change', function(ev){
+    if(ev.target && ev.target.id === 'orderDriver'){
+      var co=currentOrder();
+      if(co && T(ev.target.value)){ normalizeDriver(co, ev.target.value); rememberOrder(co, ev.target.value); saveApp(); }
+    }
+    if(ev.target && ev.target.id === 'orderStatus'){
+      beforeConfirmClick();
+      setTimeout(function(){ restoreMissing('status wijziging'); }, 200);
+    }
+  }, true);
+
+  function wrapConfirmFunction(name){
+    var old=window[name];
+    if(typeof old !== 'function' || old.__eppAmsV60Driver) return;
+    var wrapped=function(id){
+      var o=findOrder(id) || currentOrder();
+      var n=formDriver() || driverFromOrder(o) || memoryFor(o);
+      if(o && n){ normalizeDriver(o,n); rememberOrder(o,n); saveApp(); }
+      var r=old.apply(this, arguments);
+      setTimeout(function(){ restoreMissing(name); }, 80);
+      setTimeout(function(){ restoreMissing(name); }, 450);
+      setTimeout(function(){ restoreMissing(name); }, 1200);
+      return r;
+    };
+    wrapped.__eppAmsV60Driver = true;
+    window[name]=wrapped;
+  }
+  function install(){
+    scanAndRemember();
+    ['TW_V309_optionConfirm','BNS_V356_CONFIRM','BNS350_ok'].forEach(wrapConfirmFunction);
+    restoreMissing('install');
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(install,80); });
+  else setTimeout(install,80);
+  [300,900,1800,3500].forEach(function(ms){ setTimeout(install,ms); });
+  setInterval(function(){ scanAndRemember(); restoreMissing('controle'); install(); }, 2500);
+  try{ console.info('[EPP Amsterdam v60] Bezorger blijft staan bij Offerte -> Bevestigen actief.'); }catch(e){}
+})();
