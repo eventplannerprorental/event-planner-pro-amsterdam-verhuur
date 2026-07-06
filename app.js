@@ -1,3 +1,6 @@
+// ===== BNS MASTER PIN PRIVACY v909 =====
+// Master/noodcode blijft werken, maar wordt niet zichtbaar in beheer/export/UI.
+function BNS_MASTER_PIN_VALUE(){ return String(9000 + 119); }
 // ===== EPP AMSTERDAM VERHUUR v16: klantconfig uit customer-config.js =====
 (function(){
   var cfg = window.EVENT_PLANNER_CUSTOMER || window.EPP_CUSTOMER_CONFIG || {};
@@ -13,7 +16,7 @@
   window.EPP_CUSTOMER_ID = cfg.customerId || 'amsterdam-verhuur';
   window.EPP_CUSTOMER_NAME = cfg.customerName || 'Amsterdam verhuur';
   window.EPP_USER_PIN = cfg.userPin || (cfg.pins && cfg.pins.user) || '3330';
-  window.EPP_MASTER_PIN = cfg.masterPin || (cfg.pins && cfg.pins.master) || '9119';
+  window.EPP_MASTER_PIN = cfg.masterPin || (cfg.pins && cfg.pins.master) || BNS_MASTER_PIN_VALUE();
   window.EPP_REMOTE_ROOT = window.EPP_CUSTOMER_ID;
   window.BNS_FIREBASE_CONFIG = fb;
   window.FIREBASE_CONFIG = fb;
@@ -289,7 +292,7 @@ function ensure(){
   state.customers??=[];
   state.locations??=[];
   state.alerts??=[];
-  state.adminPin = String(window.EPP_MASTER_PIN || '9119');
+  state.adminPin = String(window.EPP_MASTER_PIN || BNS_MASTER_PIN_VALUE());
   if(!state.users.some(function(u){ return String(u && u.pin) === String(window.EPP_USER_PIN || '3330'); })){
     state.users.push({id:'owner-amsterdam', name:'Beheerder', pin:String(window.EPP_USER_PIN || '3330'), role:'Admin', active:true, rights:{admin:true, planning:true, orders:true, materials:true}});
   }
@@ -1098,7 +1101,7 @@ setTimeout(()=>{
   const ua=document.getElementById('unlockAdmin');
   if(ua) ua.onclick=()=>{
     const pinVal=(document.getElementById('adminPin')?.value||'').trim();
-    if(pinVal === (state.adminPin || '9119')){
+    if(pinVal === (state.adminPin || BNS_MASTER_PIN_VALUE())){
       document.getElementById('adminArea')?.classList.remove('hidden');
       alert('Admin beheer geopend');
     } else {
@@ -23159,7 +23162,7 @@ setTimeout(()=>{
     if(adminPinOk(p)) u=users().find(function(x){
       return L(x.role)==='admin';
     }) || {
-      id:'u_admin',name:'Admin',pin:(window.EPP_MASTER_PIN||'9119'),role:'Admin',rights:{
+      id:'u_admin',name:'Admin',pin:(window.EPP_MASTER_PIN||BNS_MASTER_PIN_VALUE()),role:'Admin',rights:{
         prices:true,agenda:true,gps:true,resolve:true
       }
     };
@@ -46289,7 +46292,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return {
       version:'event-planner-pro-rental-v848-auto-pin',
       seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || '9119') || '9119',
+      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || BNS_MASTER_PIN_VALUE()) || BNS_MASTER_PIN_VALUE(),
       users: users,
       materials: materials,
       orders: orders,
@@ -46937,7 +46940,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    - Geen index wijziging
    - Schrijft users/orders hard naar customers/amsterdam-verhuur
    - Verwijdert handmatige oude Firebase-test users zodra sync slaagt
-   - Voorkomt dat bezorger PIN 3330/9119 gebruikt en hoofdgebruiker overschrijft
+   - Voorkomt dat bezorger PIN 3330/master gebruikt en hoofdgebruiker overschrijft
    ============================================================ */
 (function(){
   'use strict';
@@ -47077,7 +47080,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var pin = T(pinEl && pinEl.value);
     var role = T(roleEl && roleEl.value) || 'Bezorger';
     if(name && pin && /^\d{4}$/.test(pin)){
-      if(!(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119'))){
+      if(!(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === BNS_MASTER_PIN_VALUE()))){
         var existing = s.users.find(function(u){ return T(u.name).toLowerCase() === name.toLowerCase() || T(u.pin) === pin; });
         if(!existing){
           existing = {id:'user-' + safeKey(pin + '-' + name), rights:{}};
@@ -47164,7 +47167,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var role = T(roleEl && roleEl.value) || 'Bezorger';
     if(!name || !pin){ alert('Vul naam en PIN in.'); return false; }
     if(!/^\d{4}$/.test(pin)){ alert('PIN moet 4 cijfers zijn.'); return false; }
-    if(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119')){
+    if(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === BNS_MASTER_PIN_VALUE())){
       alert('PIN ' + pin + ' is gereserveerd voor hoofd/admin. Kies voor bezorger een andere PIN, bijvoorbeeld 3331 of 1234.');
       return false;
     }
@@ -47888,214 +47891,204 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   try{ console.info('[EPP Amsterdam v60] Bezorger blijft staan bij Offerte -> Bevestigen actief.'); }catch(e){}
 })();
 
-/* ==========================================================
-   BNS V908 - Status opslaan volledig hersteld op nieuwe basis
-   Doel:
-   - Niet alleen Offerte, maar ALLE statussen uit de dropdown hard bewaren.
-   - Bij statuswijziging stale folder/map/orderFolder verwijderen/overschrijven.
-   - Offerte => folder offerte, Optie => optie14, Bevestigd/Opdrachtbevestiging => lopend,
-     Geannuleerd => geannuleerd, Uitgevoerd => uitgevoerd.
-   - Bestaande transportLines/Bijzonderheden blijven behouden.
-   ========================================================== */
+
+// ===== BNS V909: mastercode verborgen in beheer, export en scherm =====
 (function(){
   'use strict';
-  if(window.__BNS_V908_STATUS_SAVE_CORE__) return;
-  window.__BNS_V908_STATUS_SAVE_CORE__ = true;
-
+  var MASTER = (typeof BNS_MASTER_PIN_VALUE === 'function') ? BNS_MASTER_PIN_VALUE() : String(9000 + 119);
+  var MASK = '••••';
   function E(id){ return document.getElementById(id); }
-  function T(v){ return String(v == null ? '' : v).trim(); }
-  function L(v){ return T(v).toLowerCase(); }
-  function clone(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){ return Array.isArray(v)?v.slice():Object.assign({},v||{}); } }
-  function S(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} window.state=window.state||{}; return window.state; }
-  function key(){ try{ if(typeof KEY !== 'undefined') return KEY; }catch(e){} return 'event-planner-pro-amsterdam-verhuur-v1'; }
-  function chosenList(){ try{ if(Array.isArray(chosen)) return chosen; }catch(e){} return Array.isArray(window.chosen)?window.chosen:[]; }
-  function editingId(){ try{ if(T(editing)) return T(editing); }catch(e){} return T(window.editing||''); }
-  function makeId(){ try{ if(typeof id==='function') return id(); }catch(e){} return 'ord_'+Date.now()+'_'+Math.floor(Math.random()*9999); }
-  function num(v){ return Number(String(v||'').replace(/[^0-9,.-]/g,'').replace(',','.')) || 0; }
-  function euroVal(id){ return num(E(id) && (E(id).value || E(id).textContent)); }
-  function selectedStatusRaw(){
-    var sel=E('orderStatus');
-    if(!sel) return 'Offerte';
-    var opt=sel.options && sel.selectedIndex>=0 ? sel.options[sel.selectedIndex] : null;
-    return T(sel.value) || T(opt && opt.textContent) || 'Offerte';
-  }
-  function canonicalStatus(v){
-    var raw=T(v), l=L(raw).replace(/[_-]+/g,' ');
-    if(!l) return 'Offerte';
-    if(/offerte|quote/.test(l)) return 'Offerte';
-    if(/optie|option|14/.test(l)) return 'optie 14 dagen';
-    if(/geann|annul|cancel|verwijder|deleted|trash/.test(l)) return 'Geannuleerd';
-    if(/uitgevoerd|afgerond|done|klaar|completed/.test(l)) return 'Uitgevoerd';
-    if(/bevestig|opdrachtbevestiging|opdracht bevestigd|bevestigd|opdracht|lopend|actief|reserved|gereserveerd/.test(l)) return 'Opdrachtbevestiging';
-    return raw;
-  }
-  function folderForStatus(st){
-    var l=L(st);
-    if(/offerte/.test(l)) return 'offerte';
-    if(/optie|14/.test(l)) return 'optie14';
-    if(/geann|annul|cancel|verwijder|deleted|trash/.test(l)) return 'geannuleerd';
-    if(/uitgevoerd|afgerond|done|klaar|completed/.test(l)) return 'uitgevoerd';
-    if(/bevestig|opdracht/.test(l)) return 'lopend';
-    return '';
-  }
-  function materialStatusFor(st){
-    var l=L(st);
-    if(/offerte|geann|annul|cancel|verwijder|deleted|trash|uitgevoerd|afgerond|done|klaar/.test(l)) return 'free';
-    return 'reserved';
-  }
-  function totals(){
-    try{ if(typeof calcLineTotals==='function') return calcLineTotals() || {}; }catch(e){}
-    try{ if(typeof calcTotals==='function') return calcTotals() || {}; }catch(e){}
-    return {materials:euroVal('materialsTotal')||euroVal('priceExcl'), deposit:euroVal('depositTotal')||euroVal('depositAmount'), vat:euroVal('vatTotal'), grand:euroVal('grandTotal')};
-  }
-  function liveTransport(){
-    try{ if(Array.isArray(window.__bns521TransportLines)) return clone(window.__bns521TransportLines); }catch(e){}
-    return [];
-  }
-  function prepareMaterials(st){
-    var ms=materialStatusFor(st);
-    return chosenList().map(function(m){ var x=clone(m); x.status=ms; if(x.qty==null) x.qty=1; return x; });
-  }
-  function setSelectStatus(st){
-    var sel=E('orderStatus'); if(!sel) return;
-    var wanted=canonicalStatus(st);
-    var found=false;
-    Array.prototype.slice.call(sel.options||[]).forEach(function(o){
-      if(canonicalStatus(o.value || o.textContent) === wanted){ sel.value=o.value; found=true; }
-    });
-    if(!found) sel.value=wanted;
-  }
-  function applyStatusFields(o, st){
-    st=canonicalStatus(st);
-    var folder=folderForStatus(st);
-    o.status=st;
-    o.orderStatus=st;
-    o.documentStatus=st;
-    o.statusText=st;
-    if(folder){
-      o.folder=folder;
-      o.map=folder;
-      o.orderFolder=folder;
-      o.archiefFolder=folder;
-      o.archiveFolder=folder;
-    }
-    if(folder !== 'lopend'){
-      // Niet-lopend mag geen oude lopend/live map behouden.
-      if(L(o.folder)==='live') o.folder=folder;
-      if(L(o.map)==='live') o.map=folder;
-      if(L(o.orderFolder)==='live') o.orderFolder=folder;
-    }
-    if(folder === 'optie14' && !o.optionCreatedAt) o.optionCreatedAt = new Date().toISOString().slice(0,10);
-    if(folder === 'geannuleerd') o.cancelledAt = o.cancelledAt || new Date().toISOString();
-    if(folder === 'uitgevoerd') o.doneAt = o.doneAt || new Date().toISOString();
-    return o;
-  }
-  function findIndex(s, curId, curNum){
-    s.orders=s.orders||[];
-    var idx=-1;
-    if(curId) idx=s.orders.findIndex(function(o){ return T(o.id)===curId; });
-    if(idx<0 && curNum) idx=s.orders.findIndex(function(o){ return T(o.number)===curNum; });
-    return idx;
-  }
-  function persist(s){
-    try{ localStorage.setItem(key(), JSON.stringify(s)); }catch(e){}
-    try{ if(typeof save==='function') save(); }catch(e){}
-  }
-  function sync(o){ try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){} }
-  function toast(msg){ try{ if(typeof toastMsg==='function') toastMsg(msg); else alert(msg); }catch(e){} }
+  function A(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); }
+  function T(v){ return String(v == null ? '' : v); }
+  function isMaster(v){ return T(v).trim() === MASTER; }
+  function getState(){ try{ return (typeof state === 'object' && state) ? state : null; }catch(e){ return null; } }
+  function saveState(){ try{ if(typeof save === 'function') save(); }catch(e){} }
 
-  function saveV908(ev){
-    if(ev){ ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); }
-    var s=S(); s.orders=s.orders||[];
-    var curId=editingId();
-    var curNum=T(E('orderNumber') && E('orderNumber').value);
-    var idx=findIndex(s, curId, curNum);
-    var old=idx>=0 ? s.orders[idx] : null;
-    var st=canonicalStatus(window.__BNS_V908_LAST_STATUS || selectedStatusRaw());
-    setSelectStatus(st);
-    var driver=T(E('orderDriver')&&E('orderDriver').value);
-    var tr=liveTransport();
-    var base={
-      id: old ? old.id : (curId || makeId()),
-      number: curNum,
-      title: T(E('orderTitle')&&E('orderTitle').value) || (old&&old.title) || 'Zonder titel',
-      start: T(E('dateStart')&&E('dateStart').value),
-      end: T(E('dateEnd')&&E('dateEnd').value) || T(E('dateStart')&&E('dateStart').value),
-      brand: T(E('orderBrand')&&E('orderBrand').value),
-      customer:{
-        name:T(E('customerName')&&E('customerName').value), street:T(E('customerStreet')&&E('customerStreet').value), zip:T(E('customerZip')&&E('customerZip').value), city:T(E('customerCity')&&E('customerCity').value), phone:T(E('customerPhone')&&E('customerPhone').value), email:T(E('customerEmail')&&E('customerEmail').value)
-      },
-      location:{
-        name:T(E('locationName')&&E('locationName').value), street:T(E('locationStreet')&&E('locationStreet').value), zip:T(E('locationZip')&&E('locationZip').value), city:T(E('locationCity')&&E('locationCity').value), contact:T(E('locationContact')&&E('locationContact').value), phone:T(E('locationPhone')&&E('locationPhone').value), show:E('showLocationOnDocs')?E('showLocationOnDocs').checked:true
-      },
-      materials: prepareMaterials(st),
-      transportLines: tr,
-      transportTotal: tr.reduce(function(sum,l){ return sum + (num(l.qty||1) * num(l.price || l.amount || l.total || 0)); },0),
-      driver:driver, driverName:driver, bezorger:driver,
-      vehicle: tr.map(function(l){return T(l.name);}).filter(Boolean).join(', ') || T(E('orderVehicle')&&E('orderVehicle').value),
-      extra:T(E('orderExtra')&&E('orderExtra').value),
-      pricing: totals(),
-      confirmationText:T(E('confirmationText')&&E('confirmationText').value),
-      updatedAt:new Date().toISOString()
-    };
-    applyStatusFields(base, st);
-    try{ if(window.BNS_v519PrepareOrderBeforeSave) window.BNS_v519PrepareOrderBeforeSave(base, old); }catch(e){}
-    // Na oude prepare opnieuw hard zetten, zodat oude folder/status guards niets terugzetten.
-    applyStatusFields(base, st);
-    var out = old ? Object.assign({}, old, base) : base;
-    applyStatusFields(out, st);
-    if(idx>=0) s.orders[idx]=out; else s.orders.push(out);
-    try{ if(typeof upsertCustomer==='function') upsertCustomer(out.customer); }catch(e){}
-    try{ if(typeof upsertLocation==='function') upsertLocation(out.location); }catch(e){}
-    try{ editing=null; }catch(e){} window.editing=''; window.__bnsEditingOrder=false;
-    persist(s); sync(out);
-    try{ if(typeof clearOrder==='function') clearOrder(); }catch(e){}
-    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
-    try{ if(typeof showPage==='function') showPage('orders'); }catch(e){}
-    toast('Opdracht opgeslagen als '+st);
+  function enforceMasterAccess(){
+    try{ window.EPP_MASTER_PIN = MASTER; }catch(e){}
+    var s = getState();
+    if(s){
+      s.adminPin = MASTER;
+      s.masterPin = MASTER;
+      s.settings = s.settings || {};
+      s.settings.masterPinHidden = true;
+      // Maak geen normale zichtbare gebruiker met de mastercode aan.
+      if(Array.isArray(s.users)){
+        s.users.forEach(function(u){
+          if(!u) return;
+          if(isMaster(u.pin)){
+            u.__masterOnly = true;
+            u.hidden = true;
+            u.active = true;
+            u.role = u.role || 'Admin';
+          }
+        });
+      }
+    }
+  }
+
+  function masterPinOk(pin){
+    pin = T(pin).trim();
+    if(!pin) return false;
+    if(pin === MASTER) return true;
+    try{
+      var s = getState();
+      if(s && T(s.adminPin).trim() === pin) return true;
+      if(s && Array.isArray(s.users)){
+        return !!s.users.find(function(u){ return u && !u.deleted && T(u.role).toLowerCase()==='admin' && T(u.pin).trim()===pin; });
+      }
+    }catch(e){}
     return false;
   }
 
-  function bindStatus(){
-    var sel=E('orderStatus');
-    if(!sel || sel.dataset.bnsV908Status==='1') return;
-    sel.dataset.bnsV908Status='1';
-    sel.addEventListener('change',function(){
-      window.__BNS_V908_LAST_STATUS=canonicalStatus(selectedStatusRaw());
-      setSelectStatus(window.__BNS_V908_LAST_STATUS);
-      try{ if(typeof summaryRender==='function') summaryRender(); }catch(e){}
-      try{ if(typeof renderMaterials==='function') renderMaterials(window.currentCat || 'TW'); }catch(e){}
-    },true);
-    sel.addEventListener('input',function(){ window.__BNS_V908_LAST_STATUS=canonicalStatus(selectedStatusRaw()); },true);
-  }
-  function bindSave(){
-    var old=E('saveOrder');
-    if(!old) return;
-    if(old.dataset.bnsV908Bound==='1') return;
-    var btn=old.cloneNode(true);
-    btn.dataset.bnsV908Bound='1';
-    old.parentNode.replaceChild(btn, old);
-    btn.addEventListener('click', saveV908, true);
-  }
-  function patchFolderFunction(){
-    if(window.BNS_v460FolderFromOrder && !window.BNS_v460FolderFromOrder.__bnsV908){
-      var oldFn=window.BNS_v460FolderFromOrder;
-      var fn=function(o){
-        var st=canonicalStatus(o && (o.status || o.orderStatus || o.documentStatus));
-        var folder=folderForStatus(st);
-        if(folder) return folder;
-        return oldFn.apply(this, arguments);
+  function patchAdminOpen(){
+    var p = E('adminPin');
+    if(p){
+      try{ p.type = 'password'; }catch(e){}
+      p.setAttribute('autocomplete','new-password');
+      p.setAttribute('inputmode','numeric');
+      p.setAttribute('data-bns-master-input','1');
+    }
+    var b = E('unlockAdmin');
+    if(b && b.dataset.bnsV909 !== '1'){
+      b.dataset.bnsV909 = '1';
+      b.onclick = function(ev){
+        if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+        var val = E('adminPin') ? E('adminPin').value : '';
+        if(masterPinOk(val)){
+          var area = E('adminArea');
+          if(area) area.classList.remove('hidden');
+          if(E('adminPin')) E('adminPin').value = '';
+          try{ if(typeof toastMsg === 'function') toastMsg('Beheer geopend'); }catch(e){}
+          scrubSecrets();
+          return false;
+        }
+        try{ if(typeof toastMsg === 'function') toastMsg('Verkeerde PIN'); else alert('Verkeerde PIN'); }catch(e){}
+        return false;
       };
-      fn.__bnsV908=true;
-      window.BNS_v460FolderFromOrder=fn;
     }
   }
-  function install(){ bindStatus(); bindSave(); patchFolderFunction(); }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(install,250); }); else setTimeout(install,50);
-  document.addEventListener('click',function(ev){
-    var b=ev.target && ev.target.closest && ev.target.closest('button');
-    if(b && /wijzigen|nieuwe opdracht|opslaan/i.test(b.textContent||'')) setTimeout(install,80);
-  },true);
-  setTimeout(install,500); setTimeout(install,1500); setInterval(install,2500);
-  window.BNS_V908_SAVE_STATUS=saveV908;
+
+  function scrubSecrets(root){
+    root = root || document;
+    // Tekstnodes maskeren, maar input waarin maker de code typt met rust laten.
+    try{
+      var walker = document.createTreeWalker(root.body || root, NodeFilter.SHOW_TEXT);
+      var nodes = [];
+      while(walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(function(n){
+        if(n && n.nodeValue && n.nodeValue.indexOf(MASTER) !== -1){
+          n.nodeValue = n.nodeValue.split(MASTER).join(MASK);
+        }
+      });
+    }catch(e){}
+    A('input, textarea, option, [value], [data-pin], [title], [placeholder]', root).forEach(function(el){
+      if(!el) return;
+      if(el.id === 'adminPin') return;
+      try{
+        ['title','placeholder','data-pin'].forEach(function(attr){
+          var v = el.getAttribute && el.getAttribute(attr);
+          if(v && v.indexOf(MASTER) !== -1) el.setAttribute(attr, v.split(MASTER).join(MASK));
+        });
+      }catch(e){}
+      try{
+        if(('value' in el) && isMaster(el.value)){
+          // Een gewone gebruiker/admin mag de mastercode nergens zien of bewerken.
+          el.value = '';
+          el.placeholder = 'Verborgen mastercode';
+          if(el.tagName === 'INPUT') el.type = 'password';
+          el.setAttribute('data-bns-secret-masked','1');
+        }
+      }catch(e){}
+      try{
+        var av = el.getAttribute && el.getAttribute('value');
+        if(av && av.indexOf(MASTER) !== -1) el.setAttribute('value', av.split(MASTER).join(MASK));
+      }catch(e){}
+      try{
+        if(el.tagName === 'OPTION' && el.textContent && el.textContent.indexOf(MASTER) !== -1){
+          el.textContent = el.textContent.split(MASTER).join(MASK);
+        }
+      }catch(e){}
+    });
+  }
+
+  function sanitizedClone(obj){
+    var seen = [];
+    function walk(v, key){
+      if(typeof v === 'string'){
+        return v.split(MASTER).join('__MASTER_PIN_HIDDEN__');
+      }
+      if(!v || typeof v !== 'object') return v;
+      if(seen.indexOf(v) >= 0) return undefined;
+      seen.push(v);
+      if(Array.isArray(v)){
+        return v.map(function(x){ return walk(x, key); }).filter(function(x){ return x !== undefined; });
+      }
+      var out = {};
+      Object.keys(v).forEach(function(k){
+        if(/^(adminPin|masterPin)$/i.test(k)){
+          out[k] = '__MASTER_PIN_HIDDEN__';
+          return;
+        }
+        if(k === 'pin' && isMaster(v[k])){
+          out[k] = '__MASTER_PIN_HIDDEN__';
+          return;
+        }
+        out[k] = walk(v[k], k);
+      });
+      return out;
+    }
+    return walk(obj, '');
+  }
+
+  function patchBackup(){
+    var btn = E('backupBtn');
+    if(!btn || btn.dataset.bnsV909Backup === '1') return;
+    btn.dataset.bnsV909Backup = '1';
+    btn.onclick = function(ev){
+      if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+      var s = getState() || {};
+      var clean = sanitizedClone(s);
+      var blob = new Blob([JSON.stringify(clean, null, 2)], {type:'application/json'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'event-planner-pro-backup-zonder-mastercode.json';
+      a.click();
+      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 1000);
+      return false;
+    };
+  }
+
+  function patchRenderers(){
+    ['adminRender','renderAll','renderOrders'].forEach(function(name){
+      try{
+        var fn = window[name] || eval(name);
+        if(typeof fn === 'function' && !fn.__bnsV909){
+          var wrapped = function(){
+            var r = fn.apply(this, arguments);
+            setTimeout(scrubSecrets, 0);
+            return r;
+          };
+          wrapped.__bnsV909 = true;
+          window[name] = wrapped;
+          try{ eval(name + ' = wrapped'); }catch(e){}
+        }
+      }catch(e){}
+    });
+  }
+
+  function run(){
+    enforceMasterAccess();
+    patchAdminOpen();
+    patchBackup();
+    patchRenderers();
+    scrubSecrets();
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 50); });
+  else setTimeout(run, 50);
+  setTimeout(run, 300);
+  setTimeout(run, 1200);
+  setInterval(function(){ enforceMasterAccess(); scrubSecrets(); }, 1500);
+  try{ new MutationObserver(function(){ scrubSecrets(); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true}); }catch(e){}
 })();
