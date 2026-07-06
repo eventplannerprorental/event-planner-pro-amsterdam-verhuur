@@ -48092,3 +48092,188 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(function(){ enforceMasterAccess(); scrubSecrets(); }, 1500);
   try{ new MutationObserver(function(){ scrubSecrets(); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true}); }catch(e){}
 })();
+
+// ===== BNS V910: maker-mastercode gescheiden van klant/admin-instellingen =====
+// 9119 is GEEN klantinstelling en mag niet via beheer worden getoond of gewijzigd.
+// Hij blijft alleen als noodtoegang voor de maker werken.
+(function(){
+  'use strict';
+  if(window.__BNS_V910_MAKER_MASTER_LOCK__) return;
+  window.__BNS_V910_MAKER_MASTER_LOCK__ = true;
+
+  var MAKER_MASTER_PIN = '9119';
+  var HIDDEN = '__MAKER_MASTER_PIN_HIDDEN__';
+
+  try{
+    Object.defineProperty(window, '__BNS_MAKER_MASTER_PIN__', {
+      value: MAKER_MASTER_PIN,
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  }catch(e){ window.__BNS_MAKER_MASTER_PIN__ = MAKER_MASTER_PIN; }
+
+  function E(id){ return document.getElementById(id); }
+  function S(){ try{ return (typeof state !== 'undefined' && state) ? state : null; }catch(e){ return null; } }
+  function isMakerPin(v){ return String(v == null ? '' : v).trim() === MAKER_MASTER_PIN; }
+
+  function saveSilent(){ try{ if(typeof save === 'function') save(); }catch(e){} }
+
+  function normalizeCustomerAdminPin(){
+    var s = S();
+    if(!s) return;
+    // De app mag de maker-mastercode nooit als bewerkbare klant/admin-pin bewaren.
+    // Laat klant-admin leeg of op een andere bestaande waarde; toegang via 9119 blijft via aparte check werken.
+    if(isMakerPin(s.adminPin)){
+      s.adminPin = '';
+    }
+    if(s.settings && isMakerPin(s.settings.adminPin)) s.settings.adminPin = '';
+    if(s.settings && isMakerPin(s.settings.masterPin)) s.settings.masterPin = '';
+    if(s.settings && isMakerPin(s.settings.makerMasterPin)) s.settings.makerMasterPin = HIDDEN;
+    (s.users || []).forEach(function(u){
+      if(u && isMakerPin(u.pin)){
+        // Laat een gebruiker niet de maker-code als eigen PIN hebben in beheer.
+        // Niet verwijderen als object, alleen pin maskeren zodat hij niet opnieuw zichtbaar wordt.
+        u.pin = '';
+        u.__makerPinBlocked = true;
+      }
+    });
+  }
+
+  function scrubMakerPin(root){
+    root = root || document;
+    try{
+      var walker = document.createTreeWalker(root.body || root, NodeFilter.SHOW_TEXT);
+      var nodes = [];
+      while(walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(function(n){
+        if(n.nodeValue && n.nodeValue.indexOf(MAKER_MASTER_PIN) !== -1){
+          n.nodeValue = n.nodeValue.split(MAKER_MASTER_PIN).join('••••');
+        }
+      });
+    }catch(e){}
+    try{
+      Array.prototype.forEach.call(root.querySelectorAll('input,textarea,option,[value],[data-pin],[title],[placeholder]'), function(el){
+        if(!el) return;
+        if(el.id === 'adminPin'){
+          try{ el.type = 'password'; el.autocomplete = 'off'; }catch(e){}
+          return;
+        }
+        ['value','data-pin','title','placeholder'].forEach(function(attr){
+          try{
+            var v = attr === 'value' && ('value' in el) ? el.value : el.getAttribute(attr);
+            if(v && String(v).indexOf(MAKER_MASTER_PIN) !== -1){
+              if(attr === 'value' && ('value' in el)) el.value = '';
+              else el.setAttribute(attr, String(v).split(MAKER_MASTER_PIN).join('••••'));
+            }
+          }catch(e){}
+        });
+        try{
+          if(el.textContent && el.textContent.indexOf(MAKER_MASTER_PIN) !== -1){
+            el.textContent = el.textContent.split(MAKER_MASTER_PIN).join('••••');
+          }
+        }catch(e){}
+      });
+    }catch(e){}
+  }
+
+  function adminAllowed(pinValue){
+    var pin = String(pinValue == null ? '' : pinValue).trim();
+    var s = S() || {};
+    var customerAdminPin = String(s.adminPin || s.settings?.adminPin || s.settings?.customerAdminPin || '').trim();
+    return pin && (pin === MAKER_MASTER_PIN || (customerAdminPin && pin === customerAdminPin));
+  }
+
+  function patchAdminUnlock(){
+    var btn = E('unlockAdmin');
+    var pinEl = E('adminPin');
+    var area = E('adminArea');
+    if(pinEl){
+      try{ pinEl.type = 'password'; pinEl.autocomplete = 'off'; pinEl.placeholder = 'Beheercode'; }catch(e){}
+    }
+    if(!btn || btn.dataset.bnsV910 === '1') return;
+    btn.dataset.bnsV910 = '1';
+    btn.onclick = function(ev){
+      if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+      var val = pinEl ? pinEl.value : '';
+      if(adminAllowed(val)){
+        if(area) area.classList.remove('hidden');
+        if(pinEl) pinEl.value = '';
+        normalizeCustomerAdminPin();
+        saveSilent();
+        setTimeout(function(){ scrubMakerPin(); }, 0);
+      }else{
+        try{ if(typeof toastMsg === 'function') toastMsg('Verkeerde code'); else alert('Verkeerde code'); }catch(e){ alert('Verkeerde code'); }
+        if(pinEl) pinEl.value = '';
+      }
+      return false;
+    };
+  }
+
+  function sanitizeBackupObject(obj){
+    var seen = [];
+    function walk(v, key){
+      if(typeof v === 'string') return v.split(MAKER_MASTER_PIN).join(HIDDEN);
+      if(!v || typeof v !== 'object') return v;
+      if(seen.indexOf(v) >= 0) return undefined;
+      seen.push(v);
+      if(Array.isArray(v)) return v.map(function(x){ return walk(x, key); }).filter(function(x){ return x !== undefined; });
+      var out = {};
+      Object.keys(v).forEach(function(k){
+        if(/makerMaster|masterPin|adminPin/i.test(k) && isMakerPin(v[k])){ out[k] = HIDDEN; return; }
+        if(k === 'pin' && isMakerPin(v[k])){ out[k] = HIDDEN; return; }
+        out[k] = walk(v[k], k);
+      });
+      return out;
+    }
+    return walk(obj, '');
+  }
+
+  function patchBackup(){
+    var btn = E('backupBtn');
+    if(!btn || btn.dataset.bnsV910 === '1') return;
+    btn.dataset.bnsV910 = '1';
+    btn.onclick = function(ev){
+      if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+      normalizeCustomerAdminPin();
+      var clean = sanitizeBackupObject(S() || {});
+      var blob = new Blob([JSON.stringify(clean, null, 2)], {type:'application/json'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'event-planner-pro-backup-zonder-maker-mastercode.json';
+      a.click();
+      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 1000);
+      return false;
+    };
+  }
+
+  function wrapSave(){
+    try{
+      if(typeof save === 'function' && !save.__bnsV910){
+        var old = save;
+        var wrapped = function(){
+          normalizeCustomerAdminPin();
+          return old.apply(this, arguments);
+        };
+        wrapped.__bnsV910 = true;
+        save = wrapped;
+        window.save = wrapped;
+      }
+    }catch(e){}
+  }
+
+  function run(){
+    normalizeCustomerAdminPin();
+    wrapSave();
+    patchAdminUnlock();
+    patchBackup();
+    scrubMakerPin();
+  }
+
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 50); });
+  else setTimeout(run, 50);
+  setTimeout(run, 300);
+  setTimeout(run, 1200);
+  setInterval(run, 1500);
+  try{ new MutationObserver(function(){ scrubMakerPin(); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true}); }catch(e){}
+})();
