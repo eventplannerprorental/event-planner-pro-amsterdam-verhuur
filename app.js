@@ -47888,129 +47888,214 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   try{ console.info('[EPP Amsterdam v60] Bezorger blijft staan bij Offerte -> Bevestigen actief.'); }catch(e){}
 })();
 
-/* =========================================================
-   EPP Amsterdam v907 - Status terugzetten naar Offerte bij wijzigen
-   Basis: app(145).js / v906 werkend documenten-basis
-   Probleem: bij een opgeslagen bevestigde opdracht blijft folder/map soms 'lopend'.
-   Daardoor zet een latere guard de status weer terug naar Bevestigd.
-   Oplossing: bij handmatige statuswijziging is het dropdownveld leidend en worden
-   status + orderStatus + documentStatus + folder + map + orderFolder samen opgeslagen.
-   ========================================================= */
+/* ==========================================================
+   BNS V908 - Status opslaan volledig hersteld op nieuwe basis
+   Doel:
+   - Niet alleen Offerte, maar ALLE statussen uit de dropdown hard bewaren.
+   - Bij statuswijziging stale folder/map/orderFolder verwijderen/overschrijven.
+   - Offerte => folder offerte, Optie => optie14, Bevestigd/Opdrachtbevestiging => lopend,
+     Geannuleerd => geannuleerd, Uitgevoerd => uitgevoerd.
+   - Bestaande transportLines/Bijzonderheden blijven behouden.
+   ========================================================== */
 (function(){
   'use strict';
-  if(window.__EPP_AMS_V907_STATUS_BACK_TO_OFFERTE__) return;
-  window.__EPP_AMS_V907_STATUS_BACK_TO_OFFERTE__ = true;
+  if(window.__BNS_V908_STATUS_SAVE_CORE__) return;
+  window.__BNS_V908_STATUS_SAVE_CORE__ = true;
 
-  var KEY = (typeof window.KEY !== 'undefined' && window.KEY) ? window.KEY : 'event-planner-pro-amsterdam-verhuur-v1';
   function E(id){ return document.getElementById(id); }
   function T(v){ return String(v == null ? '' : v).trim(); }
   function L(v){ return T(v).toLowerCase(); }
-  function S(){
-    try{ if(typeof state === 'object' && state) return state; }catch(e){}
-    try{ return JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){ return {}; }
+  function clone(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){ return Array.isArray(v)?v.slice():Object.assign({},v||{}); } }
+  function S(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} window.state=window.state||{}; return window.state; }
+  function key(){ try{ if(typeof KEY !== 'undefined') return KEY; }catch(e){} return 'event-planner-pro-amsterdam-verhuur-v1'; }
+  function chosenList(){ try{ if(Array.isArray(chosen)) return chosen; }catch(e){} return Array.isArray(window.chosen)?window.chosen:[]; }
+  function editingId(){ try{ if(T(editing)) return T(editing); }catch(e){} return T(window.editing||''); }
+  function makeId(){ try{ if(typeof id==='function') return id(); }catch(e){} return 'ord_'+Date.now()+'_'+Math.floor(Math.random()*9999); }
+  function num(v){ return Number(String(v||'').replace(/[^0-9,.-]/g,'').replace(',','.')) || 0; }
+  function euroVal(id){ return num(E(id) && (E(id).value || E(id).textContent)); }
+  function selectedStatusRaw(){
+    var sel=E('orderStatus');
+    if(!sel) return 'Offerte';
+    var opt=sel.options && sel.selectedIndex>=0 ? sel.options[sel.selectedIndex] : null;
+    return T(sel.value) || T(opt && opt.textContent) || 'Offerte';
   }
-  function orders(){ var s=S(); s.orders=s.orders||[]; return s.orders; }
-  function currentId(){ try{ return T(window.editing || editing || ''); }catch(e){ return T(window.editing || ''); } }
-  function currentNumber(){ var n=E('orderNumber'); return T(n && n.value); }
-  function findOrder(id,num){
-    var list=orders();
-    if(id){ for(var i=0;i<list.length;i++){ if(T(list[i].id)===T(id)) return list[i]; } }
-    if(num){ for(var j=0;j<list.length;j++){ if(T(list[j].number)===T(num)) return list[j]; } }
-    return null;
+  function canonicalStatus(v){
+    var raw=T(v), l=L(raw).replace(/[_-]+/g,' ');
+    if(!l) return 'Offerte';
+    if(/offerte|quote/.test(l)) return 'Offerte';
+    if(/optie|option|14/.test(l)) return 'optie 14 dagen';
+    if(/geann|annul|cancel|verwijder|deleted|trash/.test(l)) return 'Geannuleerd';
+    if(/uitgevoerd|afgerond|done|klaar|completed/.test(l)) return 'Uitgevoerd';
+    if(/bevestig|opdrachtbevestiging|opdracht bevestigd|bevestigd|opdracht|lopend|actief|reserved|gereserveerd/.test(l)) return 'Opdrachtbevestiging';
+    return raw;
   }
-  function normalizeStatus(v){
-    var s=L(v);
-    if(/geann|annul|cancel|verwijderd|deleted|trash/.test(s)) return 'Geannuleerd';
-    if(/uitgevoerd|afgerond|done|klaar|afgemeld/.test(s)) return 'Uitgevoerd';
-    if(/optie\s*14|optie14/.test(s)) return 'Optie 14 dagen';
-    if(/bevestigd|opdrachtbevestiging|opdracht bevestigd|opdracht|actief|lopend/.test(s)) return 'Bevestigd';
-    if(/offerte|quote/.test(s)) return 'Offerte';
-    return T(v) || 'Offerte';
+  function folderForStatus(st){
+    var l=L(st);
+    if(/offerte/.test(l)) return 'offerte';
+    if(/optie|14/.test(l)) return 'optie14';
+    if(/geann|annul|cancel|verwijder|deleted|trash/.test(l)) return 'geannuleerd';
+    if(/uitgevoerd|afgerond|done|klaar|completed/.test(l)) return 'uitgevoerd';
+    if(/bevestig|opdracht/.test(l)) return 'lopend';
+    return '';
   }
-  function applyStatus(o,status){
-    if(!o) return o;
-    status=normalizeStatus(status);
-    o.status=status;
-    o.orderStatus=status;
-    o.documentStatus=status;
-    if(status === 'Bevestigd'){
-      o.folder='lopend'; o.map='lopend'; o.orderFolder='lopend';
-      o.confirmedAt=o.confirmedAt || new Date().toISOString();
-    } else if(status === 'Optie 14 dagen'){
-      o.folder='optie14'; o.map='optie14'; o.orderFolder='optie14';
-      o.optionCreatedAt=o.optionCreatedAt || new Date().toISOString().slice(0,10);
-    } else if(status === 'Offerte'){
-      o.folder='offerte'; o.map='offerte'; o.orderFolder='offerte';
-      // Bevestigd-historie mag blijven als audit, maar mag status niet meer bepalen.
-      o.status='Offerte'; o.orderStatus='Offerte'; o.documentStatus='Offerte';
-    } else if(status === 'Uitgevoerd'){
-      o.folder='uitgevoerd'; o.map='uitgevoerd'; o.orderFolder='uitgevoerd';
-    } else if(status === 'Geannuleerd'){
-      o.folder='geannuleerd'; o.map='geannuleerd'; o.orderFolder='geannuleerd';
+  function materialStatusFor(st){
+    var l=L(st);
+    if(/offerte|geann|annul|cancel|verwijder|deleted|trash|uitgevoerd|afgerond|done|klaar/.test(l)) return 'free';
+    return 'reserved';
+  }
+  function totals(){
+    try{ if(typeof calcLineTotals==='function') return calcLineTotals() || {}; }catch(e){}
+    try{ if(typeof calcTotals==='function') return calcTotals() || {}; }catch(e){}
+    return {materials:euroVal('materialsTotal')||euroVal('priceExcl'), deposit:euroVal('depositTotal')||euroVal('depositAmount'), vat:euroVal('vatTotal'), grand:euroVal('grandTotal')};
+  }
+  function liveTransport(){
+    try{ if(Array.isArray(window.__bns521TransportLines)) return clone(window.__bns521TransportLines); }catch(e){}
+    return [];
+  }
+  function prepareMaterials(st){
+    var ms=materialStatusFor(st);
+    return chosenList().map(function(m){ var x=clone(m); x.status=ms; if(x.qty==null) x.qty=1; return x; });
+  }
+  function setSelectStatus(st){
+    var sel=E('orderStatus'); if(!sel) return;
+    var wanted=canonicalStatus(st);
+    var found=false;
+    Array.prototype.slice.call(sel.options||[]).forEach(function(o){
+      if(canonicalStatus(o.value || o.textContent) === wanted){ sel.value=o.value; found=true; }
+    });
+    if(!found) sel.value=wanted;
+  }
+  function applyStatusFields(o, st){
+    st=canonicalStatus(st);
+    var folder=folderForStatus(st);
+    o.status=st;
+    o.orderStatus=st;
+    o.documentStatus=st;
+    o.statusText=st;
+    if(folder){
+      o.folder=folder;
+      o.map=folder;
+      o.orderFolder=folder;
+      o.archiefFolder=folder;
+      o.archiveFolder=folder;
     }
-    o.updatedAt = new Date().toISOString();
+    if(folder !== 'lopend'){
+      // Niet-lopend mag geen oude lopend/live map behouden.
+      if(L(o.folder)==='live') o.folder=folder;
+      if(L(o.map)==='live') o.map=folder;
+      if(L(o.orderFolder)==='live') o.orderFolder=folder;
+    }
+    if(folder === 'optie14' && !o.optionCreatedAt) o.optionCreatedAt = new Date().toISOString().slice(0,10);
+    if(folder === 'geannuleerd') o.cancelledAt = o.cancelledAt || new Date().toISOString();
+    if(folder === 'uitgevoerd') o.doneAt = o.doneAt || new Date().toISOString();
     return o;
   }
-  function persist(o){
-    try{ if(typeof save === 'function') save(); }catch(e){}
-    try{ localStorage.setItem(KEY, JSON.stringify(S())); }catch(e){}
-    try{ if(o && window.BNS && typeof window.BNS.syncOrder === 'function') window.BNS.syncOrder(o); }catch(e){}
-    try{ if(o && typeof syncDoc === 'function') syncDoc('orders', o.id, o); }catch(e){}
+  function findIndex(s, curId, curNum){
+    s.orders=s.orders||[];
+    var idx=-1;
+    if(curId) idx=s.orders.findIndex(function(o){ return T(o.id)===curId; });
+    if(idx<0 && curNum) idx=s.orders.findIndex(function(o){ return T(o.number)===curNum; });
+    return idx;
   }
-  function selectedStatus(){ var sel=E('orderStatus'); return normalizeStatus(sel && sel.value); }
-
-  window.__eppAmsV907WantedStatus = '';
-  function rememberStatusFromField(){
-    var sel=E('orderStatus');
-    if(!sel) return;
-    window.__eppAmsV907WantedStatus = normalizeStatus(sel.value);
-    // BNS527 gebruikte deze vlag; zet hem expliciet zodat opslaan de handmatige keuze respecteert.
-    window.__bns527StatusTouched = true;
+  function persist(s){
+    try{ localStorage.setItem(key(), JSON.stringify(s)); }catch(e){}
+    try{ if(typeof save==='function') save(); }catch(e){}
   }
-  ['change','input'].forEach(function(evName){
-    document.addEventListener(evName, function(ev){
-      if(ev.target && ev.target.id === 'orderStatus') rememberStatusFromField();
-    }, true);
-  });
-  document.addEventListener('click', function(ev){
-    var t=ev.target;
-    if(t && t.id === 'orderStatus') rememberStatusFromField();
-  }, true);
+  function sync(o){ try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){} }
+  function toast(msg){ try{ if(typeof toastMsg==='function') toastMsg(msg); else alert(msg); }catch(e){} }
 
-  function enforceCurrentSavedStatus(id,num,status){
-    var o=findOrder(id,num);
-    if(!o) return;
-    applyStatus(o,status);
-    persist(o);
-    try{ if(typeof renderOrders === 'function') renderOrders(); }catch(e){}
-    try{ if(typeof renderDashboard === 'function') renderDashboard(); }catch(e){}
-  }
-
-  function wrapSave(){
-    var old = window.saveCurrentOrder || (typeof saveCurrentOrder === 'function' ? saveCurrentOrder : null);
-    if(typeof old !== 'function' || old.__eppAmsV907Status) return;
-    var wrapped=function(){
-      var id=currentId();
-      var num=currentNumber();
-      var sel=E('orderStatus');
-      var wanted=normalizeStatus(window.__eppAmsV907WantedStatus || (sel && sel.value) || 'Offerte');
-      if(sel) sel.value=wanted;
-      window.__bns527StatusTouched = true;
-      var r=old.apply(this, arguments);
-      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 0);
-      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 120);
-      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 500);
-      window.__eppAmsV907WantedStatus='';
-      return r;
+  function saveV908(ev){
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation(); }
+    var s=S(); s.orders=s.orders||[];
+    var curId=editingId();
+    var curNum=T(E('orderNumber') && E('orderNumber').value);
+    var idx=findIndex(s, curId, curNum);
+    var old=idx>=0 ? s.orders[idx] : null;
+    var st=canonicalStatus(window.__BNS_V908_LAST_STATUS || selectedStatusRaw());
+    setSelectStatus(st);
+    var driver=T(E('orderDriver')&&E('orderDriver').value);
+    var tr=liveTransport();
+    var base={
+      id: old ? old.id : (curId || makeId()),
+      number: curNum,
+      title: T(E('orderTitle')&&E('orderTitle').value) || (old&&old.title) || 'Zonder titel',
+      start: T(E('dateStart')&&E('dateStart').value),
+      end: T(E('dateEnd')&&E('dateEnd').value) || T(E('dateStart')&&E('dateStart').value),
+      brand: T(E('orderBrand')&&E('orderBrand').value),
+      customer:{
+        name:T(E('customerName')&&E('customerName').value), street:T(E('customerStreet')&&E('customerStreet').value), zip:T(E('customerZip')&&E('customerZip').value), city:T(E('customerCity')&&E('customerCity').value), phone:T(E('customerPhone')&&E('customerPhone').value), email:T(E('customerEmail')&&E('customerEmail').value)
+      },
+      location:{
+        name:T(E('locationName')&&E('locationName').value), street:T(E('locationStreet')&&E('locationStreet').value), zip:T(E('locationZip')&&E('locationZip').value), city:T(E('locationCity')&&E('locationCity').value), contact:T(E('locationContact')&&E('locationContact').value), phone:T(E('locationPhone')&&E('locationPhone').value), show:E('showLocationOnDocs')?E('showLocationOnDocs').checked:true
+      },
+      materials: prepareMaterials(st),
+      transportLines: tr,
+      transportTotal: tr.reduce(function(sum,l){ return sum + (num(l.qty||1) * num(l.price || l.amount || l.total || 0)); },0),
+      driver:driver, driverName:driver, bezorger:driver,
+      vehicle: tr.map(function(l){return T(l.name);}).filter(Boolean).join(', ') || T(E('orderVehicle')&&E('orderVehicle').value),
+      extra:T(E('orderExtra')&&E('orderExtra').value),
+      pricing: totals(),
+      confirmationText:T(E('confirmationText')&&E('confirmationText').value),
+      updatedAt:new Date().toISOString()
     };
-    wrapped.__eppAmsV907Status=true;
-    window.saveCurrentOrder=wrapped;
-    try{ saveCurrentOrder=wrapped; }catch(e){}
+    applyStatusFields(base, st);
+    try{ if(window.BNS_v519PrepareOrderBeforeSave) window.BNS_v519PrepareOrderBeforeSave(base, old); }catch(e){}
+    // Na oude prepare opnieuw hard zetten, zodat oude folder/status guards niets terugzetten.
+    applyStatusFields(base, st);
+    var out = old ? Object.assign({}, old, base) : base;
+    applyStatusFields(out, st);
+    if(idx>=0) s.orders[idx]=out; else s.orders.push(out);
+    try{ if(typeof upsertCustomer==='function') upsertCustomer(out.customer); }catch(e){}
+    try{ if(typeof upsertLocation==='function') upsertLocation(out.location); }catch(e){}
+    try{ editing=null; }catch(e){} window.editing=''; window.__bnsEditingOrder=false;
+    persist(s); sync(out);
+    try{ if(typeof clearOrder==='function') clearOrder(); }catch(e){}
+    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+    try{ if(typeof showPage==='function') showPage('orders'); }catch(e){}
+    toast('Opdracht opgeslagen als '+st);
+    return false;
   }
 
-  function install(){ wrapSave(); }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(install,50); });
-  else setTimeout(install,50);
-  [250,900,1800].forEach(function(ms){ setTimeout(install,ms); });
-  try{ console.info('[EPP Amsterdam v907] Status terug naar Offerte bij wijzigen actief.'); }catch(e){}
+  function bindStatus(){
+    var sel=E('orderStatus');
+    if(!sel || sel.dataset.bnsV908Status==='1') return;
+    sel.dataset.bnsV908Status='1';
+    sel.addEventListener('change',function(){
+      window.__BNS_V908_LAST_STATUS=canonicalStatus(selectedStatusRaw());
+      setSelectStatus(window.__BNS_V908_LAST_STATUS);
+      try{ if(typeof summaryRender==='function') summaryRender(); }catch(e){}
+      try{ if(typeof renderMaterials==='function') renderMaterials(window.currentCat || 'TW'); }catch(e){}
+    },true);
+    sel.addEventListener('input',function(){ window.__BNS_V908_LAST_STATUS=canonicalStatus(selectedStatusRaw()); },true);
+  }
+  function bindSave(){
+    var old=E('saveOrder');
+    if(!old) return;
+    if(old.dataset.bnsV908Bound==='1') return;
+    var btn=old.cloneNode(true);
+    btn.dataset.bnsV908Bound='1';
+    old.parentNode.replaceChild(btn, old);
+    btn.addEventListener('click', saveV908, true);
+  }
+  function patchFolderFunction(){
+    if(window.BNS_v460FolderFromOrder && !window.BNS_v460FolderFromOrder.__bnsV908){
+      var oldFn=window.BNS_v460FolderFromOrder;
+      var fn=function(o){
+        var st=canonicalStatus(o && (o.status || o.orderStatus || o.documentStatus));
+        var folder=folderForStatus(st);
+        if(folder) return folder;
+        return oldFn.apply(this, arguments);
+      };
+      fn.__bnsV908=true;
+      window.BNS_v460FolderFromOrder=fn;
+    }
+  }
+  function install(){ bindStatus(); bindSave(); patchFolderFunction(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(install,250); }); else setTimeout(install,50);
+  document.addEventListener('click',function(ev){
+    var b=ev.target && ev.target.closest && ev.target.closest('button');
+    if(b && /wijzigen|nieuwe opdracht|opslaan/i.test(b.textContent||'')) setTimeout(install,80);
+  },true);
+  setTimeout(install,500); setTimeout(install,1500); setInterval(install,2500);
+  window.BNS_V908_SAVE_STATUS=saveV908;
 })();
