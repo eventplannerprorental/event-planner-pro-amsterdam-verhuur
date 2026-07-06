@@ -39124,7 +39124,15 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
           phone:fv('locationPhone')
         },
         materials:(function(){ try{ return window.chosen||chosen||[]; }catch(e){ return []; } })(),
-        transportLines:[]
+        // BNS v906 Amsterdam: nieuwe opdracht moet dezelfde live Bijzonderheden-regels gebruiken als na opslaan.
+        // Voorheen stond hier transportLines:[], daardoor zag het document wel materialen maar geen
+        // Bijzonderheden-prijsregels en bleef subtotaal bijzonderheden op € 0,00 tot na Opslaan.
+        transportLines:(function(){
+          try{
+            var arr = window.__bns521TransportLines || [];
+            return JSON.parse(JSON.stringify(Array.isArray(arr)?arr:[]));
+          }catch(e){ return []; }
+        })()
       };
     })();
     return openOrderDoc(formOrder, type);
@@ -47452,150 +47460,14 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function tick(){bind();load();}
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
   setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
-})();/* =========================================================
-   EPP AMSTERDAM v905 - Nieuwe opdracht: live Bijzonderheden in documenten
-   Probleem: bij NIEUWE opdracht bestaat er nog geen opgeslagen order.
-   Materiaal werkt live via chosen; vrije tekst Bijzonderheden moet ook live.
-   Deze patch grijpt in op window.open/document.write zodat ook about:blank
-   documenten de actuele tekst krijgen, ongeacht welke oude documentroute klikt.
+})();
+
+/* =========================================================
+   BNS v906 Amsterdam - GEEN nieuwe rubriek, alleen bestaande Bijzonderheden-regels live in documenten
+   - Laat de bestaande document-layout ongemoeid
+   - Gebruikt dezelfde window.__bns521TransportLines die na opslaan ook wordt opgeslagen als transportLines
+   - Lost op: Nieuwe opdracht > Documenten toonde materialen wel live, maar Bijzonderheden-prijsregels nog leeg
    ========================================================= */
 (function(){
-  'use strict';
-  if(window.__EPP_AMS_V905_LIVE_BIJZONDERHEDEN_DOCS__) return;
-  window.__EPP_AMS_V905_LIVE_BIJZONDERHEDEN_DOCS__ = true;
-
-  var lastExtra = '';
-  function T(v){ return String(v == null ? '' : v).trim(); }
-  function L(v){ return T(v).toLowerCase(); }
-  function H(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
-  function E(id){ return document.getElementById(id); }
-  function visible(el){
-    try{ var r=el.getBoundingClientRect(); var cs=getComputedStyle(el); return r.width>0 && r.height>0 && cs.display!=='none' && cs.visibility!=='hidden'; }catch(e){ return true; }
-  }
-  function valOf(el){
-    if(!el) return '';
-    if('value' in el) return T(el.value);
-    if(el.isContentEditable) return T(el.innerText || el.textContent);
-    return T(el.textContent);
-  }
-  function fieldScore(el){
-    var s=[el.id, el.name, el.placeholder, el.getAttribute&&el.getAttribute('aria-label'), el.title].map(T).join(' ').toLowerCase();
-    var parent='';
-    try{ parent=L((el.closest('label,.field,.form-row,.panel,.workpanel,section,div')||{}).innerText||''); }catch(e){}
-    var score=0;
-    if(/orderextra|bijzonder|opmerking|remark|notes|extra/.test(s)) score+=5;
-    if(/bijzonderheden/.test(parent)) score+=8;
-    if(/alleen tekst|vrije tekst|opmerkingen/.test(parent)) score+=4;
-    if(el.tagName && el.tagName.toLowerCase()==='textarea') score+=2;
-    if(visible(el)) score+=2;
-    return score;
-  }
-  function readExtra(){
-    var candidates=[];
-    ['orderExtra','extra','bijzonderheden','orderNotes','notes','remarks','opmerkingen'].forEach(function(id){ var el=E(id); if(el) candidates.push(el); });
-    try{ Array.prototype.slice.call(document.querySelectorAll('textarea,input[type="text"],input:not([type]),[contenteditable="true"]')).forEach(function(el){ if(fieldScore(el)>0) candidates.push(el); }); }catch(e){}
-    try{
-      Array.prototype.slice.call(document.querySelectorAll('label')).forEach(function(lab){
-        if(/bijzonderheden|opmerking|vrije tekst/i.test(lab.textContent||'')){
-          Array.prototype.slice.call(lab.querySelectorAll('textarea,input,[contenteditable="true"]')).forEach(function(el){ candidates.push(el); });
-        }
-      });
-    }catch(e){}
-    candidates.sort(function(a,b){ return fieldScore(b)-fieldScore(a); });
-    for(var i=0;i<candidates.length;i++){
-      var v=valOf(candidates[i]);
-      if(v){ lastExtra=v; return v; }
-    }
-    return lastExtra;
-  }
-  function refreshLast(){ readExtra(); }
-  ['input','change','keyup','blur','click'].forEach(function(ev){ document.addEventListener(ev, refreshLast, true); });
-  setInterval(refreshLast, 500);
-  setTimeout(refreshLast, 100);
-  setTimeout(refreshLast, 800);
-
-  function htmlHasExtra(html, extra){
-    html=String(html||''); extra=T(extra);
-    if(!extra) return true;
-    return html.indexOf(extra)>=0 || html.indexOf(H(extra))>=0;
-  }
-  function injectIntoHtml(html, extra){
-    html=String(html||''); extra=T(extra);
-    if(!extra || htmlHasExtra(html, extra)) return html;
-    var block='<div class="card epp-v905-bijzonderheden-live" style="white-space:pre-wrap;border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0"><b>Bijzonderheden</b><br>'+H(extra).replace(/\n/g,'<br>')+'</div>';
-    // 1) Documenten met <h3>Bijzonderheden</h3> maar zonder tekstkaart
-    if(/<h3[^>]*>\s*Bijzonderheden\s*<\/h3>/i.test(html)){
-      html=html.replace(/(<h3[^>]*>\s*Bijzonderheden\s*<\/h3>)(\s*(?:<div[^>]*>\s*<\/div>)?)/i, '$1'+block);
-      if(htmlHasExtra(html, extra)) return html;
-    }
-    // 2) Templates met tabelregel Bijzonderheden, maar lege cel
-    html=html.replace(/(<td[^>]*class=["'][^"']*label[^"']*["'][^>]*>\s*Bijzonderheden:\s*<\/td>\s*<td[^>]*>)(\s*<\/td>)/i, '$1'+H(extra).replace(/\n/g,'<br>')+'$2');
-    if(htmlHasExtra(html, extra)) return html;
-    // 3) Voor sluitende main/page/body toevoegen
-    if(/<\/main>/i.test(html)) return html.replace(/<\/main>/i, block+'</main>');
-    if(/<\/div>\s*<\/body>/i.test(html)) return html.replace(/<\/div>\s*<\/body>/i, block+'</div></body>');
-    if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, block+'</body>');
-    return html + block;
-  }
-  function injectIntoDoc(doc, extra){
-    try{
-      extra=T(extra||readExtra());
-      if(!extra || !doc || !doc.body) return;
-      var txt=doc.body.innerText || doc.body.textContent || '';
-      if(txt.indexOf(extra)>=0) return;
-      if(doc.getElementById('__eppAmsV905Extra')) return;
-      var div=doc.createElement('div');
-      div.id='__eppAmsV905Extra';
-      div.style.cssText='white-space:pre-wrap;border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0;font-family:Arial,Helvetica,sans-serif;';
-      div.innerHTML='<b>Bijzonderheden</b><br>'+H(extra).replace(/\n/g,'<br>');
-      var h3=null;
-      try{ Array.prototype.slice.call(doc.querySelectorAll('h3')).some(function(h){ if(/bijzonderheden/i.test(h.textContent||'')){ h3=h; return true; } return false; }); }catch(e){}
-      if(h3 && h3.parentNode) h3.parentNode.insertBefore(div, h3.nextSibling);
-      else doc.body.appendChild(div);
-    }catch(e){}
-  }
-
-  // Forceer nieuw-documentknoppen om eerst de live tekst te lezen, maar blokkeer oude routes niet.
-  document.addEventListener('click', function(ev){
-    var b=ev.target && ev.target.closest && ev.target.closest('button,a');
-    if(!b) return;
-    var t=L(b.textContent||b.value||'');
-    if(t.indexOf('factuur')>=0 || t.indexOf('opdracht')>=0 || t.indexOf('document')>=0 || t.indexOf('bevestiging')>=0) refreshLast();
-  }, true);
-
-  if(typeof window.open === 'function' && !window.open.__eppAmsV905){
-    var oldOpen=window.open;
-    var patchedOpen=function(){
-      refreshLast();
-      var extra=readExtra();
-      var w=oldOpen.apply(window, arguments);
-      try{
-        if(w && w.document && !w.document.__eppAmsV905Patched){
-          w.document.__eppAmsV905Patched=true;
-          var oldWrite=w.document.write.bind(w.document);
-          w.document.write=function(){
-            var args=Array.prototype.slice.call(arguments).map(function(part){
-              return typeof part==='string' ? injectIntoHtml(part, readExtra()||extra) : part;
-            });
-            return oldWrite.apply(w.document, args);
-          };
-          if(w.document.close){
-            var oldClose=w.document.close.bind(w.document);
-            w.document.close=function(){
-              var r=oldClose();
-              try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){}
-              return r;
-            };
-          }
-          setTimeout(function(){ try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){} },50);
-          setTimeout(function(){ try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){} },300);
-        }
-      }catch(e){}
-      return w;
-    };
-    patchedOpen.__eppAmsV905=true;
-    window.open=patchedOpen;
-  }
-
-  console.info('[EPP Amsterdam v905] Nieuwe opdracht: live Bijzonderheden wordt in document.write/about:blank documenten gezet.');
+  try{ console.info('[BNS v906] Live Bijzonderheden-regels in nieuwe-opdracht documenten actief.'); }catch(e){}
 })();
