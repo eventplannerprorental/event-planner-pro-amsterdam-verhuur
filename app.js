@@ -47632,3 +47632,156 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(function(){ rememberExtra(); },700);
   console.info('[AMS v902] Documenten gebruiken Bijzonderheden live uit orderExtra, net zoals materiaal live uit chosen wordt gebruikt.');
 })();
+
+/* ============================================================
+   AMSTERDAM v903 - about:blank document.write fix
+   Oorzaak: factuur/opdrachtdocument wordt als nieuwe about:blank pagina
+   geopend. Die pagina heeft een eigen document.write. Een patch op de
+   huidige pagina ziet de HTML dan soms niet. Deze patch haakt direct in
+   op het document van de nieuwe popup, VOORDAT de oude documentroute
+   document.write/html schrijft.
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__AMS_V903_ABOUT_BLANK_DOCWRITE__) return;
+  window.__AMS_V903_ABOUT_BLANK_DOCWRITE__ = true;
+
+  function E(id){ return document.getElementById(id); }
+  function T(v){ return String(v == null ? '' : v); }
+  function H(v){
+    return T(v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function liveExtra(){
+    var ids=['orderExtra','extra','bijzonderheden','orderNotes','notes'];
+    for(var i=0;i<ids.length;i++){
+      var el=E(ids[i]);
+      if(el && 'value' in el && T(el.value).trim()) return T(el.value).trim();
+    }
+    return T(window.__AMS_V903_LAST_EXTRA || window.__AMS_V902_LAST_EXTRA || '').trim();
+  }
+  function remember(){
+    var x=liveExtra();
+    if(x){ window.__AMS_V903_LAST_EXTRA=x; window.__AMS_V902_LAST_EXTRA=x; }
+    return x;
+  }
+  function blockHtml(x){
+    if(!x) return '';
+    return '<section id="__amsV903LiveBijzonderheden" style="margin:14px 0;padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#fff;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;color:#111827"><div style="font-size:11px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:5px">Bijzonderheden</div><div>'+H(x).replace(/\n/g,'<br>')+'</div></section>';
+  }
+  function htmlHasExtra(html,x){
+    if(!x || !html) return true;
+    var plain=T(html).replace(/<[^>]*>/g,' ');
+    return plain.indexOf(x) >= 0 || html.indexOf(H(x)) >= 0 || html.indexOf('__amsV903LiveBijzonderheden') >= 0 || html.indexOf('__amsV902LiveBijzonderheden') >= 0;
+  }
+  function injectHtml(html){
+    var x=remember();
+    if(!x || typeof html!=='string' || htmlHasExtra(html,x)) return html;
+    var b=blockHtml(x);
+    // Zet hem bij voorkeur in de document-pagina zelf, vlak voor bedragen/einde.
+    if(/<section[^>]*class=["'][^"']*card[^"']*["'][^>]*>\s*<div[^>]*class=["']label["'][^>]*>Bedragen/i.test(html)){
+      return html.replace(/<section[^>]*class=["'][^"']*card[^"']*["'][^>]*>\s*<div[^>]*class=["']label["'][^>]*>Bedragen/i, b + '$&');
+    }
+    if(/<h2[^>]*>\s*Totaal/i.test(html)) return html.replace(/<h2[^>]*>\s*Totaal/i, b + '$&');
+    if(/<\/main>/i.test(html)) return html.replace(/<\/main>/i,b+'</main>');
+    if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i,b+'</body>');
+    return html+b;
+  }
+  function injectDom(doc){
+    try{
+      var x=remember();
+      if(!x || !doc || !doc.body) return;
+      var t=doc.body.innerText || doc.body.textContent || '';
+      if(t.indexOf(x) >= 0) return;
+      if(doc.getElementById && (doc.getElementById('__amsV903LiveBijzonderheden') || doc.getElementById('__amsV902LiveBijzonderheden'))) return;
+      var holder=doc.querySelector('main .page, main, .page, body') || doc.body;
+      var div=doc.createElement('div');
+      div.innerHTML=blockHtml(x);
+      holder.appendChild(div.firstChild);
+    }catch(e){}
+  }
+  function patchDoc(doc){
+    try{
+      if(!doc || doc.__amsV903Patched) return;
+      doc.__amsV903Patched=true;
+      if(typeof doc.write==='function'){
+        var ow=doc.write.bind(doc);
+        doc.write=function(){
+          var args=Array.prototype.slice.call(arguments).map(function(a){ return typeof a==='string' ? injectHtml(a) : a; });
+          return ow.apply(doc,args);
+        };
+      }
+      if(typeof doc.writeln==='function'){
+        var owl=doc.writeln.bind(doc);
+        doc.writeln=function(){
+          var args=Array.prototype.slice.call(arguments).map(function(a){ return typeof a==='string' ? injectHtml(a) : a; });
+          return owl.apply(doc,args);
+        };
+      }
+      if(typeof doc.close==='function'){
+        var oc=doc.close.bind(doc);
+        doc.close=function(){
+          var r=oc.apply(doc,arguments);
+          setTimeout(function(){ injectDom(doc); },0);
+          setTimeout(function(){ injectDom(doc); },80);
+          return r;
+        };
+      }
+    }catch(e){}
+  }
+  function patchWindow(win){
+    try{
+      if(!win || !win.document) return;
+      patchDoc(win.document);
+      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },0);
+      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },120);
+      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },500);
+    }catch(e){}
+  }
+
+  // Live veld blijven onthouden.
+  document.addEventListener('input',function(ev){
+    var el=ev.target;
+    if(el && /^(orderExtra|extra|bijzonderheden|orderNotes|notes)$/i.test(el.id || el.name || '')) remember();
+  },true);
+  document.addEventListener('click',function(ev){
+    var b=ev.target && ev.target.closest && ev.target.closest('button,a,[onclick]');
+    if(!b) return;
+    var txt=T(b.textContent||b.value||b.title||b.getAttribute('onclick')||'').toLowerCase();
+    if(/factuur|opdrachtbevestiging|opdracht\s*document|document|offerte|print|mail/.test(txt)) remember();
+  },true);
+
+  // Belangrijkste fix: direct het nieuw geopende about:blank document patchen.
+  var oldOpen=window.open;
+  if(typeof oldOpen==='function' && !oldOpen.__amsV903){
+    var patchedOpen=function(){
+      remember();
+      var w=oldOpen.apply(window,arguments);
+      patchWindow(w);
+      return w;
+    };
+    patchedOpen.__amsV903=true;
+    window.open=patchedOpen;
+  }
+
+  // Fallback voor documentroutes die in dezelfde pagina HTML schrijven.
+  patchDoc(document);
+
+  // Nog een fallback: als de route een lokale docHtml/documentHtml/htmlFor functie gebruikt,
+  // vangt de popup-write hierboven hem alsnog af. Dit interval is alleen voor modals.
+  setInterval(function(){
+    remember();
+    var x=liveExtra();
+    if(!x) return;
+    document.querySelectorAll('#bns821OrderOverviewModal,.bns821-box,.bns653-doc,.tw-au-modal,.modal,[id*=Doc],[id*=Invoice],[id*=Confirm]').forEach(function(m){
+      try{
+        if(m && /factuur|opdracht|document|bijzonderheden/i.test(m.innerText||'') && (m.innerText||'').indexOf(x)<0 && !m.querySelector('#__amsV903LiveBijzonderheden')){
+          var tmp=document.createElement('div'); tmp.innerHTML=blockHtml(x); m.appendChild(tmp.firstChild);
+        }
+      }catch(e){}
+    });
+  },350);
+
+  try{ console.info('[AMS v903] about:blank document.write gepatcht: Bijzonderheden live in factuur/opdrachtdocument voor opslaan.'); }catch(e){}
+})();
