@@ -47887,3 +47887,130 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(function(){ scanAndRemember(); restoreMissing('controle'); install(); }, 2500);
   try{ console.info('[EPP Amsterdam v60] Bezorger blijft staan bij Offerte -> Bevestigen actief.'); }catch(e){}
 })();
+
+/* =========================================================
+   EPP Amsterdam v907 - Status terugzetten naar Offerte bij wijzigen
+   Basis: app(145).js / v906 werkend documenten-basis
+   Probleem: bij een opgeslagen bevestigde opdracht blijft folder/map soms 'lopend'.
+   Daardoor zet een latere guard de status weer terug naar Bevestigd.
+   Oplossing: bij handmatige statuswijziging is het dropdownveld leidend en worden
+   status + orderStatus + documentStatus + folder + map + orderFolder samen opgeslagen.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__EPP_AMS_V907_STATUS_BACK_TO_OFFERTE__) return;
+  window.__EPP_AMS_V907_STATUS_BACK_TO_OFFERTE__ = true;
+
+  var KEY = (typeof window.KEY !== 'undefined' && window.KEY) ? window.KEY : 'event-planner-pro-amsterdam-verhuur-v1';
+  function E(id){ return document.getElementById(id); }
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function S(){
+    try{ if(typeof state === 'object' && state) return state; }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(KEY) || '{}'); }catch(e){ return {}; }
+  }
+  function orders(){ var s=S(); s.orders=s.orders||[]; return s.orders; }
+  function currentId(){ try{ return T(window.editing || editing || ''); }catch(e){ return T(window.editing || ''); } }
+  function currentNumber(){ var n=E('orderNumber'); return T(n && n.value); }
+  function findOrder(id,num){
+    var list=orders();
+    if(id){ for(var i=0;i<list.length;i++){ if(T(list[i].id)===T(id)) return list[i]; } }
+    if(num){ for(var j=0;j<list.length;j++){ if(T(list[j].number)===T(num)) return list[j]; } }
+    return null;
+  }
+  function normalizeStatus(v){
+    var s=L(v);
+    if(/geann|annul|cancel|verwijderd|deleted|trash/.test(s)) return 'Geannuleerd';
+    if(/uitgevoerd|afgerond|done|klaar|afgemeld/.test(s)) return 'Uitgevoerd';
+    if(/optie\s*14|optie14/.test(s)) return 'Optie 14 dagen';
+    if(/bevestigd|opdrachtbevestiging|opdracht bevestigd|opdracht|actief|lopend/.test(s)) return 'Bevestigd';
+    if(/offerte|quote/.test(s)) return 'Offerte';
+    return T(v) || 'Offerte';
+  }
+  function applyStatus(o,status){
+    if(!o) return o;
+    status=normalizeStatus(status);
+    o.status=status;
+    o.orderStatus=status;
+    o.documentStatus=status;
+    if(status === 'Bevestigd'){
+      o.folder='lopend'; o.map='lopend'; o.orderFolder='lopend';
+      o.confirmedAt=o.confirmedAt || new Date().toISOString();
+    } else if(status === 'Optie 14 dagen'){
+      o.folder='optie14'; o.map='optie14'; o.orderFolder='optie14';
+      o.optionCreatedAt=o.optionCreatedAt || new Date().toISOString().slice(0,10);
+    } else if(status === 'Offerte'){
+      o.folder='offerte'; o.map='offerte'; o.orderFolder='offerte';
+      // Bevestigd-historie mag blijven als audit, maar mag status niet meer bepalen.
+      o.status='Offerte'; o.orderStatus='Offerte'; o.documentStatus='Offerte';
+    } else if(status === 'Uitgevoerd'){
+      o.folder='uitgevoerd'; o.map='uitgevoerd'; o.orderFolder='uitgevoerd';
+    } else if(status === 'Geannuleerd'){
+      o.folder='geannuleerd'; o.map='geannuleerd'; o.orderFolder='geannuleerd';
+    }
+    o.updatedAt = new Date().toISOString();
+    return o;
+  }
+  function persist(o){
+    try{ if(typeof save === 'function') save(); }catch(e){}
+    try{ localStorage.setItem(KEY, JSON.stringify(S())); }catch(e){}
+    try{ if(o && window.BNS && typeof window.BNS.syncOrder === 'function') window.BNS.syncOrder(o); }catch(e){}
+    try{ if(o && typeof syncDoc === 'function') syncDoc('orders', o.id, o); }catch(e){}
+  }
+  function selectedStatus(){ var sel=E('orderStatus'); return normalizeStatus(sel && sel.value); }
+
+  window.__eppAmsV907WantedStatus = '';
+  function rememberStatusFromField(){
+    var sel=E('orderStatus');
+    if(!sel) return;
+    window.__eppAmsV907WantedStatus = normalizeStatus(sel.value);
+    // BNS527 gebruikte deze vlag; zet hem expliciet zodat opslaan de handmatige keuze respecteert.
+    window.__bns527StatusTouched = true;
+  }
+  ['change','input'].forEach(function(evName){
+    document.addEventListener(evName, function(ev){
+      if(ev.target && ev.target.id === 'orderStatus') rememberStatusFromField();
+    }, true);
+  });
+  document.addEventListener('click', function(ev){
+    var t=ev.target;
+    if(t && t.id === 'orderStatus') rememberStatusFromField();
+  }, true);
+
+  function enforceCurrentSavedStatus(id,num,status){
+    var o=findOrder(id,num);
+    if(!o) return;
+    applyStatus(o,status);
+    persist(o);
+    try{ if(typeof renderOrders === 'function') renderOrders(); }catch(e){}
+    try{ if(typeof renderDashboard === 'function') renderDashboard(); }catch(e){}
+  }
+
+  function wrapSave(){
+    var old = window.saveCurrentOrder || (typeof saveCurrentOrder === 'function' ? saveCurrentOrder : null);
+    if(typeof old !== 'function' || old.__eppAmsV907Status) return;
+    var wrapped=function(){
+      var id=currentId();
+      var num=currentNumber();
+      var sel=E('orderStatus');
+      var wanted=normalizeStatus(window.__eppAmsV907WantedStatus || (sel && sel.value) || 'Offerte');
+      if(sel) sel.value=wanted;
+      window.__bns527StatusTouched = true;
+      var r=old.apply(this, arguments);
+      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 0);
+      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 120);
+      setTimeout(function(){ enforceCurrentSavedStatus(id,num,wanted); }, 500);
+      window.__eppAmsV907WantedStatus='';
+      return r;
+    };
+    wrapped.__eppAmsV907Status=true;
+    window.saveCurrentOrder=wrapped;
+    try{ saveCurrentOrder=wrapped; }catch(e){}
+  }
+
+  function install(){ wrapSave(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(install,50); });
+  else setTimeout(install,50);
+  [250,900,1800].forEach(function(ms){ setTimeout(install,ms); });
+  try{ console.info('[EPP Amsterdam v907] Status terug naar Offerte bij wijzigen actief.'); }catch(e){}
+})();
