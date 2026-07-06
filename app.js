@@ -47452,336 +47452,150 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function tick(){bind();load();}
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',tick); else tick();
   setTimeout(tick,800); setTimeout(tick,2500); setInterval(tick,10000);
-})();
-/* ============================================================
-   AMSTERDAM v902 - Documenten lezen Bijzonderheden live zoals materiaal
-   Probleem: materiaal werkt voor opslaan omdat documenten de live `chosen` lijst lezen.
-   Bijzonderheden viel in sommige oude documentroutes terug op de opgeslagen opdracht.
-   Oplossing: voor elke documentroute wordt orderExtra live opgehaald en in het
-   document gezet, zonder dat de opdracht eerst opgeslagen hoeft te worden.
-   ============================================================ */
+})();/* =========================================================
+   EPP AMSTERDAM v905 - Nieuwe opdracht: live Bijzonderheden in documenten
+   Probleem: bij NIEUWE opdracht bestaat er nog geen opgeslagen order.
+   Materiaal werkt live via chosen; vrije tekst Bijzonderheden moet ook live.
+   Deze patch grijpt in op window.open/document.write zodat ook about:blank
+   documenten de actuele tekst krijgen, ongeacht welke oude documentroute klikt.
+   ========================================================= */
 (function(){
   'use strict';
-  if(window.__AMS_V902_LIVE_EXTRA_DOCS__) return;
-  window.__AMS_V902_LIVE_EXTRA_DOCS__ = true;
+  if(window.__EPP_AMS_V905_LIVE_BIJZONDERHEDEN_DOCS__) return;
+  window.__EPP_AMS_V905_LIVE_BIJZONDERHEDEN_DOCS__ = true;
 
+  var lastExtra = '';
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function H(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function E(id){ return document.getElementById(id); }
-  function T(v){ return String(v == null ? '' : v); }
-  function H(v){ return T(v).replace(/[&<>\"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]; }); }
-  function getState(){ try{ if(typeof state !== 'undefined' && state) return state; }catch(e){} return window.state || null; }
-  function liveExtra(){
-    var ids = ['orderExtra','extra','bijzonderheden','notes'];
-    for(var i=0;i<ids.length;i++){
-      var el = E(ids[i]);
-      if(el && 'value' in el && T(el.value).trim()) return T(el.value).trim();
-    }
-    return T(window.__AMS_V902_LAST_EXTRA || '').trim();
+  function visible(el){
+    try{ var r=el.getBoundingClientRect(); var cs=getComputedStyle(el); return r.width>0 && r.height>0 && cs.display!=='none' && cs.visibility!=='hidden'; }catch(e){ return true; }
   }
-  function currentKey(){
-    var k = '';
-    try{ if(typeof editing !== 'undefined' && editing) k = T(editing); }catch(e){}
-    if(!k && window.editing) k = T(window.editing);
-    if(!k && E('orderNumber')) k = T(E('orderNumber').value);
-    return k;
+  function valOf(el){
+    if(!el) return '';
+    if('value' in el) return T(el.value);
+    if(el.isContentEditable) return T(el.innerText || el.textContent);
+    return T(el.textContent);
   }
-  function rememberExtra(){
-    var x = liveExtra();
-    if(x) window.__AMS_V902_LAST_EXTRA = x;
-    return x;
+  function fieldScore(el){
+    var s=[el.id, el.name, el.placeholder, el.getAttribute&&el.getAttribute('aria-label'), el.title].map(T).join(' ').toLowerCase();
+    var parent='';
+    try{ parent=L((el.closest('label,.field,.form-row,.panel,.workpanel,section,div')||{}).innerText||''); }catch(e){}
+    var score=0;
+    if(/orderextra|bijzonder|opmerking|remark|notes|extra/.test(s)) score+=5;
+    if(/bijzonderheden/.test(parent)) score+=8;
+    if(/alleen tekst|vrije tekst|opmerkingen/.test(parent)) score+=4;
+    if(el.tagName && el.tagName.toLowerCase()==='textarea') score+=2;
+    if(visible(el)) score+=2;
+    return score;
   }
-  function patchMemoryOrder(){
-    var x = rememberExtra();
-    if(!x) return;
-    var s = getState();
-    if(!s || !Array.isArray(s.orders)) return;
-    var key = currentKey();
-    var nr = E('orderNumber') ? T(E('orderNumber').value) : '';
-    s.orders.forEach(function(o){
-      if(!o) return;
-      var match = false;
-      if(key && (T(o.id)===key || T(o.number)===key || T(o.orderNumber)===key)) match = true;
-      if(nr && (T(o.number)===nr || T(o.orderNumber)===nr)) match = true;
-      if(match){
-        o.extra = x;
-        o.notes = x;
-        o.bijzonderheden = x;
-        o.__amsLiveExtraPreview = true;
-      }
-    });
-  }
-  function isDocClickTarget(el){
-    if(!el) return false;
-    var b = el.closest && el.closest('button,a,[onclick]');
-    if(!b) return false;
-    var txt = T(b.textContent || b.value || b.getAttribute('aria-label') || b.title || b.getAttribute('onclick') || '').toLowerCase();
-    return /factuur|opdracht\s*document|opdrachtbevestiging|document|offerte|overzicht bestelling|maak/.test(txt);
-  }
-  function extraBlock(doc, x){
-    var d = doc || document;
-    var sec = d.createElement('section');
-    sec.id = '__amsV902LiveBijzonderheden';
-    sec.style.cssText = 'margin:14px 0;padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#fff;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;color:#111827';
-    sec.innerHTML = '<b>Bijzonderheden</b><br>' + H(x).replace(/\n/g,'<br>');
-    return sec;
-  }
-  function injectIntoDoc(doc){
+  function readExtra(){
+    var candidates=[];
+    ['orderExtra','extra','bijzonderheden','orderNotes','notes','remarks','opmerkingen'].forEach(function(id){ var el=E(id); if(el) candidates.push(el); });
+    try{ Array.prototype.slice.call(document.querySelectorAll('textarea,input[type="text"],input:not([type]),[contenteditable="true"]')).forEach(function(el){ if(fieldScore(el)>0) candidates.push(el); }); }catch(e){}
     try{
-      var x = rememberExtra();
-      if(!x || !doc || !doc.body) return;
-      var text = doc.body.innerText || doc.body.textContent || '';
-      if(text.indexOf(x) >= 0) return;
-      if(doc.getElementById && doc.getElementById('__amsV902LiveBijzonderheden')) return;
-      var target = doc.querySelector('main .page, main, .page, body') || doc.body;
-      target.appendChild(extraBlock(doc,x));
+      Array.prototype.slice.call(document.querySelectorAll('label')).forEach(function(lab){
+        if(/bijzonderheden|opmerking|vrije tekst/i.test(lab.textContent||'')){
+          Array.prototype.slice.call(lab.querySelectorAll('textarea,input,[contenteditable="true"]')).forEach(function(el){ candidates.push(el); });
+        }
+      });
     }catch(e){}
+    candidates.sort(function(a,b){ return fieldScore(b)-fieldScore(a); });
+    for(var i=0;i<candidates.length;i++){
+      var v=valOf(candidates[i]);
+      if(v){ lastExtra=v; return v; }
+    }
+    return lastExtra;
   }
-  function injectIntoHtml(html){
-    var x = rememberExtra();
-    if(!x || !html || typeof html !== 'string') return html;
-    if(html.indexOf(x) >= 0) return html;
-    var safe = H(x).replace(/\n/g,'<br>');
-    html = html.replace(/\{\{\s*bijzonderheden\s*\}\}/ig, safe);
-    html = html.replace(/\{\{\s*extra\s*\}\}/ig, safe);
-    if(html.indexOf(x) >= 0 || html.indexOf(safe) >= 0) return html;
-    var block = '<section id="__amsV902LiveBijzonderheden" style="margin:14px 0;padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#fff;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;color:#111827"><b>Bijzonderheden</b><br>'+safe+'</section>';
-    if(/<\/main>/i.test(html)) return html.replace(/<\/main>/i, block + '</main>');
-    if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, block + '</body>');
+  function refreshLast(){ readExtra(); }
+  ['input','change','keyup','blur','click'].forEach(function(ev){ document.addEventListener(ev, refreshLast, true); });
+  setInterval(refreshLast, 500);
+  setTimeout(refreshLast, 100);
+  setTimeout(refreshLast, 800);
+
+  function htmlHasExtra(html, extra){
+    html=String(html||''); extra=T(extra);
+    if(!extra) return true;
+    return html.indexOf(extra)>=0 || html.indexOf(H(extra))>=0;
+  }
+  function injectIntoHtml(html, extra){
+    html=String(html||''); extra=T(extra);
+    if(!extra || htmlHasExtra(html, extra)) return html;
+    var block='<div class="card epp-v905-bijzonderheden-live" style="white-space:pre-wrap;border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0"><b>Bijzonderheden</b><br>'+H(extra).replace(/\n/g,'<br>')+'</div>';
+    // 1) Documenten met <h3>Bijzonderheden</h3> maar zonder tekstkaart
+    if(/<h3[^>]*>\s*Bijzonderheden\s*<\/h3>/i.test(html)){
+      html=html.replace(/(<h3[^>]*>\s*Bijzonderheden\s*<\/h3>)(\s*(?:<div[^>]*>\s*<\/div>)?)/i, '$1'+block);
+      if(htmlHasExtra(html, extra)) return html;
+    }
+    // 2) Templates met tabelregel Bijzonderheden, maar lege cel
+    html=html.replace(/(<td[^>]*class=["'][^"']*label[^"']*["'][^>]*>\s*Bijzonderheden:\s*<\/td>\s*<td[^>]*>)(\s*<\/td>)/i, '$1'+H(extra).replace(/\n/g,'<br>')+'$2');
+    if(htmlHasExtra(html, extra)) return html;
+    // 3) Voor sluitende main/page/body toevoegen
+    if(/<\/main>/i.test(html)) return html.replace(/<\/main>/i, block+'</main>');
+    if(/<\/div>\s*<\/body>/i.test(html)) return html.replace(/<\/div>\s*<\/body>/i, block+'</div></body>');
+    if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i, block+'</body>');
     return html + block;
   }
-
-  // 1) Houd het tekstveld live bij, net zoals materiaal live in `chosen` staat.
-  document.addEventListener('input', function(ev){
-    var el = ev.target;
-    if(el && (el.id==='orderExtra' || el.name==='extra' || el.name==='bijzonderheden')) rememberExtra();
-  }, true);
-
-  // 2) Vlak voor documentknoppen klikken: schrijf live extra in geheugen, niet als definitieve save.
-  document.addEventListener('click', function(ev){
-    if(isDocClickTarget(ev.target)){
-      rememberExtra();
-      patchMemoryOrder();
-      setTimeout(function(){
-        injectIntoDoc(document);
-        document.querySelectorAll('#bns821OrderOverviewModal,.bns821-box,.bns653-doc,.tw-au-modal,.modal').forEach(function(m){
-          try{ if(m.innerText.indexOf(window.__AMS_V902_LAST_EXTRA) < 0) m.appendChild(extraBlock(document, window.__AMS_V902_LAST_EXTRA)); }catch(e){}
-        });
-      },120);
-    }
-  }, true);
-
-  // 3) Pop-up documenten: pas HTML aan voordat het venster sluit/schrijft.
-  try{
-    if(!Document.prototype.__amsV902WritePatched){
-      Document.prototype.__amsV902WritePatched = true;
-      var oldWrite = Document.prototype.write;
-      Document.prototype.write = function(){
-        var args = Array.prototype.slice.call(arguments).map(function(a){ return typeof a === 'string' ? injectIntoHtml(a) : a; });
-        return oldWrite.apply(this,args);
-      };
-      var oldWriteln = Document.prototype.writeln;
-      if(oldWriteln){
-        Document.prototype.writeln = function(){
-          var args = Array.prototype.slice.call(arguments).map(function(a){ return typeof a === 'string' ? injectIntoHtml(a) : a; });
-          return oldWriteln.apply(this,args);
-        };
-      }
-    }
-  }catch(e){}
-
-  try{
-    if(!window.__amsV902OpenPatched){
-      window.__amsV902OpenPatched = true;
-      var oldOpen = window.open;
-      window.open = function(){
-        rememberExtra();
-        patchMemoryOrder();
-        var w = oldOpen.apply(window, arguments);
-        try{
-          if(w && w.document){
-            var odc = w.document.close && w.document.close.bind(w.document);
-            if(odc && !w.document.__amsV902ClosePatched){
-              w.document.__amsV902ClosePatched = true;
-              w.document.close = function(){ var r = odc(); setTimeout(function(){ injectIntoDoc(w.document); },0); return r; };
-            }
-            setTimeout(function(){ injectIntoDoc(w.document); },80);
-            setTimeout(function(){ injectIntoDoc(w.document); },300);
-          }
-        }catch(e){}
-        return w;
-      };
-    }
-  }catch(e){}
-
-  // 4) Modals/overlays die niet via window.open gaan.
-  try{
-    var mo = new MutationObserver(function(){
-      var x = rememberExtra();
-      if(!x) return;
-      patchMemoryOrder();
-      document.querySelectorAll('#bns821OrderOverviewModal,.bns821-box,.bns653-doc,.tw-au-modal,.modal,[id*=Doc],[id*=Invoice],[id*=Confirm]').forEach(function(m){
-        try{
-          if(m && m.innerText && /factuur|opdracht|document|bijzonderheden/i.test(m.innerText) && m.innerText.indexOf(x) < 0 && !m.querySelector('#__amsV902LiveBijzonderheden')){
-            m.appendChild(extraBlock(document,x));
-          }
-        }catch(e){}
-      });
-    });
-    if(document.body) mo.observe(document.body,{childList:true,subtree:true});
-  }catch(e){}
-
-  setInterval(function(){ rememberExtra(); },700);
-  console.info('[AMS v902] Documenten gebruiken Bijzonderheden live uit orderExtra, net zoals materiaal live uit chosen wordt gebruikt.');
-})();
-
-/* ============================================================
-   AMSTERDAM v903 - about:blank document.write fix
-   Oorzaak: factuur/opdrachtdocument wordt als nieuwe about:blank pagina
-   geopend. Die pagina heeft een eigen document.write. Een patch op de
-   huidige pagina ziet de HTML dan soms niet. Deze patch haakt direct in
-   op het document van de nieuwe popup, VOORDAT de oude documentroute
-   document.write/html schrijft.
-   ============================================================ */
-(function(){
-  'use strict';
-  if(window.__AMS_V903_ABOUT_BLANK_DOCWRITE__) return;
-  window.__AMS_V903_ABOUT_BLANK_DOCWRITE__ = true;
-
-  function E(id){ return document.getElementById(id); }
-  function T(v){ return String(v == null ? '' : v); }
-  function H(v){
-    return T(v).replace(/[&<>"']/g,function(c){
-      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
-    });
-  }
-  function liveExtra(){
-    var ids=['orderExtra','extra','bijzonderheden','orderNotes','notes'];
-    for(var i=0;i<ids.length;i++){
-      var el=E(ids[i]);
-      if(el && 'value' in el && T(el.value).trim()) return T(el.value).trim();
-    }
-    return T(window.__AMS_V903_LAST_EXTRA || window.__AMS_V902_LAST_EXTRA || '').trim();
-  }
-  function remember(){
-    var x=liveExtra();
-    if(x){ window.__AMS_V903_LAST_EXTRA=x; window.__AMS_V902_LAST_EXTRA=x; }
-    return x;
-  }
-  function blockHtml(x){
-    if(!x) return '';
-    return '<section id="__amsV903LiveBijzonderheden" style="margin:14px 0;padding:12px;border:1px solid #dbe3ef;border-radius:12px;background:#fff;white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;color:#111827"><div style="font-size:11px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:5px">Bijzonderheden</div><div>'+H(x).replace(/\n/g,'<br>')+'</div></section>';
-  }
-  function htmlHasExtra(html,x){
-    if(!x || !html) return true;
-    var plain=T(html).replace(/<[^>]*>/g,' ');
-    return plain.indexOf(x) >= 0 || html.indexOf(H(x)) >= 0 || html.indexOf('__amsV903LiveBijzonderheden') >= 0 || html.indexOf('__amsV902LiveBijzonderheden') >= 0;
-  }
-  function injectHtml(html){
-    var x=remember();
-    if(!x || typeof html!=='string' || htmlHasExtra(html,x)) return html;
-    var b=blockHtml(x);
-    // Zet hem bij voorkeur in de document-pagina zelf, vlak voor bedragen/einde.
-    if(/<section[^>]*class=["'][^"']*card[^"']*["'][^>]*>\s*<div[^>]*class=["']label["'][^>]*>Bedragen/i.test(html)){
-      return html.replace(/<section[^>]*class=["'][^"']*card[^"']*["'][^>]*>\s*<div[^>]*class=["']label["'][^>]*>Bedragen/i, b + '$&');
-    }
-    if(/<h2[^>]*>\s*Totaal/i.test(html)) return html.replace(/<h2[^>]*>\s*Totaal/i, b + '$&');
-    if(/<\/main>/i.test(html)) return html.replace(/<\/main>/i,b+'</main>');
-    if(/<\/body>/i.test(html)) return html.replace(/<\/body>/i,b+'</body>');
-    return html+b;
-  }
-  function injectDom(doc){
+  function injectIntoDoc(doc, extra){
     try{
-      var x=remember();
-      if(!x || !doc || !doc.body) return;
-      var t=doc.body.innerText || doc.body.textContent || '';
-      if(t.indexOf(x) >= 0) return;
-      if(doc.getElementById && (doc.getElementById('__amsV903LiveBijzonderheden') || doc.getElementById('__amsV902LiveBijzonderheden'))) return;
-      var holder=doc.querySelector('main .page, main, .page, body') || doc.body;
+      extra=T(extra||readExtra());
+      if(!extra || !doc || !doc.body) return;
+      var txt=doc.body.innerText || doc.body.textContent || '';
+      if(txt.indexOf(extra)>=0) return;
+      if(doc.getElementById('__eppAmsV905Extra')) return;
       var div=doc.createElement('div');
-      div.innerHTML=blockHtml(x);
-      holder.appendChild(div.firstChild);
-    }catch(e){}
-  }
-  function patchDoc(doc){
-    try{
-      if(!doc || doc.__amsV903Patched) return;
-      doc.__amsV903Patched=true;
-      if(typeof doc.write==='function'){
-        var ow=doc.write.bind(doc);
-        doc.write=function(){
-          var args=Array.prototype.slice.call(arguments).map(function(a){ return typeof a==='string' ? injectHtml(a) : a; });
-          return ow.apply(doc,args);
-        };
-      }
-      if(typeof doc.writeln==='function'){
-        var owl=doc.writeln.bind(doc);
-        doc.writeln=function(){
-          var args=Array.prototype.slice.call(arguments).map(function(a){ return typeof a==='string' ? injectHtml(a) : a; });
-          return owl.apply(doc,args);
-        };
-      }
-      if(typeof doc.close==='function'){
-        var oc=doc.close.bind(doc);
-        doc.close=function(){
-          var r=oc.apply(doc,arguments);
-          setTimeout(function(){ injectDom(doc); },0);
-          setTimeout(function(){ injectDom(doc); },80);
-          return r;
-        };
-      }
-    }catch(e){}
-  }
-  function patchWindow(win){
-    try{
-      if(!win || !win.document) return;
-      patchDoc(win.document);
-      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },0);
-      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },120);
-      setTimeout(function(){ patchDoc(win.document); injectDom(win.document); },500);
+      div.id='__eppAmsV905Extra';
+      div.style.cssText='white-space:pre-wrap;border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0;font-family:Arial,Helvetica,sans-serif;';
+      div.innerHTML='<b>Bijzonderheden</b><br>'+H(extra).replace(/\n/g,'<br>');
+      var h3=null;
+      try{ Array.prototype.slice.call(doc.querySelectorAll('h3')).some(function(h){ if(/bijzonderheden/i.test(h.textContent||'')){ h3=h; return true; } return false; }); }catch(e){}
+      if(h3 && h3.parentNode) h3.parentNode.insertBefore(div, h3.nextSibling);
+      else doc.body.appendChild(div);
     }catch(e){}
   }
 
-  // Live veld blijven onthouden.
-  document.addEventListener('input',function(ev){
-    var el=ev.target;
-    if(el && /^(orderExtra|extra|bijzonderheden|orderNotes|notes)$/i.test(el.id || el.name || '')) remember();
-  },true);
-  document.addEventListener('click',function(ev){
-    var b=ev.target && ev.target.closest && ev.target.closest('button,a,[onclick]');
+  // Forceer nieuw-documentknoppen om eerst de live tekst te lezen, maar blokkeer oude routes niet.
+  document.addEventListener('click', function(ev){
+    var b=ev.target && ev.target.closest && ev.target.closest('button,a');
     if(!b) return;
-    var txt=T(b.textContent||b.value||b.title||b.getAttribute('onclick')||'').toLowerCase();
-    if(/factuur|opdrachtbevestiging|opdracht\s*document|document|offerte|print|mail/.test(txt)) remember();
-  },true);
+    var t=L(b.textContent||b.value||'');
+    if(t.indexOf('factuur')>=0 || t.indexOf('opdracht')>=0 || t.indexOf('document')>=0 || t.indexOf('bevestiging')>=0) refreshLast();
+  }, true);
 
-  // Belangrijkste fix: direct het nieuw geopende about:blank document patchen.
-  var oldOpen=window.open;
-  if(typeof oldOpen==='function' && !oldOpen.__amsV903){
+  if(typeof window.open === 'function' && !window.open.__eppAmsV905){
+    var oldOpen=window.open;
     var patchedOpen=function(){
-      remember();
-      var w=oldOpen.apply(window,arguments);
-      patchWindow(w);
+      refreshLast();
+      var extra=readExtra();
+      var w=oldOpen.apply(window, arguments);
+      try{
+        if(w && w.document && !w.document.__eppAmsV905Patched){
+          w.document.__eppAmsV905Patched=true;
+          var oldWrite=w.document.write.bind(w.document);
+          w.document.write=function(){
+            var args=Array.prototype.slice.call(arguments).map(function(part){
+              return typeof part==='string' ? injectIntoHtml(part, readExtra()||extra) : part;
+            });
+            return oldWrite.apply(w.document, args);
+          };
+          if(w.document.close){
+            var oldClose=w.document.close.bind(w.document);
+            w.document.close=function(){
+              var r=oldClose();
+              try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){}
+              return r;
+            };
+          }
+          setTimeout(function(){ try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){} },50);
+          setTimeout(function(){ try{ injectIntoDoc(w.document, readExtra()||extra); }catch(e){} },300);
+        }
+      }catch(e){}
       return w;
     };
-    patchedOpen.__amsV903=true;
+    patchedOpen.__eppAmsV905=true;
     window.open=patchedOpen;
   }
 
-  // Fallback voor documentroutes die in dezelfde pagina HTML schrijven.
-  patchDoc(document);
-
-  // Nog een fallback: als de route een lokale docHtml/documentHtml/htmlFor functie gebruikt,
-  // vangt de popup-write hierboven hem alsnog af. Dit interval is alleen voor modals.
-  setInterval(function(){
-    remember();
-    var x=liveExtra();
-    if(!x) return;
-    document.querySelectorAll('#bns821OrderOverviewModal,.bns821-box,.bns653-doc,.tw-au-modal,.modal,[id*=Doc],[id*=Invoice],[id*=Confirm]').forEach(function(m){
-      try{
-        if(m && /factuur|opdracht|document|bijzonderheden/i.test(m.innerText||'') && (m.innerText||'').indexOf(x)<0 && !m.querySelector('#__amsV903LiveBijzonderheden')){
-          var tmp=document.createElement('div'); tmp.innerHTML=blockHtml(x); m.appendChild(tmp.firstChild);
-        }
-      }catch(e){}
-    });
-  },350);
-
-  try{ console.info('[AMS v903] about:blank document.write gepatcht: Bijzonderheden live in factuur/opdrachtdocument voor opslaan.'); }catch(e){}
+  console.info('[EPP Amsterdam v905] Nieuwe opdracht: live Bijzonderheden wordt in document.write/about:blank documenten gezet.');
 })();
