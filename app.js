@@ -13,7 +13,7 @@
   window.EPP_CUSTOMER_ID = cfg.customerId || 'amsterdam-verhuur';
   window.EPP_CUSTOMER_NAME = cfg.customerName || 'Amsterdam verhuur';
   window.EPP_USER_PIN = cfg.userPin || (cfg.pins && cfg.pins.user) || '3330';
-  window.EPP_MASTER_PIN = cfg.masterPin || (cfg.pins && cfg.pins.master) || String.fromCharCode(57,49,49,57);
+  window.EPP_MASTER_PIN = cfg.masterPin || (cfg.pins && cfg.pins.master) || '9119';
   window.EPP_REMOTE_ROOT = window.EPP_CUSTOMER_ID;
   window.BNS_FIREBASE_CONFIG = fb;
   window.FIREBASE_CONFIG = fb;
@@ -289,7 +289,7 @@ function ensure(){
   state.customers??=[];
   state.locations??=[];
   state.alerts??=[];
-  state.adminPin = String(window.EPP_MASTER_PIN || String.fromCharCode(57,49,49,57));
+  state.adminPin = String(window.EPP_MASTER_PIN || '9119');
   if(!state.users.some(function(u){ return String(u && u.pin) === String(window.EPP_USER_PIN || '3330'); })){
     state.users.push({id:'owner-amsterdam', name:'Beheerder', pin:String(window.EPP_USER_PIN || '3330'), role:'Admin', active:true, rights:{admin:true, planning:true, orders:true, materials:true}});
   }
@@ -1098,7 +1098,7 @@ setTimeout(()=>{
   const ua=document.getElementById('unlockAdmin');
   if(ua) ua.onclick=()=>{
     const pinVal=(document.getElementById('adminPin')?.value||'').trim();
-    if(pinVal === (state.adminPin || String.fromCharCode(57,49,49,57))){
+    if(pinVal === (state.adminPin || '9119')){
       document.getElementById('adminArea')?.classList.remove('hidden');
       alert('Admin beheer geopend');
     } else {
@@ -23159,7 +23159,7 @@ setTimeout(()=>{
     if(adminPinOk(p)) u=users().find(function(x){
       return L(x.role)==='admin';
     }) || {
-      id:'u_admin',name:'Admin',pin:(window.EPP_MASTER_PIN||String.fromCharCode(57,49,49,57)),role:'Admin',rights:{
+      id:'u_admin',name:'Admin',pin:(window.EPP_MASTER_PIN||'9119'),role:'Admin',rights:{
         prices:true,agenda:true,gps:true,resolve:true
       }
     };
@@ -46289,7 +46289,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return {
       version:'event-planner-pro-rental-v848-auto-pin',
       seq: Number(remote.seq || raw.seq || 1) || 1,
-      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || String.fromCharCode(57,49,49,57)) || String.fromCharCode(57,49,49,57),
+      adminPin: T(remote.adminPin || raw.adminPin || window.EPP_MASTER_PIN || '9119') || '9119',
       users: users,
       materials: materials,
       orders: orders,
@@ -46937,7 +46937,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    - Geen index wijziging
    - Schrijft users/orders hard naar customers/amsterdam-verhuur
    - Verwijdert handmatige oude Firebase-test users zodra sync slaagt
-   - Voorkomt dat bezorger PIN 3330/mastercode gebruikt en hoofdgebruiker overschrijft
+   - Voorkomt dat bezorger PIN 3330/9119 gebruikt en hoofdgebruiker overschrijft
    ============================================================ */
 (function(){
   'use strict';
@@ -47077,7 +47077,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var pin = T(pinEl && pinEl.value);
     var role = T(roleEl && roleEl.value) || 'Bezorger';
     if(name && pin && /^\d{4}$/.test(pin)){
-      if(!(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === String.fromCharCode(57,49,49,57)))){
+      if(!(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119'))){
         var existing = s.users.find(function(u){ return T(u.name).toLowerCase() === name.toLowerCase() || T(u.pin) === pin; });
         if(!existing){
           existing = {id:'user-' + safeKey(pin + '-' + name), rights:{}};
@@ -47164,7 +47164,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var role = T(roleEl && roleEl.value) || 'Bezorger';
     if(!name || !pin){ alert('Vul naam en PIN in.'); return false; }
     if(!/^\d{4}$/.test(pin)){ alert('PIN moet 4 cijfers zijn.'); return false; }
-    if(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === String.fromCharCode(57,49,49,57))){
+    if(role.toLowerCase()==='bezorger' && (pin === '3330' || pin === '9119')){
       alert('PIN ' + pin + ' is gereserveerd voor hoofd/admin. Kies voor bezorger een andere PIN, bijvoorbeeld 3331 of 1234.');
       return false;
     }
@@ -47887,236 +47887,127 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(function(){ scanAndRemember(); restoreMissing('controle'); install(); }, 2500);
   try{ console.info('[EPP Amsterdam v60] Bezorger blijft staan bij Offerte -> Bevestigen actief.'); }catch(e){}
 })();
-
-
-// ===== BNS V911: verborgen master code, geen zichtbare/beheerbare klantcode =====
-(function(){
+/* =========================================================
+   BNS DOCUMENT OUTPUT PATCH v1 - PDF opslaan + mail fallback
+   Doel: 1 generieke patch voor Tapwagen.nl, Amsterdam-verhuur en Rental.
+   Werkt zonder klantnamen, Firebase of storage keys.
+   Plak dit blok onderaan app.js of laad als laatste script in index.html.
+   ========================================================= */
+(function BNS_DOCUMENT_OUTPUT_PATCH_V1(){
   'use strict';
-  if(window.__BNS_V911_MASTER_CODE_ACCESS__) return;
-  window.__BNS_V911_MASTER_CODE_ACCESS__ = true;
+  if(window.__BNS_DOCUMENT_OUTPUT_PATCH_V1__) return;
+  window.__BNS_DOCUMENT_OUTPUT_PATCH_V1__ = true;
 
-  function masterCode(){ return String.fromCharCode(57,49,49,57); }
-  function E(id){ return document.getElementById(id); }
-  function T(v){ return String(v == null ? '' : v).trim(); }
-  function isMaster(v){ return T(v) === masterCode(); }
-  function getState(){ try{ return (typeof state !== 'undefined' && state) ? state : null; }catch(e){ return null; } }
-  function tell(t){ try{ if(typeof toastMsg === 'function') toastMsg(t); else alert(t); }catch(e){ alert(t); } }
-
-  function isAdminUser(u){
-    if(!u) return false;
-    var role = T(u.role).toLowerCase();
-    return role === 'admin' || role === 'beheerder' || !!(u.rights && u.rights.admin);
-  }
-
-  function customerAccessCode(pinValue){
-    var pin = T(pinValue);
-    if(!pin) return false;
-    if(isMaster(pin)) return true;
-    var s = getState() || {};
-    var codes = [];
-    try{ if(s.adminPin && !isMaster(s.adminPin)) codes.push(T(s.adminPin)); }catch(e){}
-    try{ if(s.settings && s.settings.adminPin && !isMaster(s.settings.adminPin)) codes.push(T(s.settings.adminPin)); }catch(e){}
-    try{ if(s.settings && s.settings.customerAdminPin && !isMaster(s.settings.customerAdminPin)) codes.push(T(s.settings.customerAdminPin)); }catch(e){}
-    try{ (s.users || []).forEach(function(u){ if(isAdminUser(u) && u.pin && !isMaster(u.pin)) codes.push(T(u.pin)); }); }catch(e){}
-    return codes.indexOf(pin) >= 0;
-  }
-
-  function normalizeState(){
-    var s = getState();
-    if(!s) return;
-    try{
-      if(isMaster(s.adminPin)) s.adminPin = '';
-      if(s.settings){
-        ['adminPin','masterPin','makerMasterPin','superPin','ownerPin'].forEach(function(k){ if(isMaster(s.settings[k])) s.settings[k] = ''; });
-      }
-      (s.users || []).forEach(function(u){
-        if(u && isMaster(u.pin)){
-          u.pin = '';
-          u.__masterCodeRemoved = true;
-        }
-      });
-    }catch(e){}
-  }
-
-  function saveSilent(){ try{ if(typeof save === 'function') save(); }catch(e){} }
-
-  function openAppAsMaster(){
-    try{
-      user = {id:'bns_master_access', name:'Beheerder', role:'Admin', active:true, rights:{admin:true, planning:true, orders:true, materials:true, finance:true, documents:true}};
-    }catch(e){
-      window.user = {id:'bns_master_access', name:'Beheerder', role:'Admin', active:true, rights:{admin:true, planning:true, orders:true, materials:true, finance:true, documents:true}};
-    }
-    window.__BNS_MASTER_ACCESS_GRANTED__ = true;
-    try{ pin = ''; }catch(e){}
-    var pinView = E('pinView');
-    if(pinView) pinView.textContent = '- - - -';
-    var login = E('login'), app = E('app');
-    if(login) login.classList.add('hidden');
-    if(app) app.classList.remove('hidden');
-    try{ document.querySelectorAll('.admin-only').forEach(function(x){ x.style.display = ''; }); }catch(e){}
-    try{ if(typeof showPage === 'function') showPage('dashboard'); }catch(e){}
-    setTimeout(scrubVisible, 0);
-  }
-
-  function patchLogin(){
-    try{
-      if(typeof doLogin === 'function' && !doLogin.__bnsV911){
-        var old = doLogin;
-        var wrapped = function(){
-          try{
-            if(isMaster(pin)){
-              normalizeState();
-              openAppAsMaster();
-              return;
-            }
-          }catch(e){}
-          return old.apply(this, arguments);
-        };
-        wrapped.__bnsV911 = true;
-        doLogin = wrapped;
-        window.doLogin = wrapped;
-        var ok = E('pinOk');
-        if(ok) ok.onclick = wrapped;
-      }
-    }catch(e){}
-  }
-
-  function patchAdminPanelAccess(){
-    var input = E('adminPin');
-    var btn = E('unlockAdmin');
-    var area = E('adminArea');
-    if(input){
-      try{ input.type = 'password'; input.autocomplete = 'off'; input.placeholder = 'Beheercode'; }catch(e){}
-    }
-    if(!btn) return;
-    var handler = function(ev){
-      var val = input ? input.value : '';
-      if(customerAccessCode(val)){
-        if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-        if(area) area.classList.remove('hidden');
-        if(input) input.value = '';
-        normalizeState();
-        saveSilent();
-        setTimeout(scrubVisible, 0);
-        return false;
-      }
-      if(isMaster(val)){
-        if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-        if(input) input.value = '';
-        tell('Verkeerde code');
-        return false;
-      }
-      return true;
-    };
-    if(btn.__bnsV911Access !== true){
-      btn.__bnsV911Access = true;
-      btn.addEventListener('click', handler, true);
-    }
-    btn.onclick = function(ev){
-      var val = input ? input.value : '';
-      if(customerAccessCode(val)){
-        if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-        if(area) area.classList.remove('hidden');
-        if(input) input.value = '';
-        normalizeState();
-        saveSilent();
-        setTimeout(scrubVisible, 0);
-        return false;
-      }
-      try{ tell('Verkeerde code'); }catch(e){}
-      if(input) input.value = '';
-      return false;
-    };
-  }
-
-  function scrubVisible(root){
-    var code = masterCode();
-    root = root || document;
-    try{
-      var walker = document.createTreeWalker(root.body || root, NodeFilter.SHOW_TEXT);
-      var nodes = [];
-      while(walker.nextNode()) nodes.push(walker.currentNode);
-      nodes.forEach(function(n){ if(n.nodeValue && n.nodeValue.indexOf(code) !== -1) n.nodeValue = n.nodeValue.split(code).join('••••'); });
-    }catch(e){}
-    try{
-      Array.prototype.forEach.call(root.querySelectorAll('input,textarea,option,[value],[data-pin],[title],[placeholder]'), function(el){
-        if(!el) return;
-        if(el.id === 'adminPin'){
-          try{ el.type='password'; el.autocomplete='off'; }catch(e){}
-          return; // niet wissen tijdens intypen; pas na succesvolle/onjuiste poging.
-        }
-        ['value','data-pin','title','placeholder'].forEach(function(a){
-          try{
-            var v = (a === 'value' && ('value' in el)) ? el.value : el.getAttribute(a);
-            if(v && String(v).indexOf(code) !== -1){
-              if(a === 'value' && ('value' in el)) el.value = '';
-              else el.setAttribute(a, String(v).split(code).join('••••'));
-            }
-          }catch(e){}
-        });
-      });
-    }catch(e){}
-  }
-
-  function sanitizeForExport(v, seen){
-    var code = masterCode();
-    seen = seen || [];
-    if(typeof v === 'string') return v.split(code).join('__MASTER_CODE_HIDDEN__');
-    if(!v || typeof v !== 'object') return v;
-    if(seen.indexOf(v) >= 0) return undefined;
-    seen.push(v);
-    if(Array.isArray(v)) return v.map(function(x){ return sanitizeForExport(x, seen); }).filter(function(x){ return x !== undefined; });
-    var out = {};
-    Object.keys(v).forEach(function(k){
-      if(/master|super|owner/i.test(k) && isMaster(v[k])) out[k] = '__MASTER_CODE_HIDDEN__';
-      else if(k === 'pin' && isMaster(v[k])) out[k] = '';
-      else out[k] = sanitizeForExport(v[k], seen);
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
     });
+  }
+  function safeName(v){
+    return String(v || 'document')
+      .replace(/[^a-z0-9\-_. ]/gi, '_')
+      .replace(/\s+/g, '_')
+      .slice(0,80) || 'document';
+  }
+  function b64utf8(s){
+    return btoa(unescape(encodeURIComponent(String(s || ''))));
+  }
+
+  var PATCH_CSS = ''+
+    '<style id="bnsDocumentOutputPatchCss">'+
+    '.bns-doc-toolbar{position:sticky;top:0;z-index:2147483647;background:#0f172a;color:#fff;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)}'+
+    '.bns-doc-toolbar button{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#2563eb;color:white;font-size:14px}'+
+    '.bns-doc-toolbar button.green{background:#16a34a}.bns-doc-toolbar button.orange{background:#f97316}.bns-doc-toolbar button.grey{background:#64748b}.bns-doc-toolbar button.red{background:#dc2626}'+
+    '.bns-doc-toolbar .hint{font-size:12px;opacity:.9;margin-left:auto}'+
+    'body>.actions:not(.bns-doc-toolbar){display:none!important}'+
+    '@media print{.bns-doc-toolbar,body>.actions{display:none!important}body{background:white!important}.page,main{box-shadow:none!important}}'+
+    '</style>';
+
+  var PATCH_SCRIPT = ''+
+    '<script id="bnsDocumentOutputPatchScript">(function(){'+
+    'if(window.__BNS_DOC_POPUP_HELPERS__)return;window.__BNS_DOC_POPUP_HELPERS__=true;'+
+    'function safeName(v){return String(v||"document").replace(/[^a-z0-9\\-_. ]/gi,"_").replace(/\\s+/g,"_").slice(0,80)||"document"}'+
+    'function cleanClone(){var c=document.documentElement.cloneNode(true);c.querySelectorAll(".bns-doc-toolbar,body>.actions,script#bnsDocumentOutputPatchScript,style#bnsDocumentOutputPatchCss").forEach(function(e){e.remove()});return c}'+
+    'function htmlBody(){var c=cleanClone();return "<!doctype html>\\n"+c.outerHTML}'+
+    'function textBody(){var c=cleanClone();return (c.querySelector("main,.page,body")||c).innerText||document.body.innerText||""}'+
+    'function downloadBlob(name,type,content){var blob=new Blob([content],{type:type});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)}'+
+    'function mailSubject(){return document.title||"Document"}'+
+    'window.bnsDocSavePdf=function(){alert("Kies in het printervenster bij Bestemming/Printer: Opslaan als PDF. Daarna kun je de PDF aan je e-mail toevoegen.");setTimeout(function(){try{window.print()}catch(e){alert("Printvenster kon niet openen: "+e.message)}},80)};'+
+    'window.bnsDocDownloadHtml=function(){downloadBlob(safeName(mailSubject())+".html","text/html;charset=utf-8",htmlBody())};'+
+    'window.bnsDocCopyText=function(){var t=textBody();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){alert("Documenttekst gekopieerd.")}).catch(function(){prompt("Kopieer de tekst:",t)})}else{prompt("Kopieer de tekst:",t)}};'+
+    'window.bnsDocDownloadEml=function(){var subj=mailSubject();var html=htmlBody();var eml="To: \\r\\nSubject: =?UTF-8?B?"+btoa(unescape(encodeURIComponent(subj)))+"?=\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/html; charset=UTF-8\\r\\nContent-Transfer-Encoding: 8bit\\r\\n\\r\\n"+html;downloadBlob(safeName(subj)+".eml","message/rfc822;charset=utf-8",eml);};'+
+    'window.bnsDocMail=function(){var subj=mailSubject();var txt=textBody();var url="mailto:?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(txt);if(url.length<1800){location.href=url}else{window.bnsDocDownloadEml();alert("De e-mailtekst is te groot voor mailto. Er is daarom een .eml mailbestand gedownload. Open dat bestand om te mailen, of gebruik Kopieer tekst.")}};'+
+    '})();<\/script>';
+
+  function toolbarHtml(){
+    return ''+
+      '<div class="actions bns-doc-toolbar" id="bnsDocumentToolbar">'+
+        '<button type="button" class="green" onclick="bnsDocSavePdf()">PDF opslaan</button>'+
+        '<button type="button" onclick="window.print()">Print</button>'+
+        '<button type="button" class="orange" onclick="bnsDocMail()">Mail</button>'+
+        '<button type="button" class="grey" onclick="bnsDocDownloadEml()">Download mailbestand</button>'+
+        '<button type="button" class="grey" onclick="bnsDocCopyText()">Kopieer tekst</button>'+
+        '<button type="button" class="grey" onclick="bnsDocDownloadHtml()">Download HTML</button>'+
+        '<button type="button" class="red" onclick="try{window.close()}catch(e){}">Sluiten</button>'+
+        '<span class="hint">Powered by Tapwagen.nl</span>'+
+      '</div>';
+  }
+
+  function injectIntoHtml(html){
+    html = String(html == null ? '' : html);
+    if(!html || html.indexOf('__BNS_DOC_POPUP_HELPERS__') >= 0 || html.indexOf('bnsDocumentToolbar') >= 0) return html;
+    var out = html;
+    if(/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, PATCH_CSS + PATCH_SCRIPT + '</head>');
+    else out = PATCH_CSS + PATCH_SCRIPT + out;
+    if(/<body([^>]*)>/i.test(out)) out = out.replace(/<body([^>]*)>/i, '<body$1>' + toolbarHtml());
+    else out = toolbarHtml() + out;
     return out;
   }
 
-  function patchBackup(){
-    var btn = E('backupBtn');
-    if(!btn) return;
-    btn.onclick = function(ev){
-      if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
-      normalizeState();
-      var clean = sanitizeForExport(getState() || {});
-      var blob = new Blob([JSON.stringify(clean, null, 2)], {type:'application/json'});
-      var a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'event-planner-pro-backup.json';
-      a.click();
-      setTimeout(function(){ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 1000);
-      return false;
+  function patchDocObject(doc){
+    if(!doc || doc.__bnsDocumentOutputPatched) return;
+    doc.__bnsDocumentOutputPatched = true;
+    var oldWrite = doc.write;
+    var oldWriteln = doc.writeln;
+    doc.write = function(){
+      var args = Array.prototype.slice.call(arguments).map(function(a){
+        var s = String(a == null ? '' : a);
+        if(/<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|Offerte|Opdracht/i.test(s)) return injectIntoHtml(s);
+        return a;
+      });
+      return oldWrite.apply(doc,args);
+    };
+    doc.writeln = function(){
+      var args = Array.prototype.slice.call(arguments).map(function(a){
+        var s = String(a == null ? '' : a);
+        if(/<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|Offerte|Opdracht/i.test(s)) return injectIntoHtml(s);
+        return a;
+      });
+      return oldWriteln.apply(doc,args);
     };
   }
 
-  function patchSave(){
+  var oldOpen = window.open;
+  window.open = function(){
+    var w = oldOpen.apply(window, arguments);
     try{
-      if(typeof save === 'function' && !save.__bnsV911){
-        var old = save;
-        var wrapped = function(){ normalizeState(); return old.apply(this, arguments); };
-        wrapped.__bnsV911 = true;
-        save = wrapped;
-        window.save = wrapped;
-      }
+      if(w && w.document) patchDocObject(w.document);
+    }catch(e){}
+    return w;
+  };
+
+  // Voor documenten die in dezelfde pagina of al geopende popup geladen worden.
+  function patchVisibleDocument(){
+    try{
+      if(!document.body || document.getElementById('bnsDocumentToolbar')) return;
+      var isDoc = /factuur|opdracht|offerte|opdrachtbevestiging/i.test(document.title || '') || document.querySelector('.page .doc-title, main.page, .invoice-preview');
+      if(!isDoc) return;
+      if(!document.getElementById('bnsDocumentOutputPatchCss')) document.head.insertAdjacentHTML('beforeend', PATCH_CSS + PATCH_SCRIPT);
+      document.body.insertAdjacentHTML('afterbegin', toolbarHtml());
     }catch(e){}
   }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', patchVisibleDocument);
+  else setTimeout(patchVisibleDocument, 50);
 
-  function run(){
-    normalizeState();
-    patchLogin();
-    patchAdminPanelAccess();
-    patchBackup();
-    patchSave();
-    scrubVisible();
-  }
-
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(run, 50); });
-  else setTimeout(run, 50);
-  setTimeout(run, 250);
-  setTimeout(run, 1000);
-  setInterval(run, 2000);
-  try{ new MutationObserver(function(){ scrubVisible(); patchAdminPanelAccess(); }).observe(document.documentElement, {childList:true, subtree:true, characterData:true}); }catch(e){}
+  console.info('[BNS document output patch v1] PDF/mail toolbar actief.');
 })();
