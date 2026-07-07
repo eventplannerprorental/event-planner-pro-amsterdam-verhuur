@@ -45680,7 +45680,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:da37eeebb0b3915ffa2407'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   });
 
   var app = null, auth = null, db = null, authMod = null, dbMod = null;
@@ -45869,7 +45869,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:da37eeebb0b3915ffa2407'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   });
 
   var app = null, auth = null, db = null, authMod = null, dbMod = null, ready = false;
@@ -46018,7 +46018,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:da37eeebb0b3915ffa2407'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   });
 
   var app=null, auth=null, db=null, authMod=null, dbMod=null;
@@ -46232,7 +46232,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:da37eeebb0b3915ffa2407'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   });
 
   var app=null, auth=null, db=null, authMod=null, dbMod=null;
@@ -46829,7 +46829,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     projectId: 'epp-amsterdam-verhuur',
     storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
     messagingSenderId: '484128911122',
-    appId: '1:484128911122:web:v43-driver-sync'
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
   };
 
   function getState(){ try{ return (typeof state !== 'undefined') ? state : (window.state || null); }catch(e){ return window.state || null; } }
@@ -49820,4 +49820,153 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     function bind(){ var el=document.getElementById(id); if(!el || el.dataset.bnsV921) return; el.dataset.bnsV921='1'; el.addEventListener('click',function(){setTimeout(function(){force('admin-'+id);},800);},true); }
     if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind); else bind(); setTimeout(bind,1200);
   });
+})();
+
+/* ============================================================
+   AMSTERDAM v922 - Firebase config cleanup + materialen zichtbaar
+   - Gebruikt 1 correcte Amsterdam Firebase config/appId.
+   - Exposeert herstel vanuit RTDB backups naar customers/amsterdam-verhuur/materials.
+   - Schrijft materialen ook naar appState/state/materials en backups/materials_latest.
+   - Gebruikt REST RTDB zodat dit niet afhankelijk is van Anonymous Auth.
+   ============================================================ */
+(function(){
+  'use strict';
+  if(window.__AMS_V922_CONFIG_MATERIALS__) return;
+  window.__AMS_V922_CONFIG_MATERIALS__ = true;
+
+  var CUSTOMER_ID = (window.EPP_CUSTOMER_ID || (window.EPP_CUSTOMER_CONFIG && window.EPP_CUSTOMER_CONFIG.customerId) || 'amsterdam-verhuur');
+  var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  try{
+    var cfg = (window.EPP_CUSTOMER_CONFIG && window.EPP_CUSTOMER_CONFIG.firebaseConfig) || window.BNS_FIREBASE_CONFIG || window.FIREBASE_CONFIG || window.firebaseConfig || {};
+    if(cfg && cfg.databaseURL) DB = String(cfg.databaseURL).replace(/\/$/, '');
+  }catch(e){}
+  var BASE = 'customers/' + CUSTOMER_ID;
+  var CORRECT_CFG = {
+    apiKey: 'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain: 'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL: DB,
+    projectId: 'epp-amsterdam-verhuur',
+    storageBucket: 'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId: '484128911122',
+    appId: '1:484128911122:web:b2ba741c7a0a2511054dcb'
+  };
+  try{
+    window.BNS_FIREBASE_CONFIG = Object.assign({}, CORRECT_CFG, window.BNS_FIREBASE_CONFIG||{});
+    window.FIREBASE_CONFIG = Object.assign({}, CORRECT_CFG, window.FIREBASE_CONFIG||{});
+    window.firebaseConfig = Object.assign({}, CORRECT_CFG, window.firebaseConfig||{});
+    if(window.EPP_CUSTOMER_CONFIG){
+      window.EPP_CUSTOMER_CONFIG.firebaseConfig = Object.assign({}, CORRECT_CFG, window.EPP_CUSTOMER_CONFIG.firebaseConfig||{});
+      delete window.EPP_CUSTOMER_CONFIG.masterPin;
+    }
+  }catch(e){}
+
+  function clone(x){ try{return JSON.parse(JSON.stringify(x));}catch(e){return x;} }
+  function arrFrom(v){
+    if(Array.isArray(v)) return v.filter(Boolean);
+    if(v && typeof v==='object') return Object.keys(v).map(function(k){ var m=v[k]; if(m && typeof m==='object' && !m.id) m.id=k; return m; }).filter(Boolean);
+    return [];
+  }
+  function isRealMaterial(m){
+    if(!m || typeof m!=='object') return false;
+    var s = [m.code,m.name,m.cat,m.rubriek,m.category,m.price,m.status].map(function(x){return String(x==null?'':x).trim();}).join('');
+    return !!s;
+  }
+  function normalizeMaterials(list){
+    var out=[], seen={};
+    arrFrom(list).forEach(function(m){
+      if(!isRealMaterial(m)) return;
+      var x=Object.assign({}, m);
+      x.id = String(x.id || x.code || ('mat_'+Date.now()+'_'+Math.random().toString(36).slice(2,7)));
+      var cat = String(x.cat || x.rubriek || x.category || '').trim().toUpperCase();
+      if(cat) x.cat = cat;
+      if(!x.rubriek && cat) x.rubriek = cat;
+      if(!x.category && cat) x.category = cat;
+      var key = (String(x.id)+'|'+String(x.code||'')+'|'+cat).toLowerCase();
+      if(seen[key]) return;
+      seen[key]=1;
+      out.push(x);
+    });
+    return out;
+  }
+  function localMaterials(){
+    var found=[];
+    try{ if(typeof state==='object' && state && Array.isArray(state.materials)) found=state.materials; }catch(e){}
+    if(!found.length){ try{ if(window.state && Array.isArray(window.state.materials)) found=window.state.materials; }catch(e){} }
+    try{
+      var raw = localStorage.getItem('event-planner-pro-amsterdam-verhuur-v1');
+      if(raw){
+        var obj=JSON.parse(raw);
+        if(obj && Array.isArray(obj.materials) && obj.materials.length>found.length) found=obj.materials;
+        if(obj && obj.items){
+          Object.keys(obj.items).forEach(function(k){
+            try{ var inner=JSON.parse(obj.items[k]); if(inner && Array.isArray(inner.materials) && inner.materials.length>found.length) found=inner.materials; }catch(e){}
+          });
+        }
+      }
+    }catch(e){}
+    return normalizeMaterials(found);
+  }
+  function getJson(path){ return fetch(DB+'/'+path+'.json?cb='+Date.now(), {cache:'no-store'}).then(function(r){return r.json();}); }
+  function putJson(path, data){
+    return fetch(DB+'/'+path+'.json', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)}).then(function(r){ if(!r.ok) throw new Error('RTDB PUT '+path+' HTTP '+r.status); return r.json(); });
+  }
+  async function findBestMaterials(){
+    var best = localMaterials();
+    var paths = [
+      BASE+'/materials',
+      BASE+'/backups/materials_latest',
+      BASE+'/backups/business_data_latest/materials',
+      BASE+'/appState/state/materials',
+      BASE+'/appState/materials',
+      CUSTOMER_ID+'/appState/state/materials',
+      CUSTOMER_ID+'/appState/materials'
+    ];
+    for(var i=0;i<paths.length;i++){
+      try{
+        var data = await getJson(paths[i]);
+        var arr = normalizeMaterials(data && data.materials ? data.materials : data);
+        if(arr.length > best.length) best = arr;
+      }catch(e){}
+    }
+    return best;
+  }
+  async function writeMaterials(list){
+    var mats = normalizeMaterials(list);
+    if(!mats.length){ console.warn('[BNS v922] Geen materialen gevonden om te schrijven.'); return {ok:false,count:0}; }
+    try{ if(typeof state==='object' && state){ state.materials=clone(mats); } }catch(e){}
+    try{ if(window.state){ window.state.materials=clone(mats); } }catch(e){}
+    try{ if(typeof save==='function') save(); }catch(e){}
+    await putJson(BASE+'/materials', mats);
+    await putJson(BASE+'/appState/state/materials', mats);
+    await putJson(BASE+'/backups/materials_latest', {savedAt:new Date().toISOString(), count:mats.length, materials:mats});
+    console.info('[BNS v922] Materialen zichtbaar geschreven naar '+BASE+'/materials:', mats.length);
+    return {ok:true,count:mats.length};
+  }
+  window.BNS922RebuildMaterialsNode = async function(){
+    var mats = await findBestMaterials();
+    return writeMaterials(mats);
+  };
+  window.BNS922FirebaseInfo = function(){
+    return {
+      customerId:CUSTOMER_ID,
+      databaseURL:DB,
+      base:BASE,
+      appId:(window.BNS_FIREBASE_CONFIG||{}).appId,
+      apiKey:(window.BNS_FIREBASE_CONFIG||{}).apiKey,
+      localMaterials:localMaterials().length,
+      hasCustomerConfig:!!window.EPP_CUSTOMER_CONFIG
+    };
+  };
+  function hookAdminSave(){
+    document.addEventListener('click', function(ev){
+      var t=ev.target; if(!t) return;
+      var txt=String((t.id||'')+' '+(t.textContent||'')).toLowerCase();
+      if(/adminsavemat|materiaal opgeslagen|opslaan materiaal|save.*mat/.test(txt)){
+        setTimeout(function(){ window.BNS922RebuildMaterialsNode().catch(function(e){console.warn('[BNS v922] materialen sync na admin save mislukt', e);}); }, 600);
+      }
+    }, true);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', hookAdminSave); else hookAdminSave();
+  setTimeout(function(){ window.BNS922RebuildMaterialsNode().catch(function(e){ console.warn('[BNS v922] auto rebuild overgeslagen:', e.message||e); }); }, 2500);
+  console.info('[BNS v922] Firebase config/materialen herstel actief. Gebruik BNS922RebuildMaterialsNode().');
 })();
