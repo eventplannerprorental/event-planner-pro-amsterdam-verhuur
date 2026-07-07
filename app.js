@@ -49538,3 +49538,286 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   else run();
   setTimeout(run, 1000);
 })();
+
+// ===== BNS v920: materialen zichtbaar in RTDB + statusvelden leegmaken =====
+// Doel:
+// - Materialen/rubrieken zichtbaar maken onder customers/<customerId>/materials
+// - Ook herstellen uit backups/materials_latest als de live state leeg is
+// - Oude materiaal-statusvelden leegmaken zodat master-materialen schoon blijven
+(function(){
+  if(window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__) return;
+  window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__ = true;
+
+  function cid(){
+    try{
+      return String(
+        window.EPP_CUSTOMER_ID ||
+        (window.EVENT_PLANNER_CUSTOMER && window.EVENT_PLANNER_CUSTOMER.customerId) ||
+        (window.EPP_CUSTOMER_CONFIG && window.EPP_CUSTOMER_CONFIG.customerId) ||
+        'amsterdam-verhuur'
+      ).trim() || 'amsterdam-verhuur';
+    }catch(e){ return 'amsterdam-verhuur'; }
+  }
+  function db(){ try{ if(window.firebase && firebase.database) return firebase.database(); }catch(e){} return null; }
+  function key(){ return window.BNS_RENTAL_STORAGE_KEY || window.EPP_STORAGE_KEY || ('event-planner-pro-' + cid() + '-v1'); }
+  function normCat(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
+  function clone(o){ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function arr(v){ return Array.isArray(v) ? v : []; }
+  function getLocalState(){
+    try{ if(typeof state === 'object' && state) return state; }catch(e){}
+    try{ if(window.state && typeof window.state === 'object') return window.state; }catch(e){}
+    try{ var raw = localStorage.getItem(key()); if(raw) return JSON.parse(raw); }catch(e){}
+    return {};
+  }
+  function statusLooksEmptyOrDefault(v){
+    var s = String(v == null ? '' : v).trim().toLowerCase();
+    return !s || s === 'free' || s === 'vrij' || s === 'beschikbaar' || s === 'available' || s === 'actief' || s === 'active';
+  }
+  function cleanMaterial(m){
+    if(!m || typeof m !== 'object') return null;
+    var x = Object.assign({}, m);
+    var cat = normCat(x.cat || x.rubriek || x.category);
+    var code = String(x.code || x.nr || x.number || x.productNr || '').trim();
+    var name = String(x.name || x.naam || x.description || x.omschrijving || '').trim();
+    if(!cat || (!code && !name)) return null;
+    x.cat = cat; x.rubriek = cat; x.category = cat;
+    if(!x.id){
+      x.id = [cat, code || name || Date.now()].join('_').toLowerCase().replace(/[^a-z0-9_]+/g,'_');
+    }
+    // Master-materialen moeten geen oude live-status vasthouden. Defect/inactief behouden we wel.
+    if(statusLooksEmptyOrDefault(x.status)) delete x.status;
+    if(statusLooksEmptyOrDefault(x.availability)) delete x.availability;
+    if(statusLooksEmptyOrDefault(x.state)) delete x.state;
+    return x;
+  }
+  function cleanMaterials(list){
+    var out = [], seen = {};
+    arr(list).forEach(function(m){
+      var x = cleanMaterial(m);
+      if(!x) return;
+      var id = String(x.id || '').trim() || ('mat_' + Math.random().toString(36).slice(2,10));
+      if(seen[id]) id = id + '_' + Math.random().toString(36).slice(2,6);
+      x.id = id;
+      seen[id] = true;
+      out.push(x);
+    });
+    return out;
+  }
+  function writeLocal(mats){
+    try{
+      var s = getLocalState();
+      s.materials = clone(mats);
+      s.updatedAt = s.updatedAt || new Date().toISOString();
+      try{ if(typeof state === 'object' && state) state.materials = clone(mats); }catch(e){}
+      try{ if(window.state && typeof window.state === 'object') window.state.materials = clone(mats); }catch(e){}
+      try{ localStorage.setItem(key(), JSON.stringify(s)); }catch(e){}
+    }catch(e){}
+  }
+  function readAllLocalMaterialCandidates(){
+    var lists = [];
+    try{ lists.push(getLocalState().materials); }catch(e){}
+    try{
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        var raw = localStorage.getItem(k);
+        if(!raw || raw.length < 20 || raw.indexOf('materials') < 0) continue;
+        try{
+          var o = JSON.parse(raw);
+          if(Array.isArray(o.materials)) lists.push(o.materials);
+          if(o.state && Array.isArray(o.state.materials)) lists.push(o.state.materials);
+          if(o.items && typeof o.items === 'object'){
+            Object.keys(o.items).forEach(function(ik){
+              try{ var io = JSON.parse(o.items[ik]); if(io && Array.isArray(io.materials)) lists.push(io.materials); }catch(x){}
+            });
+          }
+        }catch(e){}
+      }
+    }catch(e){}
+    var best = [];
+    lists.forEach(function(l){ var c = cleanMaterials(l); if(c.length > best.length) best = c; });
+    return best;
+  }
+  async function readRemoteCandidates(){
+    var d = db(); if(!d) return [];
+    var root = 'customers/' + cid();
+    var paths = [
+      root + '/materials',
+      root + '/appState/state/materials',
+      root + '/backups/materials_latest/materials',
+      root + '/backups/business_data_latest/materials'
+    ];
+    var best = [];
+    for(var i=0;i<paths.length;i++){
+      try{
+        var snap = await d.ref(paths[i]).once('value');
+        var val = snap.val();
+        var list = [];
+        if(Array.isArray(val)) list = val;
+        else if(val && Array.isArray(val.materials)) list = val.materials;
+        else if(val && typeof val === 'object') list = Object.keys(val).filter(function(k){ return k !== '_meta'; }).map(function(k){ return val[k]; });
+        var c = cleanMaterials(list);
+        if(c.length > best.length) best = c;
+      }catch(e){}
+    }
+    return best;
+  }
+  async function syncMaterials(reason){
+    var local = readAllLocalMaterialCandidates();
+    var remote = await readRemoteCandidates();
+    var mats = local.length >= remote.length ? local : remote;
+    mats = cleanMaterials(mats);
+    if(!mats.length){
+      try{ console.warn('[BNS v920] Geen materialen gevonden om zichtbaar te maken. Maak/sla eerst een materiaal op in Admin.'); }catch(e){}
+      return {ok:false, reason:'Geen materialen gevonden'};
+    }
+    writeLocal(mats);
+    var d = db(); if(!d) return {ok:false, reason:'Geen Firebase Realtime Database beschikbaar'};
+    var root = 'customers/' + cid();
+    var payload = {updatedAt:new Date().toISOString(), reason:reason || 'sync', count:mats.length, materials:mats};
+    try{
+      await d.ref(root + '/materials').set(mats);
+      await d.ref(root + '/appState/state/materials').set(mats);
+      await d.ref(root + '/backups/materials_latest').set(payload);
+      await d.ref(root + '/syncDebug/materials_v920_latest').set(payload);
+      try{ console.info('[BNS v920] Materialen zichtbaar gezet:', root + '/materials', mats.length); }catch(e){}
+      return {ok:true, count:mats.length, path:root + '/materials'};
+    }catch(e){
+      try{ console.warn('[BNS v920] Materialen sync mislukt', e); }catch(x){}
+      return {ok:false, reason:String(e && e.message || e)};
+    }
+  }
+  window.BNS920RebuildMaterialsNode = function(){
+    return syncMaterials('console-rebuild').then(function(res){
+      try{ alert(res.ok ? ('Materialen zichtbaar in Firebase: ' + res.count) : ('Materialen niet zichtbaar gemaakt: ' + res.reason)); }catch(e){}
+      return res;
+    });
+  };
+  window.BNS920ClearMaterialStatusFields = function(){
+    return syncMaterials('console-clear-status').then(function(res){
+      try{ alert(res.ok ? ('Materiaalstatus opgeschoond en gesynchroniseerd: ' + res.count) : ('Niet opgeschoond: ' + res.reason)); }catch(e){}
+      return res;
+    });
+  };
+  function hookAdmin(){
+    ['adminSaveMat','adminDeleteMat','adminNewMat'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el || el.dataset.bnsV920) return;
+      el.dataset.bnsV920 = '1';
+      el.addEventListener('click', function(){
+        setTimeout(function(){ syncMaterials('admin-' + id); }, 350);
+        setTimeout(function(){ syncMaterials('admin-' + id + '-late'); }, 1400);
+      }, true);
+    });
+  }
+  function run(){ hookAdmin(); setTimeout(function(){ syncMaterials('startup'); }, 3500); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  setTimeout(run, 1200);
+})();
+
+// ===== BNS v921: force materials visible + debug helpers =====
+(function(){
+  if(window.__BNS_V921_FORCE_MATERIALS_VISIBLE__) return;
+  window.__BNS_V921_FORCE_MATERIALS_VISIBLE__ = true;
+  console.info('[BNS v921] Materialen force-sync helpers actief');
+  function cid(){ try{return String(window.EPP_CUSTOMER_ID || (window.EVENT_PLANNER_CUSTOMER&&window.EVENT_PLANNER_CUSTOMER.customerId) || (window.EPP_CUSTOMER_CONFIG&&window.EPP_CUSTOMER_CONFIG.customerId) || 'amsterdam-verhuur').trim() || 'amsterdam-verhuur';}catch(e){return 'amsterdam-verhuur';} }
+  function key(){ return window.BNS_RENTAL_STORAGE_KEY || window.EPP_STORAGE_KEY || ('event-planner-pro-' + cid() + '-v1'); }
+  function db(){ try{ if(window.firebase && firebase.database) return firebase.database(); }catch(e){} return null; }
+  function clone(o){ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function normCat(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
+  function stateObj(){
+    try{ if(typeof state === 'object' && state) return state; }catch(e){}
+    try{ if(window.state && typeof window.state === 'object') return window.state; }catch(e){}
+    try{ var raw=localStorage.getItem(key()); if(raw) return JSON.parse(raw); }catch(e){}
+    return {};
+  }
+  function cleanMaterial(m){
+    if(!m || typeof m !== 'object') return null;
+    var x=Object.assign({},m);
+    var cat=normCat(x.cat || x.rubriek || x.category);
+    var code=String(x.code || x.nr || x.number || x.productNr || '').trim();
+    var name=String(x.name || x.naam || x.description || x.omschrijving || '').trim();
+    if(!cat || (!code && !name)) return null;
+    x.cat=cat; x.rubriek=cat; x.category=cat;
+    if(!x.id) x.id=(cat+'_'+(code||name||Date.now())).toLowerCase().replace(/[^a-z0-9_]+/g,'_');
+    ['status','availability','state'].forEach(function(k){
+      var s=String(x[k] == null ? '' : x[k]).trim().toLowerCase();
+      if(!s || s==='free' || s==='vrij' || s==='beschikbaar' || s==='available' || s==='actief' || s==='active') delete x[k];
+    });
+    return x;
+  }
+  function cleanMaterials(list){
+    var out=[], seen={};
+    (Array.isArray(list)?list:[]).forEach(function(m){
+      var x=cleanMaterial(m); if(!x) return;
+      var id=String(x.id||'').trim();
+      if(seen[id]) id=id+'_'+Math.random().toString(36).slice(2,6);
+      x.id=id; seen[id]=true; out.push(x);
+    });
+    out.sort(function(a,b){ return String(a.cat||'').localeCompare(String(b.cat||'')) || String(a.code||'').localeCompare(String(b.code||'')); });
+    return out;
+  }
+  function localCandidates(){
+    var s=stateObj(), lists=[];
+    if(Array.isArray(s.materials)) lists.push(s.materials);
+    if(s.state && Array.isArray(s.state.materials)) lists.push(s.state.materials);
+    if(window.INITIAL_STATE && Array.isArray(window.INITIAL_STATE.materials)) lists.push(window.INITIAL_STATE.materials);
+    try{ var raw=localStorage.getItem(key()); if(raw){ var j=JSON.parse(raw); if(Array.isArray(j.materials)) lists.push(j.materials); if(j.state&&Array.isArray(j.state.materials)) lists.push(j.state.materials); } }catch(e){}
+    var best=[]; lists.forEach(function(l){ var c=cleanMaterials(l); if(c.length>best.length) best=c; });
+    return best;
+  }
+  async function remoteCandidates(){
+    var d=db(); if(!d) return [];
+    var root='customers/'+cid();
+    var paths=[root+'/materials',root+'/appState/state/materials',root+'/backups/materials_latest/materials',root+'/backups/business_data_latest/materials'];
+    var best=[];
+    for(var i=0;i<paths.length;i++){
+      try{
+        var snap=await d.ref(paths[i]).once('value'); var val=snap.val(); var list=[];
+        if(Array.isArray(val)) list=val;
+        else if(val && Array.isArray(val.materials)) list=val.materials;
+        else if(val && typeof val==='object') list=Object.keys(val).filter(function(k){return k!=='_meta';}).map(function(k){return val[k];});
+        var c=cleanMaterials(list); if(c.length>best.length) best=c;
+      }catch(e){}
+    }
+    return best;
+  }
+  function writeLocal(mats){
+    try{ if(typeof state==='object' && state) state.materials=clone(mats); }catch(e){}
+    try{ if(window.state && typeof window.state==='object') window.state.materials=clone(mats); }catch(e){}
+    try{ var s=stateObj(); s.materials=clone(mats); localStorage.setItem(key(),JSON.stringify(s)); }catch(e){}
+  }
+  async function force(reason){
+    var local=localCandidates();
+    var remote=await remoteCandidates();
+    var mats=cleanMaterials(local.length>=remote.length ? local : remote);
+    if(!mats.length){
+      console.warn('[BNS v921] Geen materialen gevonden. Maak of sla eerst een materiaal op in Admin.');
+      return {ok:false, reason:'Geen materialen gevonden'};
+    }
+    writeLocal(mats);
+    var d=db(); if(!d) return {ok:false, reason:'Firebase database object niet beschikbaar'};
+    var root='customers/'+cid();
+    var payload={updatedAt:new Date().toISOString(), reason:reason||'force', count:mats.length, materials:mats};
+    try{
+      await d.ref(root+'/materials').set(mats);
+      await d.ref(root+'/appState/state/materials').set(mats);
+      await d.ref(root+'/backups/materials_latest').set(payload);
+      await d.ref(root+'/syncDebug/materials_v921_latest').set(payload);
+      console.info('[BNS v921] Materialen zichtbaar geschreven naar '+root+'/materials', mats.length);
+      return {ok:true, count:mats.length, path:root+'/materials'};
+    }catch(e){
+      console.error('[BNS v921] Schrijven naar Firebase mislukt', e);
+      return {ok:false, reason:String(e && e.message || e)};
+    }
+  }
+  window.BNS921ForceMaterialsToFirebase=function(){ return force('console-v921').then(function(r){ try{alert(r.ok?'Materialen zichtbaar in Firebase: '+r.count:'Materialen niet geschreven: '+r.reason);}catch(e){} return r; }); };
+  if(typeof window.BNS920RebuildMaterialsNode !== 'function') window.BNS920RebuildMaterialsNode = window.BNS921ForceMaterialsToFirebase;
+  window.BNS921FirebaseInfo=function(){
+    var info={customerId:cid(), storageKey:key(), hasFirebase:!!window.firebase, hasDatabase:!!db(), config:window.BNS_FIREBASE_CONFIG||window.FIREBASE_CONFIG||window.firebaseConfig||null};
+    console.log('[BNS v921 firebase info]', info); return info;
+  };
+  ['adminSaveMat','adminDeleteMat'].forEach(function(id){
+    function bind(){ var el=document.getElementById(id); if(!el || el.dataset.bnsV921) return; el.dataset.bnsV921='1'; el.addEventListener('click',function(){setTimeout(function(){force('admin-'+id);},800);},true); }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind); else bind(); setTimeout(bind,1200);
+  });
+})();
