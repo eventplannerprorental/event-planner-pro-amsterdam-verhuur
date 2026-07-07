@@ -48506,3 +48506,264 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   console.info('[BNS v914] verwijderde opdrachten tombstone-sync actief');
 })();
+
+/* =========================================================
+   BNS v915 - Materiaal/rubriek bescherming bij updates en Firebase sync
+   Doel:
+   - Admin aangemaakte materialen/rubrieken niet meer kwijt na F5/update.
+   - Firebase blijft leidend, maar lokale nieuwere/lange materialenlijst wordt
+     nooit stil overschreven door een oudere/kortere Firebase/localStorage lijst.
+   - Voor elke overschrijving wordt automatisch een materialen-backup gemaakt.
+   - Na admin materiaal wijziging wordt Firebase-save expliciet opnieuw aangeroepen.
+   ========================================================= */
+(function BNS915MaterialenUpdateSafety(){
+  if(window.__BNS915_MATERIALEN_UPDATE_SAFETY__) return;
+  window.__BNS915_MATERIALEN_UPDATE_SAFETY__ = true;
+
+  var KEY = (typeof window.EVENT_PLANNER_CONFIG==='object' && window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.storageKey) ||
+            (typeof KEY!=='undefined' ? KEY : 'event-planner-pro-amsterdam-verhuur-v1');
+  var BK_PREFIX = KEY + '::materials-backup::';
+  var BK_LATEST = BK_PREFIX + 'latest';
+  var BK_KEEP = 10;
+  var editUntil = 0;
+  var lastBackupSig = '';
+  var restoring = false;
+
+  function log(t){ try{ console.info('[BNS v915 materialen] ' + t); }catch(e){} }
+  function A(v){ return Array.isArray(v) ? v : []; }
+  function S(v){ return String(v == null ? '' : v).trim(); }
+  function nowIso(){ return new Date().toISOString(); }
+  function markEdit(ms){
+    editUntil = Math.max(editUntil, Date.now() + (ms || 60000));
+    window.__BNS_ADMIN_MATERIAL_EDIT_UNTIL = editUntil;
+    window.__BNS629_ADMIN_MATERIAL_DELETE_LOCK_UNTIL = editUntil;
+    window.__BNS915_MATERIAL_EDIT_UNTIL = editUntil;
+  }
+  function materialId(m){
+    return S(m && (m.id || m.docId || m.materialId || m.key || ((m.cat||m.rubriek||m.category||'') + ':' + (m.code||m.nr||m.productNr||m.name||''))));
+  }
+  function normId(m){ return materialId(m).toLowerCase(); }
+  function cleanMaterials(list){
+    var seen = {};
+    return A(list).filter(function(m){
+      if(!m || typeof m !== 'object') return false;
+      var id = normId(m);
+      if(!id) return false;
+      if(seen[id]) return false;
+      seen[id] = true;
+      return true;
+    }).map(function(m){ return Object.assign({}, m); });
+  }
+  function sig(list){
+    var mats = cleanMaterials(list);
+    return mats.length + ':' + mats.map(normId).sort().join('|');
+  }
+  function readRawState(){
+    try{ return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(e){ return {}; }
+  }
+  function getLiveState(){
+    try{ if(typeof state !== 'undefined' && state && Array.isArray(state.materials)) return state; }catch(e){}
+    try{ if(window.state && Array.isArray(window.state.materials)) return window.state; }catch(e){}
+    return readRawState();
+  }
+  function getMaterials(st){ return cleanMaterials((st || getLiveState() || {}).materials); }
+  function isBetterCandidate(candidate, current){
+    candidate = cleanMaterials(candidate); current = cleanMaterials(current);
+    if(!candidate.length) return false;
+    if(!current.length) return true;
+    if(candidate.length > current.length) return true;
+    var curIds = {};
+    current.forEach(function(m){ curIds[normId(m)] = true; });
+    var newCount = 0;
+    candidate.forEach(function(m){ if(!curIds[normId(m)]) newCount++; });
+    return newCount > 0 && candidate.length >= Math.max(1, current.length - 3);
+  }
+  function mergeMaterials(primary, secondary){
+    var out = [];
+    var map = {};
+    cleanMaterials(secondary).forEach(function(m){ var id=normId(m); map[id]=Object.assign({}, m); });
+    cleanMaterials(primary).forEach(function(m){ var id=normId(m); map[id]=Object.assign({}, map[id] || {}, m); });
+    Object.keys(map).forEach(function(id){ out.push(map[id]); });
+    out.sort(function(a,b){
+      var ca=S(a.cat||a.rubriek||a.category).localeCompare(S(b.cat||b.rubriek||b.category));
+      if(ca) return ca;
+      return S(a.code||a.nr||a.name).localeCompare(S(b.code||b.nr||b.name));
+    });
+    return out;
+  }
+  function writeStateWithMaterials(mats, reason){
+    mats = cleanMaterials(mats);
+    if(!mats.length) return false;
+    var st = readRawState();
+    st.materials = mats;
+    st.updatedAt = st.updatedAt || nowIso();
+    st.materialsUpdatedAt = nowIso();
+    try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){ log('localStorage schrijven mislukt: '+(e&&e.message||e)); }
+    try{ if(typeof state !== 'undefined' && state){ state.materials = mats; state.materialsUpdatedAt = st.materialsUpdatedAt; } }catch(e){}
+    try{ if(window.state){ window.state.materials = mats; window.state.materialsUpdatedAt = st.materialsUpdatedAt; } }catch(e){}
+    try{ window.__BNS915_MATERIALS = mats; }catch(e){}
+    try{ if(typeof renderCats === 'function') renderCats(); }catch(e){}
+    try{ if(typeof renderMaterials === 'function') renderMaterials(window.currentCat || (typeof currentCat!=='undefined'?currentCat:'')); }catch(e){}
+    try{ if(typeof adminRender === 'function') adminRender(); }catch(e){}
+    log('materialen hersteld/bewaard ('+mats.length+') via '+(reason||'v915'));
+    return true;
+  }
+  function backupMaterials(reason, list){
+    var mats = cleanMaterials(list || getMaterials());
+    if(!mats.length) return;
+    var s = sig(mats);
+    if(s === lastBackupSig) return;
+    lastBackupSig = s;
+    var payload = {type:'materials-backup-v915', reason:reason||'', createdAt:nowIso(), count:mats.length, materials:mats};
+    try{ localStorage.setItem(BK_LATEST, JSON.stringify(payload)); }catch(e){}
+    try{
+      var indexRaw = localStorage.getItem(BK_PREFIX + 'index');
+      var index = indexRaw ? JSON.parse(indexRaw) : [];
+      var key = BK_PREFIX + Date.now();
+      localStorage.setItem(key, JSON.stringify(payload));
+      index.unshift(key);
+      while(index.length > BK_KEEP){ var old = index.pop(); try{ localStorage.removeItem(old); }catch(e){} }
+      localStorage.setItem(BK_PREFIX + 'index', JSON.stringify(index));
+    }catch(e){}
+  }
+  function bestBackup(){
+    var best = null;
+    function consider(raw){
+      try{
+        var p = JSON.parse(raw || '{}');
+        var mats = cleanMaterials(p.materials);
+        if(!mats.length) return;
+        if(!best || mats.length > best.materials.length) best = {createdAt:p.createdAt||'', materials:mats};
+      }catch(e){}
+    }
+    try{ consider(localStorage.getItem(BK_LATEST)); }catch(e){}
+    try{
+      var index = JSON.parse(localStorage.getItem(BK_PREFIX + 'index') || '[]');
+      index.forEach(function(k){ consider(localStorage.getItem(k)); });
+    }catch(e){}
+    return best;
+  }
+  function protectAgainstShortOverwrite(incomingState){
+    if(restoring || !incomingState || typeof incomingState !== 'object') return incomingState;
+    if(!Array.isArray(incomingState.materials)) return incomingState;
+    var incoming = cleanMaterials(incomingState.materials);
+    var current = getMaterials();
+    var backup = (bestBackup() || {}).materials || [];
+    var guardActive = Date.now() < editUntil;
+    var best = current;
+    if(isBetterCandidate(backup, best)) best = mergeMaterials(backup, best);
+
+    // Tijdens admin werk of na een update: nooit een kortere/lossy lijst stil accepteren.
+    if(best.length && incoming.length && best.length > incoming.length && (guardActive || best.length - incoming.length >= 1)){
+      var merged = mergeMaterials(best, incoming);
+      incomingState.materials = merged;
+      backupMaterials('korte overschrijving geblokkeerd', merged);
+      log('korte materialenlijst geblokkeerd: incoming '+incoming.length+', bewaard '+merged.length+'.');
+      return incomingState;
+    }
+    if(!incoming.length && best.length){
+      incomingState.materials = best;
+      log('lege materialenlijst geblokkeerd; backup/live behouden: '+best.length+'.');
+    }
+    return incomingState;
+  }
+
+  // Direct backup maken van huidige goede lijst.
+  setTimeout(function(){ backupMaterials('start/update'); }, 300);
+  setTimeout(function(){
+    var cur = getMaterials();
+    var bk = bestBackup();
+    if(bk && isBetterCandidate(bk.materials, cur)){
+      writeStateWithMaterials(mergeMaterials(bk.materials, cur), 'start recovery uit backup');
+      if(typeof window.BNS600SyncMaterialsNow === 'function') setTimeout(function(){ window.BNS600SyncMaterialsNow(); }, 1500);
+    }
+  }, 1200);
+
+  // Admin materiaal activiteit herkennen.
+  function isMaterialAdminElement(el){
+    if(!el || !el.closest) return false;
+    if(el.closest('#adminMatList,#adminMaterials,.admin-materials,.materials-admin,#bns391AdminCard,#bns390AdminCard,#bnsV56AdminCard')) return true;
+    var id = S(el.id || '');
+    if(/^adminMat|material/i.test(id)) return true;
+    var txt = S(el.textContent || el.value || '').toLowerCase();
+    return /materiaal|material|rubriek/.test(txt);
+  }
+  ['input','change','keydown','pointerdown','click'].forEach(function(evName){
+    document.addEventListener(evName, function(ev){
+      if(isMaterialAdminElement(ev.target)){
+        markEdit(evName==='click' ? 90000 : 60000);
+        backupMaterials('admin '+evName+' voor wijziging');
+        setTimeout(function(){ backupMaterials('admin '+evName+' na wijziging'); }, 600);
+      }
+    }, true);
+  });
+
+  // Na materiaal-opslaan expliciet Firebase sync en backup uitvoeren.
+  document.addEventListener('click', function(ev){
+    var b = ev.target && ev.target.closest && ev.target.closest('button,input[type="button"],input[type="submit"]');
+    if(!b || !isMaterialAdminElement(b)) return;
+    var txt = S(b.textContent || b.value || '').toLowerCase();
+    if(!/opslaan|bewaar|save|toevoegen|wijzig|verwijder|wis|delete/.test(txt)) return;
+    markEdit(120000);
+    setTimeout(function(){ backupMaterials('admin knop '+txt); }, 400);
+    setTimeout(function(){
+      backupMaterials('admin knop '+txt+' nasync');
+      if(typeof window.BNS600SyncMaterialsNow === 'function'){
+        try{ window.BNS600SyncMaterialsNow(); log('Firebase materiaal-sync opnieuw aangeroepen na admin actie.'); }catch(e){ log('sync call mislukt: '+(e&&e.message||e)); }
+      }
+    }, 1800);
+  }, true);
+
+  // localStorage overschrijvingen beschermen.
+  try{
+    var rawSet = localStorage.setItem.bind(localStorage);
+    if(!localStorage.setItem.__bns915Protected){
+      var patchedSet = function(k, v){
+        if(k === KEY && typeof v === 'string' && v.indexOf('materials') >= 0){
+          try{
+            backupMaterials('voor localStorage setItem');
+            var parsed = JSON.parse(v);
+            parsed = protectAgainstShortOverwrite(parsed);
+            v = JSON.stringify(parsed);
+            if(Array.isArray(parsed.materials)) backupMaterials('na localStorage setItem kandidaat', parsed.materials);
+          }catch(e){}
+        }
+        return rawSet(k, v);
+      };
+      patchedSet.__bns915Protected = true;
+      localStorage.setItem = patchedSet;
+    }
+  }catch(e){ log('localStorage bescherming niet actief: '+(e&&e.message||e)); }
+
+  // save() extra backup/merge.
+  try{
+    if(typeof save === 'function' && !save.__bns915Materials){
+      var oldSave = save;
+      save = function(){
+        try{
+          var st = getLiveState();
+          st = protectAgainstShortOverwrite(st) || st;
+          if(st && Array.isArray(st.materials)) backupMaterials('voor save()', st.materials);
+        }catch(e){}
+        var r = oldSave.apply(this, arguments);
+        try{ backupMaterials('na save()'); }catch(e){}
+        return r;
+      };
+      save.__bns915Materials = true;
+      try{ window.save = save; }catch(e){}
+    }
+  }catch(e){}
+
+  // Handmatige herstelknop voor noodgeval in console.
+  window.BNS915RestoreMaterialsBackup = function(){
+    var bk = bestBackup();
+    if(!bk || !bk.materials || !bk.materials.length){ alert('Geen materiaal-backup gevonden.'); return false; }
+    var merged = mergeMaterials(bk.materials, getMaterials());
+    writeStateWithMaterials(merged, 'handmatig backup herstel');
+    if(typeof window.BNS600SyncMaterialsNow === 'function') setTimeout(function(){ window.BNS600SyncMaterialsNow(); }, 1200);
+    alert('Materiaal-backup hersteld: '+merged.length+' materialen.');
+    return true;
+  };
+
+  log('actief: materialen/rubrieken blijven bewaard bij update, F5 en Firebase-sync.');
+})();
