@@ -48336,3 +48336,173 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   console.info('[Documenten] v5 PDF, mail en WhatsApp actief - alleen documentvensters.');
 })();
+
+/* =========================================================
+   BNS v914 - Verwijderde opdrachten blijven verwijderd
+   Oorzaak: oude Firebase/driver-sync kan een lokale delete opnieuw
+   terughalen wanneer de delete niet als tombstone naar Firebase is
+   geschreven of updatedAt ontbreekt. Deze patch maakt delete expliciet:
+   - status Verwijderd + deleted/deletedAt/updatedAt + map/folder
+   - lokale tombstone per id/nummer
+   - sync naar bestaande Firebase routes
+   - lege verwijderde map blijft leeg na refresh/sync
+========================================================= */
+(function(){
+  'use strict';
+  if(window.__BNS_V914_DELETE_GUARD__) return;
+  window.__BNS_V914_DELETE_GUARD__ = true;
+
+  var KEY = (typeof window.KEY !== 'undefined' && window.KEY) || 'event-planner-pro-amsterdam-verhuur-v1';
+  var TOMBS = 'bns_v914_deleted_order_tombstones';
+  var PURGED = 'bns_v914_purged_order_tombstones';
+
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function now(){ return new Date().toISOString(); }
+  function S(){
+    try{ if(typeof state !== 'undefined' && state) return state; }catch(e){}
+    try{ if(window.state) return window.state; }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(e){ return {}; }
+  }
+  function saveLocal(){
+    try{ if(typeof save === 'function') save(); }catch(e){}
+    try{ localStorage.setItem(KEY, JSON.stringify(S())); }catch(e){}
+  }
+  function readMap(k){ try{ return JSON.parse(localStorage.getItem(k) || '{}') || {}; }catch(e){ return {}; } }
+  function writeMap(k,m){ try{ localStorage.setItem(k, JSON.stringify(m || {})); }catch(e){} }
+  function orderKey(o){ return T(o && (o.id || o.orderId || o.number || o.orderNumber)); }
+  function orderKeys(o){
+    var a=[];
+    ['id','orderId','number','orderNumber'].forEach(function(k){ var v=T(o && o[k]); if(v && a.indexOf(v)<0) a.push(v); });
+    return a;
+  }
+  function isDeleted(o){
+    var s=L(o && o.status);
+    return !!(o && (o.deleted === true || o.deletedAt || o._deleted === true || /verwijderd|deleted|gewist|trash/.test(s)));
+  }
+  function markDeleted(o){
+    if(!o) return o;
+    var t=now();
+    if(!o._oldStatus && L(o.status) !== 'verwijderd') o._oldStatus = o.status || '';
+    o.status = 'Verwijderd';
+    o.orderStatus = 'Verwijderd';
+    o.documentStatus = 'Verwijderd';
+    o.folder = 'verwijderd';
+    o.map = 'verwijderd';
+    o.orderFolder = 'verwijderd';
+    o.deleted = true;
+    o._deleted = true;
+    o.deletedAt = o.deletedAt || t;
+    o.updatedAt = t;
+    return o;
+  }
+  function tombstone(o, purged){
+    if(!o) return;
+    var kmap = readMap(purged ? PURGED : TOMBS);
+    orderKeys(o).forEach(function(k){ kmap[k] = {deletedAt:o.deletedAt || now(), number:T(o.number||o.orderNumber), id:T(o.id||o.orderId)}; });
+    writeMap(purged ? PURGED : TOMBS, kmap);
+  }
+  function hasMap(kmap,o){
+    var hit=false;
+    orderKeys(o).forEach(function(k){ if(kmap[k]) hit=true; });
+    return hit;
+  }
+  function applyTombstones(){
+    var s=S();
+    if(!s || !Array.isArray(s.orders)) return false;
+    var del=readMap(TOMBS), pur=readMap(PURGED), changed=false;
+    s.orders = s.orders.filter(function(o){
+      if(!o) return false;
+      if(hasMap(pur,o)){ changed=true; return false; }
+      if(hasMap(del,o) && !isDeleted(o)){ markDeleted(o); changed=true; }
+      if(isDeleted(o)){
+        var before=o.updatedAt;
+        markDeleted(o);
+        if(o.updatedAt!==before) changed=true;
+      }
+      return true;
+    });
+    if(changed) saveLocal();
+    return changed;
+  }
+  function syncOrder(o){
+    if(!o) return;
+    var copy = JSON.parse(JSON.stringify(o));
+    if(isDeleted(copy)) markDeleted(copy);
+    try{ if(window.BNS && typeof window.BNS.syncOrder === 'function') Promise.resolve(window.BNS.syncOrder(copy)).catch(function(){}); }catch(e){}
+    try{ if(window.BNS && typeof window.BNS.syncDoc === 'function') window.BNS.syncDoc('orders', copy.id || copy.orderId || copy.number, copy); }catch(e){}
+    try{ if(typeof syncDoc === 'function') syncDoc('orders', copy.id || copy.orderId || copy.number, copy); }catch(e){}
+    try{ if(typeof window.EPP_FORCE_FIREBASE_SYNC === 'function') setTimeout(function(){ window.EPP_FORCE_FIREBASE_SYNC('v914-delete-guard').catch(function(){}); },900); }catch(e){}
+  }
+  function findCurrentOrder(){
+    var s=S(); if(!s || !Array.isArray(s.orders)) return null;
+    var id=''; try{ if(typeof editing !== 'undefined' && editing) id=T(editing); }catch(e){}
+    id = id || T(window.editing);
+    var nr=T((document.getElementById('orderNumber')||{}).value);
+    return s.orders.find(function(o){ return (id && T(o.id||o.orderId)===id) || (nr && T(o.number||o.orderNumber)===nr); }) || null;
+  }
+  function findFromButton(btn){
+    var s=S(); if(!s || !Array.isArray(s.orders) || !btn) return null;
+    var box = btn.closest && btn.closest('[data-order-id],[data-order-number],.order-card');
+    var id=T(btn.dataset && (btn.dataset.orderId || btn.dataset.id)) || T(box && box.dataset && box.dataset.orderId);
+    var nr=T(btn.dataset && btn.dataset.orderNumber) || T(box && box.dataset && box.dataset.orderNumber);
+    if(!id && box){
+      var txt=T(box.innerText||'');
+      var m=txt.match(/(20\d{2}-\d{3,5})/); if(m) nr=m[1];
+    }
+    return s.orders.find(function(o){ return (id && T(o.id||o.orderId)===id) || (nr && T(o.number||o.orderNumber)===nr); }) || null;
+  }
+  function isOrderDeleteButton(btn){
+    if(!btn) return false;
+    var t=L(btn.textContent || btn.value || btn.id || '');
+    if(!/(verwijder|wis)/.test(t)) return false;
+    if(/materiaal|klant|locatie|gebruiker|melding|alert|factuur|type|logo/.test(t)) return false;
+    if(btn.id === 'bnsEmptyDeleted') return true;
+    if(/opdracht/.test(t)) return true;
+    if(btn.closest && (btn.closest('#newOrder') || btn.closest('.order-card') || btn.closest('[data-order-id]'))) return true;
+    return false;
+  }
+  var pendingPurge=[];
+  document.addEventListener('click', function(ev){
+    var btn = ev.target && ev.target.closest && ev.target.closest('button,input[type="button"],input[type="submit"]');
+    if(!btn || !isOrderDeleteButton(btn)) return;
+
+    if(btn.id === 'bnsEmptyDeleted'){
+      try{ pendingPurge = (S().orders||[]).filter(isDeleted).map(function(o){ return JSON.parse(JSON.stringify(o)); }); }catch(e){ pendingPurge=[]; }
+      setTimeout(function(){
+        pendingPurge.forEach(function(o){ tombstone(o,true); });
+        applyTombstones();
+        try{ if(typeof window.EPP_FORCE_FIREBASE_SYNC === 'function') window.EPP_FORCE_FIREBASE_SYNC('v914-empty-deleted').catch(function(){}); }catch(e){}
+        pendingPurge=[];
+      },650);
+      return;
+    }
+
+    setTimeout(function(){
+      var o = findCurrentOrder() || findFromButton(btn);
+      if(!o) return;
+      markDeleted(o);
+      tombstone(o,false);
+      saveLocal();
+      syncOrder(o);
+      try{ if(typeof renderOrders==='function') renderOrders(); }catch(e){}
+    },80);
+  }, true);
+
+  var oldSync = window.BNS && window.BNS.syncOrder;
+  if(window.BNS && typeof oldSync === 'function' && !oldSync.__bnsV914){
+    var wrapped=function(o){ if(isDeleted(o)){ markDeleted(o); tombstone(o,false); } return oldSync.apply(this,arguments); };
+    wrapped.__bnsV914=true;
+    window.BNS.syncOrder=wrapped;
+  }
+
+  ['bns:firebase-updated','epp:firebase-updated','storage'].forEach(function(evt){
+    window.addEventListener(evt,function(){ setTimeout(applyTombstones,80); });
+    document.addEventListener(evt,function(){ setTimeout(applyTombstones,80); });
+  });
+  setTimeout(applyTombstones,300);
+  setTimeout(applyTombstones,1200);
+  setInterval(applyTombstones,5000);
+
+  console.info('[BNS v914] verwijderde opdrachten tombstone-sync actief');
+})();
