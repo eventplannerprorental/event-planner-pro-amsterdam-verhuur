@@ -1,3 +1,60 @@
+
+/* =========================================================
+   BNS EARLY ADMIN STABILITY GUARD v913
+   Doel: oude setInterval/MutationObserver patches rustiger maken in Admin.
+   ========================================================= */
+(function BNS_EARLY_ADMIN_STABILITY_GUARD_V913(){
+  'use strict';
+  if(window.__BNS_EARLY_ADMIN_STABILITY_V913__) return;
+  window.__BNS_EARLY_ADMIN_STABILITY_V913__ = true;
+  function adminActive(){
+    try{ var a=document.getElementById('admin'); return !!(a && a.classList.contains('active')); }catch(e){ return false; }
+  }
+  function adminEditing(){
+    try{
+      if(!adminActive()) return false;
+      var el=document.activeElement;
+      return !!(el && el.closest && el.closest('#admin') && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/i.test(el.tagName));
+    }catch(e){ return false; }
+  }
+  var nativeSetInterval = window.setInterval;
+  if(nativeSetInterval && !nativeSetInterval.__bnsV913){
+    var wrappedSetInterval = function(fn, delay){
+      var args = Array.prototype.slice.call(arguments,2);
+      var lastRun = 0;
+      var safeFn = function(){
+        try{
+          if(adminActive()){
+            var now = Date.now();
+            if(adminEditing() && Number(delay||0) < 6000) return;
+            if(now - lastRun < 2500) return;
+            lastRun = now;
+          }
+        }catch(e){}
+        if(typeof fn === 'function') return fn.apply(this,args);
+        try{ return (new Function(String(fn)))(); }catch(e){}
+      };
+      return nativeSetInterval.call(window, safeFn, delay);
+    };
+    wrappedSetInterval.__bnsV913 = true;
+    window.setInterval = wrappedSetInterval;
+  }
+  try{
+    var NativeMO = window.MutationObserver;
+    if(NativeMO && !NativeMO.__bnsV913){
+      var WrappedMO = function(cb){
+        return new NativeMO(function(mutations, observer){
+          try{ if(adminEditing()) return; }catch(e){}
+          return cb.call(this, mutations, observer);
+        });
+      };
+      WrappedMO.prototype = NativeMO.prototype;
+      WrappedMO.__bnsV913 = true;
+      window.MutationObserver = WrappedMO;
+    }
+  }catch(e){}
+})();
+
 // ===== EPP AMSTERDAM VERHUUR v16: klantconfig uit customer-config.js =====
 (function(){
   var cfg = window.EVENT_PLANNER_CUSTOMER || window.EPP_CUSTOMER_CONFIG || {};
@@ -48123,109 +48180,149 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
 
 /* =========================================================
-   DOCUMENT OUTPUT PATCH v4 - PDF DOWNLOAD / MAIL / WHATSAPP
-   Ingebouwd in app.js. Geen apart scriptbestand nodig.
-   Werkt alleen op documentvensters via window.open/document.write.
+   BNS ADMIN STABILITY + DOCUMENT OUTPUT PATCH v913
+   - Admin minder flikkeren/vastlopen.
+   - Documentknoppen werken via delegated events, niet alleen inline onclick.
+   - PDF downloaden, Print/PDF, Mail, WhatsApp, mailbestand en kopieer tekst.
    ========================================================= */
-/* =========================================================
-   BNS DOCUMENT OUTPUT PATCH v4 - safe login + PDF download + mail + WhatsApp
-   Doel: 1 generieke patch voor Tapwagen.nl, Amsterdam-verhuur en Rental.
-   Werkt zonder klantnamen, Firebase of storage keys.
-
-   Wat v4 doet:
-   - PDF downloaden als echt .pdf bestand via html2pdf.js CDN.
-   - Fallback naar Print -> Opslaan als PDF als CDN/PDF-generator niet laadt.
-   - Browser mag niet rechtstreeks op Bureaublad schrijven; download gaat naar de
-     downloadmap van de gebruiker. Zet die map in browserinstellingen op Bureaublad
-     als je hem daar direct wilt hebben.
-   - Download HTML is vervangen door WhatsApp delen.
-   ========================================================= */
-(function DOCUMENT_OUTPUT_PATCH_V4(){
+(function BNS_ADMIN_STABILITY_V913(){
   'use strict';
-  if(window.__DOCUMENT_OUTPUT_PATCH_V4__) return;
-  window.__DOCUMENT_OUTPUT_PATCH_V4__ = true;
+  if(window.__BNS_ADMIN_STABILITY_V913__) return;
+  window.__BNS_ADMIN_STABILITY_V913__ = true;
 
-  function injectIntoHtml(html){
-    html = String(html == null ? '' : html);
-    if(!html || html.indexOf('__DOC_POPUP_HELPERS_V4__') >= 0 || html.indexOf('documentToolbarV4') >= 0) return html;
-    var out = html;
-    if(/<\/head>/i.test(out)) out = out.replace(/<\/head>/i, patchCss() + patchScript() + '</head>');
-    else out = patchCss() + patchScript() + out;
-    if(/<body([^>]*)>/i.test(out)) out = out.replace(/<body([^>]*)>/i, '<body$1>' + toolbarHtml());
-    else out = toolbarHtml() + out;
-    return out;
+  function E(id){ return document.getElementById(id); }
+  function isAdmin(){ try{ var a=E('admin'); return !!(a && a.classList.contains('active')); }catch(e){ return false; } }
+  function focusedInAdmin(){
+    try{ var el=document.activeElement; return !!(isAdmin() && el && el.closest && el.closest('#admin') && /^(INPUT|TEXTAREA|SELECT)$/i.test(el.tagName)); }catch(e){ return false; }
+  }
+  function debounce(fn, ms){ var t=0; return function(){ var self=this,args=arguments; clearTimeout(t); t=setTimeout(function(){ fn.apply(self,args); },ms||120); }; }
+
+  try{
+    if(typeof adminRender === 'function' && !adminRender.__bnsV913){
+      var oldAdminRender = adminRender;
+      var debouncedAdminRender = debounce(function(){
+        if(focusedInAdmin()) return;
+        return oldAdminRender.apply(window, arguments);
+      }, 160);
+      debouncedAdminRender.__bnsV913 = true;
+      adminRender = debouncedAdminRender;
+      window.adminRender = debouncedAdminRender;
+    }
+  }catch(e){}
+
+  try{
+    if(typeof renderAll === 'function' && !renderAll.__bnsV913AdminSafe){
+      var oldRenderAll = renderAll;
+      var safeRenderAll = function(){
+        if(focusedInAdmin()) return;
+        return oldRenderAll.apply(this, arguments);
+      };
+      safeRenderAll.__bnsV913AdminSafe = true;
+      renderAll = safeRenderAll;
+      window.renderAll = safeRenderAll;
+    }
+  }catch(e){}
+
+  function installAdminHandlers(){
+    try{
+      var admin = E('admin');
+      if(!admin || admin.__bnsV913Handlers) return;
+      admin.__bnsV913Handlers = true;
+      admin.addEventListener('input', function(ev){
+        var id = ev.target && ev.target.id;
+        if(id === 'adminMatSearch' || id === 'adminCustomerSearch' || id === 'adminLocationSearch'){
+          if(typeof window.adminRender === 'function') window.adminRender();
+        }
+      }, true);
+      admin.addEventListener('change', function(){
+        try{ if(typeof summaryRender === 'function') summaryRender(); }catch(e){}
+      }, true);
+    }catch(e){}
   }
 
-  function patchCss(){
-    return ''+
-      '<style id="documentOutputPatchCssV4">'+
+  function install(){ installAdminHandlers(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(install,80); });
+  else setTimeout(install,80);
+})();
+
+(function DOCUMENT_OUTPUT_PATCH_V5(){
+  'use strict';
+  if(window.__DOCUMENT_OUTPUT_PATCH_V5__) return;
+  window.__DOCUMENT_OUTPUT_PATCH_V5__ = true;
+
+  function css(){
+    return '<style id="documentOutputPatchCssV5">'+
       '.doc-toolbar{position:sticky;top:0;z-index:2147483647;background:#0f172a;color:#fff;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)}'+
       '.doc-toolbar button{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#2563eb;color:white;font-size:14px}'+
       '.doc-toolbar button.green{background:#16a34a}.doc-toolbar button.orange{background:#f97316}.doc-toolbar button.grey{background:#64748b}.doc-toolbar button.red{background:#dc2626}'+
-      '.doc-toolbar .hint{font-size:12px;opacity:.9;margin-left:auto}'+
-      '.doc-pdf-note{font-size:11px;opacity:.85}'+
+      '.doc-toolbar .hint{font-size:12px;opacity:.9;margin-left:auto}.doc-toolbar .note{font-size:11px;opacity:.85}'+
       'body>.actions:not(.doc-toolbar){display:none!important}'+
-      '@media print{.doc-toolbar,body>.actions{display:none!important}body{background:white!important}.page,main{box-shadow:none!important}}'+
+      '@media print{.doc-toolbar,body>.actions{display:none!important}body{background:#fff!important}.page,main{box-shadow:none!important}}'+
       '</style>';
   }
 
-  function patchScript(){
-    return ''+
-      '<script id="documentOutputPatchScriptV4">(function(){'+
-      'if(window.__DOC_POPUP_HELPERS_V4__)return;window.__DOC_POPUP_HELPERS_V4__=true;'+
-      'var PDF_CDN="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";'+
-      'function safeName(v){return String(v||"document").replace(/[^a-z0-9\\-_. ]/gi,"_").replace(/\\s+/g,"_").slice(0,80)||"document"}'+
-      'function cleanClone(){var c=document.documentElement.cloneNode(true);c.querySelectorAll(".doc-toolbar,body>.actions,script#documentOutputPatchScriptV4,style#documentOutputPatchCssV4").forEach(function(e){e.remove()});return c}'+
-      'function htmlBody(){var c=cleanClone();return "<!doctype html>\\n"+c.outerHTML}'+
-      'function textBody(){var c=cleanClone();return (c.querySelector("main,.page,body")||c).innerText||document.body.innerText||""}'+
-      'function mainEl(){return document.querySelector("main,.page,.invoice-preview,.document,.doc,body")||document.body}'+
-      'function downloadBlob(name,type,content){var blob=new Blob([content],{type:type});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)}'+
-      'function loadPdfLib(cb){if(window.html2pdf)return cb(true);var s=document.createElement("script");s.src=PDF_CDN;s.async=true;s.onload=function(){cb(!!window.html2pdf)};s.onerror=function(){cb(false)};document.head.appendChild(s)}'+
-      'function mailSubject(){return document.title||"Document"}'+
-      'function filename(){return safeName(mailSubject())+".pdf"}'+
-      'window.docPrintPdf=function(){alert("Kies in het printervenster bij Bestemming/Printer: Opslaan als PDF.");setTimeout(function(){try{window.print()}catch(e){alert("Printvenster kon niet openen: "+e.message)}},80)};'+
-      'window.docDownloadPdf=function(){var note=document.getElementById("pdfNoteV4");if(note)note.textContent="PDF wordt gemaakt...";loadPdfLib(function(ok){if(!ok||!window.html2pdf){if(note)note.textContent="PDF-generator niet geladen; gebruik Print PDF.";window.docPrintPdf();return}try{var el=mainEl();var opt={margin:[8,8,8,8],filename:filename(),image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollX:0,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}};window.html2pdf().set(opt).from(el).save().then(function(){if(note)note.textContent="PDF gedownload. Staat in je downloadmap."}).catch(function(err){if(note)note.textContent="PDF maken mislukt; gebruik Print PDF.";alert("PDF maken mislukt: "+(err&&err.message?err.message:err));});}catch(e){if(note)note.textContent="PDF maken mislukt; gebruik Print PDF.";alert("PDF maken mislukt: "+e.message)}})};'+
-      'window.docDownloadHtml=function(){downloadBlob(safeName(mailSubject())+".html","text/html;charset=utf-8",htmlBody())};'+
-      'window.docCopyText=function(){var t=textBody();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){alert("Documenttekst gekopieerd.")}).catch(function(){prompt("Kopieer de tekst:",t)})}else{prompt("Kopieer de tekst:",t)}};'+
-      'window.docDownloadEml=function(){var subj=mailSubject();var html=htmlBody();var eml="To: \\r\\nSubject: =?UTF-8?B?"+btoa(unescape(encodeURIComponent(subj)))+"?=\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/html; charset=UTF-8\\r\\nContent-Transfer-Encoding: 8bit\\r\\n\\r\\n"+html;downloadBlob(safeName(subj)+".eml","message/rfc822;charset=utf-8",eml);};'+
-      'window.docMail=function(){var subj=mailSubject();var txt=textBody();var url="mailto:?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(txt);if(url.length<1800){location.href=url}else{window.docDownloadEml();alert("De e-mailtekst is te groot voor mailto. Er is daarom een .eml mailbestand gedownload. Open dat bestand om te mailen, of gebruik Kopieer tekst.")}};'+
-      'window.docWhatsApp=function(){var subj=mailSubject();var txt=textBody();var msg=subj+"\n\n"+txt;var url="https://wa.me/?text="+encodeURIComponent(msg);if(msg.length>4500){window.docCopyText();alert("De tekst is te lang voor WhatsApp. De tekst is gekopieerd; plak hem zelf in WhatsApp.");return}window.open(url,"_blank")};'+
-      '})();<\/script>';
-  }
-
-  function toolbarHtml(){
-    return ''+
-      '<div class="actions doc-toolbar" id="documentToolbarV4">'+
-        '<button type="button" class="green" onclick="docDownloadPdf()">PDF downloaden</button>'+        
-        '<button type="button" onclick="docPrintPdf()">Print / PDF</button>'+        
-        '<button type="button" class="orange" onclick="docMail()">Mail</button>'+        
-        '<button type="button" class="green" onclick="docWhatsApp()">WhatsApp</button>'+        
-        '<button type="button" class="grey" onclick="docDownloadEml()">Download mailbestand</button>'+        
-        '<button type="button" class="grey" onclick="docCopyText()">Kopieer tekst</button>'+        
-        '<button type="button" class="red" onclick="try{window.close()}catch(e){}">Sluiten</button>'+        
-        '<span class="hint">Powered by Tapwagen.nl <span class="doc-pdf-note" id="pdfNoteV4"></span></span>'+        
+  function toolbar(){
+    return '<div class="actions doc-toolbar" id="documentToolbarV5">'+
+      '<button type="button" class="green" data-doc-action="pdf">PDF downloaden</button>'+
+      '<button type="button" data-doc-action="print">Print / PDF</button>'+
+      '<button type="button" class="orange" data-doc-action="mail">Mail</button>'+
+      '<button type="button" class="green" data-doc-action="whatsapp">WhatsApp</button>'+
+      '<button type="button" class="grey" data-doc-action="eml">Download mailbestand</button>'+
+      '<button type="button" class="grey" data-doc-action="copy">Kopieer tekst</button>'+
+      '<button type="button" class="red" data-doc-action="close">Sluiten</button>'+
+      '<span class="hint">Powered by Tapwagen.nl <span class="note" id="docPatchNoteV5"></span></span>'+
       '</div>';
   }
 
-  function patchDocObject(doc){
-    if(!doc || doc.__documentOutputPatchedV4) return;
-    doc.__documentOutputPatchedV4 = true;
+  function script(){
+    return '<script id="documentOutputPatchScriptV5">(function(){'+
+      'if(window.__DOC_POPUP_HELPERS_V5__)return;window.__DOC_POPUP_HELPERS_V5__=true;'+
+      'var PDF_CDN="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";'+
+      'function note(t){var n=document.getElementById("docPatchNoteV5");if(n)n.textContent=t||""}'+
+      'function safe(v){return String(v||"document").replace(/[^a-z0-9\\-_. ]/gi,"_").replace(/\\s+/g,"_").slice(0,80)||"document"}'+
+      'function cloneDoc(){var c=document.documentElement.cloneNode(true);c.querySelectorAll(".doc-toolbar,body>.actions,script#documentOutputPatchScriptV5,style#documentOutputPatchCssV5").forEach(function(e){e.remove()});return c}'+
+      'function html(){return "<!doctype html>\\n"+cloneDoc().outerHTML}'+
+      'function text(){var c=cloneDoc();return ((c.querySelector("main,.page,.invoice-preview,.document,.doc,body")||c).innerText||"").trim()}'+
+      'function main(){return document.querySelector("main,.page,.invoice-preview,.document,.doc,body")||document.body}'+
+      'function subject(){return (document.title||document.querySelector("h1,h2")&&document.querySelector("h1,h2").innerText||"Document").trim()}'+
+      'function blob(name,type,content){var b=new Blob([content],{type:type});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){try{URL.revokeObjectURL(a.href);a.remove()}catch(e){}},1000)}'+
+      'function loadPdf(cb){if(window.html2pdf)return cb(true);var s=document.createElement("script");s.src=PDF_CDN;s.async=true;s.onload=function(){cb(!!window.html2pdf)};s.onerror=function(){cb(false)};document.head.appendChild(s)}'+
+      'function doPrint(){alert("Kies in het printervenster bij Bestemming/Printer: Opslaan als PDF.");setTimeout(function(){try{window.print()}catch(e){alert("Printvenster kon niet openen: "+e.message)}},80)}'+
+      'function doPdf(){note("PDF wordt gemaakt...");loadPdf(function(ok){if(!ok||!window.html2pdf){note("PDF-generator niet geladen; Print/PDF geopend.");doPrint();return}try{var opt={margin:[8,8,8,8],filename:safe(subject())+".pdf",image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollX:0,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}};window.html2pdf().set(opt).from(main()).save().then(function(){note("PDF gedownload.")}).catch(function(err){note("PDF mislukt; Print/PDF geopend.");alert("PDF maken mislukt. We openen Print/PDF.");doPrint()});}catch(e){note("PDF mislukt; Print/PDF geopend.");alert("PDF maken mislukt. We openen Print/PDF.");doPrint()}})}'+
+      'function doCopy(){var t=text();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){alert("Documenttekst gekopieerd.")}).catch(function(){prompt("Kopieer de tekst:",t)})}else prompt("Kopieer de tekst:",t)}'+
+      'function doEml(){var subj=subject();var eml="To: \\r\\nSubject: "+subj.replace(/[\\r\\n]/g," ")+"\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/html; charset=UTF-8\\r\\nContent-Transfer-Encoding: 8bit\\r\\n\\r\\n"+html();blob(safe(subj)+".eml","message/rfc822;charset=utf-8",eml)}'+
+      'function doMail(){var subj=subject(), body=text(), url="mailto:?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);if(url.length<1800){try{window.location.href=url}catch(e){window.open(url,"_self")}}else{doEml();alert("De e-mailtekst is te groot voor direct mailen. Er is een mailbestand gedownload.")}}'+
+      'function doWhatsApp(){var msg=subject()+"\\n\\n"+text();if(msg.length>4500){doCopy();alert("De tekst is te lang voor WhatsApp. De tekst is gekopieerd.");return}window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}'+
+      'function handle(action){if(action==="pdf")doPdf();else if(action==="print")doPrint();else if(action==="mail")doMail();else if(action==="whatsapp")doWhatsApp();else if(action==="eml")doEml();else if(action==="copy")doCopy();else if(action==="close")try{window.close()}catch(e){}}'+
+      'document.addEventListener("click",function(ev){var b=ev.target&&ev.target.closest&&ev.target.closest("[data-doc-action]");if(!b)return;ev.preventDefault();ev.stopPropagation();handle(b.getAttribute("data-doc-action"));},true);'+
+      'window.docDownloadPdf=doPdf;window.docPrintPdf=doPrint;window.docMail=doMail;window.docWhatsApp=doWhatsApp;window.docDownloadEml=doEml;window.docCopyText=doCopy;'+
+      '})();<\/script>';
+  }
+
+  function inject(html){
+    html = String(html == null ? '' : html);
+    if(!html || html.indexOf('documentToolbarV5') >= 0 || html.indexOf('__DOC_POPUP_HELPERS_V5__') >= 0) return html;
+    var h = html;
+    if(/<\/head>/i.test(h)) h = h.replace(/<\/head>/i, css()+script()+'</head>');
+    else h = css()+script()+h;
+    if(/<body([^>]*)>/i.test(h)) h = h.replace(/<body([^>]*)>/i, '<body$1>'+toolbar());
+    else h = toolbar()+h;
+    return h;
+  }
+
+  function shouldPatch(s){ return /<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|OFFERTE|Opdrachtbevestiging|Factuur|Offerte/i.test(String(s||'')); }
+
+  function patchDoc(doc){
+    if(!doc || doc.__documentOutputPatchedV5) return;
+    doc.__documentOutputPatchedV5 = true;
     var oldWrite = doc.write;
     var oldWriteln = doc.writeln;
     doc.write = function(){
-      var args = Array.prototype.slice.call(arguments).map(function(a){
-        var s = String(a == null ? '' : a);
-        if(/<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|Offerte|Opdracht/i.test(s)) return injectIntoHtml(s);
-        return a;
-      });
+      var args = Array.prototype.slice.call(arguments).map(function(a){ var s=String(a==null?'':a); return shouldPatch(s) ? inject(s) : a; });
       return oldWrite.apply(doc,args);
     };
     doc.writeln = function(){
-      var args = Array.prototype.slice.call(arguments).map(function(a){
-        var s = String(a == null ? '' : a);
-        if(/<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|Offerte|Opdracht/i.test(s)) return injectIntoHtml(s);
-        return a;
-      });
+      var args = Array.prototype.slice.call(arguments).map(function(a){ var s=String(a==null?'':a); return shouldPatch(s) ? inject(s) : a; });
       return oldWriteln.apply(doc,args);
     };
   }
@@ -48233,12 +48330,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var oldOpen = window.open;
   window.open = function(){
     var w = oldOpen.apply(window, arguments);
-    try{ if(w && w.document) patchDocObject(w.document); }catch(e){}
+    try{ if(w && w.document) patchDoc(w.document); }catch(e){}
     return w;
   };
 
-  // v4: bewust GEEN toolbar injecteren in de hoofdapp/login.
-  // Deze patch werkt alleen in documentvensters die via window.open/document.write worden gemaakt.
-
-  console.info('[Documenten] PDF, mail en WhatsApp actief - alleen documentvensters.');
+  console.info('[Documenten] v5 PDF, mail en WhatsApp actief - alleen documentvensters.');
 })();
