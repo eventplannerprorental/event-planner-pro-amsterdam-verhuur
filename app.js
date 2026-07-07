@@ -48767,3 +48767,212 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   log('actief: materialen/rubrieken blijven bewaard bij update, F5 en Firebase-sync.');
 })();
+
+/* =========================================================
+   BNS V916 - FIREBASE DAGBACKUP 14 DAGEN RETENTIE
+   - maakt maximaal 1 automatische backup per dag
+   - bewaart 14 roterende dagbackups: backups/daily_00 t/m daily_13
+   - dag 15 overschrijft automatisch het oudste slot
+   - houdt daarnaast backups/daily_latest bij voor snel herstel
+   - maakt ook materialen-backup per dag-slot
+   - raakt opdrachten/materialen niet aan; schrijft alleen backup-documenten
+========================================================= */
+(function bnsV916DailyBackup14Days(){
+  'use strict';
+  if(window.__BNS_V916_DAILY_BACKUP_14__) return;
+  window.__BNS_V916_DAILY_BACKUP_14__ = true;
+
+  var RETENTION_DAYS = 14;
+  var DAY_MS = 86400000;
+  var CHUNK_SIZE = 500000;
+  var APP_KEY = (typeof KEY !== 'undefined' && KEY) ? KEY :
+    ((window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.storageKey) ||
+     ('event-planner-pro-' + ((window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.customerId) || (window.EPP_CUSTOMER_ID || 'customer')) + '-v1'));
+  var LOCAL_DAY_KEY = APP_KEY + '::bns916_backup_day';
+
+  window.BNS = window.BNS || {};
+  window.BNS.autoBackup = window.BNS.autoBackup || {};
+
+  function todayKey(){
+    var d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function nowIso(){ return new Date().toISOString(); }
+  function slotForDay(day){
+    var d = new Date(String(day || todayKey()) + 'T00:00:00');
+    if(isNaN(d.getTime())) d = new Date();
+    return 'daily_' + String(Math.floor(d.getTime() / DAY_MS) % RETENTION_DAYS).padStart(2,'0');
+  }
+  function materialSlotForDay(day){ return 'materials_' + slotForDay(day); }
+  function getCustomerId(){
+    try{ return (window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.customerId) || window.EPP_CUSTOMER_ID || window.BNS_RENTAL_CUSTOMER_ID || 'amsterdam-verhuur'; }catch(e){ return 'amsterdam-verhuur'; }
+  }
+  function setStatus(text){
+    var msg = String(text || '');
+    window.BNS.autoBackup.status = msg;
+    try{
+      var el = document.getElementById('bnsAutoBackupStatus');
+      if(el) el.textContent = msg;
+    }catch(e){}
+    try{ console.info('[BNS916 backup]', msg); }catch(e){}
+  }
+  function cleanForBackup(obj){
+    var copy;
+    try{ copy = JSON.parse(JSON.stringify(obj || {})); }catch(e){ copy = obj || {}; }
+    var BIG = ['photoData','photo','image','signatureData','signature','data','customerSignature'];
+    function strip(o){
+      if(!o || typeof o !== 'object') return;
+      BIG.forEach(function(f){ if(o[f] && String(o[f]).length > 200) delete o[f]; });
+    }
+    try{
+      (copy.orders || []).forEach(function(o){
+        strip(o);
+        ['media','photos','signatures','driverUploads','handtekeningen','klantmeldingen'].forEach(function(k){ (o[k] || []).forEach(strip); });
+      });
+      (copy.alerts || []).forEach(strip);
+    }catch(e){}
+    return copy;
+  }
+  function getStateObject(){
+    try{ if(typeof state !== 'undefined' && state) return cleanForBackup(state); }catch(e){}
+    try{
+      var raw = localStorage.getItem(APP_KEY);
+      if(raw) return cleanForBackup(JSON.parse(raw));
+    }catch(e){}
+    return cleanForBackup({});
+  }
+  function chunks(str){
+    var out = [];
+    str = String(str || '');
+    for(var i=0;i<str.length;i+=CHUNK_SIZE) out.push(str.slice(i,i+CHUNK_SIZE));
+    return out.length ? out : [''];
+  }
+  function fb(){
+    if(window.BNS && window.BNS.fs && window.BNS.db) return {fs:window.BNS.fs, db:window.BNS.db};
+    return null;
+  }
+  async function clearChunks(t, docId){
+    try{
+      if(!t.fs.getDocs || !t.fs.collection || !t.fs.deleteDoc) return;
+      var snap = await t.fs.getDocs(t.fs.collection(t.db, 'backups', docId, 'chunks'));
+      var jobs = [];
+      snap.forEach(function(d){ jobs.push(t.fs.deleteDoc(t.fs.doc(t.db, 'backups', docId, 'chunks', d.id))); });
+      if(jobs.length) await Promise.all(jobs);
+    }catch(e){
+      try{ console.warn('[BNS916 backup] oude chunks wissen mislukt', docId, e); }catch(_e){}
+    }
+  }
+  async function writeBackupDoc(t, docId, payload){
+    var json = JSON.stringify(payload);
+    var cs = chunks(json);
+    var ts = nowIso();
+    await clearChunks(t, docId);
+    await t.fs.setDoc(t.fs.doc(t.db, 'backups', docId), {
+      type: payload.type || 'daily-backup',
+      customerId: getCustomerId(),
+      date: payload.date,
+      slot: payload.slot || docId,
+      updatedAt: ts,
+      createdAt: payload.createdAt || ts,
+      chunkCount: cs.length,
+      size: json.length,
+      retentionDays: RETENTION_DAYS,
+      version: 'BNS916',
+      note: 'Automatische dagbackup. Er zijn 14 dag-slots; op dag 15 wordt automatisch het oudste slot overschreven.'
+    }, {merge:false});
+    for(var i=0;i<cs.length;i++){
+      await t.fs.setDoc(t.fs.doc(t.db, 'backups', docId, 'chunks', String(i).padStart(4,'0')), {
+        index:i,
+        data:cs[i],
+        updatedAt:ts
+      }, {merge:false});
+    }
+  }
+  async function runBackup(force){
+    var day = todayKey();
+    if(!force && localStorage.getItem(LOCAL_DAY_KEY) === day){
+      setStatus('Dagbackup vandaag bestaat al: ' + day + ' (14 dagen retentie actief)');
+      return true;
+    }
+    var t = fb();
+    if(!t){
+      setStatus('Dagbackup wacht op Firebase; lokale app blijft werken');
+      return false;
+    }
+    var slot = slotForDay(day);
+    var matSlot = materialSlotForDay(day);
+    var stateObj = getStateObject();
+    var payload = {
+      type:'daily-backup-14days',
+      backupVersion:'BNS916',
+      customerId:getCustomerId(),
+      date:day,
+      slot:slot,
+      createdAt:nowIso(),
+      source:location.href,
+      state:stateObj
+    };
+    var materialsPayload = {
+      type:'materials-backup-14days',
+      backupVersion:'BNS916',
+      customerId:getCustomerId(),
+      date:day,
+      slot:matSlot,
+      createdAt:nowIso(),
+      materials:Array.isArray(stateObj.materials) ? stateObj.materials : []
+    };
+    try{
+      await writeBackupDoc(t, slot, payload);
+      await writeBackupDoc(t, 'daily_latest', payload);
+      await writeBackupDoc(t, matSlot, materialsPayload);
+      await writeBackupDoc(t, 'materials_latest', materialsPayload);
+      localStorage.setItem(LOCAL_DAY_KEY, day);
+      setStatus('Firebase dagbackup klaar: ' + day + ' → ' + slot + ' / ' + matSlot + ' (14 dagen bewaartijd)');
+      return true;
+    }catch(e){
+      console.warn('[BNS916 backup] backup fout', e);
+      setStatus('Firebase dagbackup mislukt; probeer opnieuw of controleer verbinding');
+      return false;
+    }
+  }
+
+  function installPanel(){
+    try{
+      var box = document.getElementById('bnsAutoBackupPanel');
+      if(!box){
+        var anchor = document.getElementById('backupBtn') || Array.prototype.slice.call(document.querySelectorAll('button')).find(function(b){ return /backup/i.test(String(b.textContent||'')); });
+        if(anchor && anchor.parentNode){
+          box = document.createElement('div');
+          box.id = 'bnsAutoBackupPanel';
+          box.style.cssText = 'margin-top:14px;padding:14px;border:2px solid #1f2937;border-radius:14px;background:#fff;color:#111;font-weight:700;max-width:760px;';
+          anchor.parentNode.insertBefore(box, anchor.nextSibling);
+        }
+      }
+      if(!box) return;
+      box.innerHTML =
+        '<div style="font-size:18px;margin-bottom:8px;">Automatische dagbackup</div>'+
+        '<div id="bnsAutoBackupStatus" style="margin-bottom:10px;">'+(window.BNS.autoBackup.status || '14 dagen Firebase backup actief')+'</div>'+
+        '<button type="button" id="bnsAutoBackupNow" style="background:#16a34a;color:#fff;border:0;border-radius:10px;padding:12px 16px;font-weight:900;cursor:pointer;">Backup nu naar Firebase</button>'+
+        '<div style="font-size:13px;margin-top:8px;color:#374151;">Maakt maximaal 1 backup per dag. Firebase bewaart 14 dag-slots: <b>backups/daily_00</b> t/m <b>backups/daily_13</b>. Daarna wordt automatisch het oudste slot overschreven. De laatste backup staat ook in <b>backups/daily_latest</b>.</div>';
+      var btn = document.getElementById('bnsAutoBackupNow');
+      if(btn && btn.dataset.bns916 !== '1'){
+        btn.dataset.bns916 = '1';
+        btn.onclick = function(ev){
+          if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+          setStatus('Backup wordt gemaakt...');
+          runBackup(true);
+        };
+      }
+    }catch(e){}
+  }
+
+  window.BNS.runDailyBackup14Days = function(){ return runBackup(true); };
+  window.BNS.runBackup916 = window.BNS.runDailyBackup14Days;
+  setTimeout(function(){ runBackup(false); installPanel(); }, 8000);
+  setInterval(function(){ runBackup(false); }, 30*60*1000);
+  setInterval(installPanel, 4000);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(installPanel, 1200); });
+  else setTimeout(installPanel, 1200);
+  console.info('[BNS V916] 14-dagen Firebase dagbackup actief.');
+})();
