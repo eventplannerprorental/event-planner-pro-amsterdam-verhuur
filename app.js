@@ -49425,3 +49425,116 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   };
   console.info('[BNS V918] Update-safe data guard actief: klanten, opdrachten, materialen en locaties worden beschermd tegen lege updates.');
 })();
+
+// ===== BNS v919: forceer zichtbare materialen-node in Firebase RTDB =====
+// Doel: admin-materialen/rubrieken moeten zichtbaar en veilig staan onder:
+// customers/<customerId>/materials
+// customers/<customerId>/appState/state/materials
+// customers/<customerId>/backups/materials_latest
+(function(){
+  if(window.__BNS_V919_MATERIALS_RTD_SYNC__) return;
+  window.__BNS_V919_MATERIALS_RTD_SYNC__ = true;
+
+  function cid(){
+    try{
+      return String(
+        window.EPP_CUSTOMER_ID ||
+        (window.EVENT_PLANNER_CUSTOMER && window.EVENT_PLANNER_CUSTOMER.customerId) ||
+        (window.EPP_CUSTOMER_CONFIG && window.EPP_CUSTOMER_CONFIG.customerId) ||
+        'amsterdam-verhuur'
+      ).trim() || 'amsterdam-verhuur';
+    }catch(e){ return 'amsterdam-verhuur'; }
+  }
+  function rtdb(){
+    try{
+      if(window.firebase && firebase.database) return firebase.database();
+    }catch(e){}
+    return null;
+  }
+  function getState(){
+    try{ if(typeof state === 'object' && state) return state; }catch(e){}
+    try{ if(window.state && typeof window.state === 'object') return window.state; }catch(e){}
+    try{
+      var key = window.BNS_RENTAL_STORAGE_KEY || window.EPP_STORAGE_KEY || ('event-planner-pro-' + cid() + '-v1');
+      var raw = localStorage.getItem(key);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return {};
+  }
+  function normCat(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
+  function isRealMaterial(m){
+    if(!m || typeof m !== 'object') return false;
+    var cat = normCat(m.cat || m.rubriek || m.category);
+    var code = String(m.code || m.nr || m.number || m.productNr || '').trim();
+    var name = String(m.name || m.naam || m.description || m.omschrijving || '').trim();
+    return !!(cat && (code || name));
+  }
+  function cleanMaterials(list){
+    var seen = {};
+    return (Array.isArray(list) ? list : []).filter(isRealMaterial).map(function(m){
+      var x = Object.assign({}, m);
+      x.cat = normCat(x.cat || x.rubriek || x.category);
+      x.rubriek = x.cat;
+      x.category = x.cat;
+      if(!x.id){
+        var basis = [x.cat, x.code || x.nr || x.number || x.productNr || x.name || x.naam].join('_').toLowerCase().replace(/[^a-z0-9_]+/g,'_');
+        x.id = basis || ('mat_' + Math.random().toString(36).slice(2,10));
+      }
+      var key = String(x.id);
+      if(seen[key]) x.id = key + '_' + Math.random().toString(36).slice(2,6);
+      seen[String(x.id)] = true;
+      return x;
+    });
+  }
+  async function writeMaterialsToRtd(reason){
+    var db = rtdb();
+    if(!db) return {ok:false, reason:'Geen Firebase Realtime Database beschikbaar'};
+    var s = getState();
+    var mats = cleanMaterials(s.materials || []);
+    if(!mats.length){
+      return {ok:false, reason:'Geen echte materialen om te synchroniseren'};
+    }
+    var root = 'customers/' + cid();
+    var payload = {
+      updatedAt: new Date().toISOString(),
+      reason: reason || 'manual',
+      count: mats.length,
+      materials: mats
+    };
+    try{
+      await db.ref(root + '/materials').set(mats);
+      await db.ref(root + '/appState/state/materials').set(mats);
+      await db.ref(root + '/backups/materials_latest').set(payload);
+      await db.ref(root + '/syncDebug/materials_rtd_latest').set(payload);
+      try{ console.info('[BNS v919] Materialen naar RTDB geschreven:', root + '/materials', mats.length); }catch(e){}
+      return {ok:true, count:mats.length, path:root + '/materials'};
+    }catch(e){
+      try{ console.warn('[BNS v919] Materialen RTDB sync mislukt', e); }catch(x){}
+      return {ok:false, reason:String(e && e.message || e)};
+    }
+  }
+  window.BNS919ForceMaterialsToFirebase = function(){
+    return writeMaterialsToRtd('console-force').then(function(res){
+      try{ alert(res.ok ? ('Materialen naar Firebase geschreven: ' + res.count) : ('Materialen niet geschreven: ' + res.reason)); }catch(e){}
+      return res;
+    });
+  };
+  function hookAdminButtons(){
+    ['adminSaveMat','adminDeleteMat','adminNewMat'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el || el.dataset.bnsV919) return;
+      el.dataset.bnsV919 = '1';
+      el.addEventListener('click', function(){
+        setTimeout(function(){ writeMaterialsToRtd('admin-' + id); }, 250);
+        setTimeout(function(){ writeMaterialsToRtd('admin-' + id + '-late'); }, 1200);
+      }, true);
+    });
+  }
+  function run(){
+    hookAdminButtons();
+    setTimeout(function(){ writeMaterialsToRtd('startup'); }, 2500);
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+  else run();
+  setTimeout(run, 1000);
+})();
