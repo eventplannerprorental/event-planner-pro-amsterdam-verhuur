@@ -48976,3 +48976,452 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   else setTimeout(installPanel, 1200);
   console.info('[BNS V916] 14-dagen Firebase dagbackup actief.');
 })();
+
+// ===== BNS V917: materiaalrubrieken schoon + exacte rubriek-match + TOIL fix =====
+(function(){
+  if(window.__BNS_V917_MATERIAL_RUBRIC_CLEAN__) return;
+  window.__BNS_V917_MATERIAL_RUBRIC_CLEAN__ = true;
+
+  var STORAGE_KEY = (window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.storageKey) || window.BNS_RENTAL_STORAGE_KEY || 'event-planner-pro-amsterdam-verhuur-v1';
+  var CUSTOMER_ID = String(window.EPP_CUSTOMER_ID || window.BNS_RENTAL_CUSTOMER_ID || (window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.customerId) || 'amsterdam-verhuur');
+  var BASE_PATH = 'customers/' + CUSTOMER_ID;
+
+  function E(id){ return document.getElementById(id); }
+  function now(){ return new Date().toISOString(); }
+  function clone(o){ try{return JSON.parse(JSON.stringify(o));}catch(e){return o;} }
+  function toast(t){ try{ if(typeof toastMsg==='function') toastMsg(t); else console.info(t); }catch(e){ console.info(t); } }
+
+  function getState(){
+    try{ if(typeof state==='object' && state) return state; }catch(e){}
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {}; }catch(e){ return {}; }
+  }
+  function saveLocal(s){
+    try{ if(typeof state==='object' && state && s && s!==state) Object.assign(state,s); }catch(e){}
+    try{ if(typeof save==='function') save(); else localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }catch(e){
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }catch(e2){}
+    }
+  }
+
+  // Exacte rubriek: TO is TO, TOIL is TOIL. Geen prefix-matches meer.
+  function normCat(v){
+    return String(v==null?'':v).trim().replace(/\s+/g,' ').toUpperCase();
+  }
+  function normCode(v){
+    return String(v==null?'':v).trim().replace(/\s+/g,' ').toUpperCase();
+  }
+  function hasText(v){ return String(v==null?'':v).trim() !== ''; }
+  function matKey(m){
+    return normCat(m && (m.cat || m.rubriek || m.category)) + '|' + normCode(m && (m.code || m.nr || m.number || m.productNr));
+  }
+  function isEmptyMaterial(m){
+    if(!m || typeof m !== 'object') return true;
+    var cat = normCat(m.cat || m.rubriek || m.category);
+    var code = normCode(m.code || m.nr || m.number || m.productNr);
+    var name = String(m.name || m.omschrijving || m.description || '').trim();
+    var price = String(m.price || m.prijs || m.linePrice || '').trim();
+    var status = String(m.status || '').trim();
+    // Een rubriek zonder echt materiaal mag niet als leeg spookmateriaal blijven bestaan.
+    return !code && !name && !price && (!status || status === 'free' || status === 'Vrij') && !!cat;
+  }
+  function isTotallyEmpty(m){
+    if(!m || typeof m !== 'object') return true;
+    return !normCat(m.cat || m.rubriek || m.category) && !normCode(m.code || m.nr || m.number || m.productNr) && !hasText(m.name || m.omschrijving || m.description) && !hasText(m.price || m.prijs || m.linePrice);
+  }
+  function scoreMaterial(m){
+    var score=0;
+    ['id','cat','code','name','price','status','linePrice','lineDeposit','deposit','borg','notes','description','omschrijving'].forEach(function(k){ if(hasText(m && m[k])) score++; });
+    return score;
+  }
+
+  function cleanMaterialList(list){
+    var out=[], seen={};
+    (Array.isArray(list)?list:[]).forEach(function(raw){
+      if(isTotallyEmpty(raw) || isEmptyMaterial(raw)) return;
+      var m = Object.assign({}, raw);
+      var cat = normCat(m.cat || m.rubriek || m.category);
+      if(!cat) cat = 'EXTRA';
+      m.cat = cat;
+      m.rubriek = cat;
+      m.category = cat;
+      if(m.code != null) m.code = normCode(m.code);
+      else if(m.nr != null) m.code = normCode(m.nr);
+      else if(m.number != null) m.code = normCode(m.number);
+      if(!m.id) m.id = 'mat_' + cat.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '_' + (normCode(m.code)||Math.random().toString(36).slice(2,8)).toLowerCase();
+      m.updatedAt = m.updatedAt || now();
+      var key = matKey(m) || String(m.id);
+      if(seen[key] == null){
+        seen[key] = out.length;
+        out.push(m);
+      } else {
+        var idx = seen[key];
+        // Bewaar de rijkste/nieuwste variant, niet de lege placeholder.
+        if(scoreMaterial(m) >= scoreMaterial(out[idx])) out[idx] = Object.assign({}, out[idx], m);
+      }
+    });
+    out.sort(function(a,b){
+      var ca=normCat(a.cat), cb=normCat(b.cat);
+      if(ca!==cb) return ca.localeCompare(cb,'nl',{numeric:true});
+      return normCode(a.code).localeCompare(normCode(b.code),'nl',{numeric:true});
+    });
+    return out;
+  }
+
+  function cleanRubricSettings(s, cats){
+    s.settings = s.settings || {};
+    var active = {};
+    cats.forEach(function(c){ active[normCat(c)] = true; });
+    ['categoryColors','rubricColors','rubriekKleuren'].forEach(function(k){
+      if(s.settings[k] && typeof s.settings[k] === 'object'){
+        Object.keys(s.settings[k]).forEach(function(c){ if(!active[normCat(c)]) delete s.settings[k][c]; });
+      }
+    });
+    ['categoryOrder','rubricOrder','materialCategories','rubrieken'].forEach(function(k){
+      if(Array.isArray(s.settings[k])) s.settings[k] = s.settings[k].map(normCat).filter(function(c,i,a){ return c && active[c] && a.indexOf(c)===i; });
+    });
+  }
+
+  function cleanupMaterials(options){
+    var s = getState();
+    s.materials = cleanMaterialList(s.materials || []);
+    var cats = Array.from(new Set(s.materials.map(function(m){ return normCat(m.cat); }).filter(Boolean)));
+    cleanRubricSettings(s, cats);
+    s.__BNS917_MATERIALS_CLEANED_AT = now();
+    saveLocal(s);
+    if(!options || options.sync !== false) syncMaterialsToFirebase(s).catch(function(err){ console.warn('[BNS v917] materialen sync melding:', err); });
+    return {state:s, cats:cats};
+  }
+
+  async function getDb(){
+    if(!window.BNS_FIREBASE_CONFIG || !window.BNS_FIREBASE_CONFIG.apiKey) return null;
+    var appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    var dbMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js');
+    var app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(window.BNS_FIREBASE_CONFIG);
+    return {db: dbMod.getDatabase(app), dbMod: dbMod};
+  }
+  function materialObjectById(list){
+    var obj={};
+    (list||[]).forEach(function(m,i){
+      var id = String(m.id || ('mat_' + i)).replace(/[.#$\[\]/]/g,'_');
+      obj[id] = m;
+    });
+    return obj;
+  }
+  async function syncMaterialsToFirebase(s){
+    var ctx = await getDb();
+    if(!ctx) return false;
+    var db=ctx.db, d=ctx.dbMod;
+    var materials = cleanMaterialList(s.materials || []);
+    var payload = {
+      updatedAt: now(),
+      customerId: CUSTOMER_ID,
+      count: materials.length,
+      materials: materials
+    };
+    var byId = materialObjectById(materials);
+    await Promise.all([
+      d.set(d.ref(db, BASE_PATH + '/materials'), byId),
+      d.set(d.ref(db, BASE_PATH + '/appState/state/materials'), materials),
+      d.set(d.ref(db, BASE_PATH + '/backups/materials_latest'), payload)
+    ]);
+    return true;
+  }
+
+  function refreshMaterialUi(){
+    try{ if(typeof renderCats==='function') renderCats(); }catch(e){}
+    try{ if(typeof renderMaterials==='function') renderMaterials(window.currentCat || (E('adminMatCat') && E('adminMatCat').value) || ''); }catch(e){}
+    try{ if(typeof adminRender==='function') adminRender(); }catch(e){}
+    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+  }
+
+  function saveMaterialFromAdmin(ev){
+    var catEl=E('adminMatCat'), codeEl=E('adminMatCode'), nameEl=E('adminMatName'), priceEl=E('adminMatPrice'), statusEl=E('adminMatStatus');
+    if(!catEl || !codeEl || !nameEl) return;
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); }
+
+    var cat = normCat(catEl.value);
+    var code = normCode(codeEl.value);
+    var name = String(nameEl.value||'').trim();
+    var price = priceEl ? String(priceEl.value||'').trim() : '';
+    var status = statusEl ? String(statusEl.value||'free').trim() : 'free';
+    if(!cat){ alert('Vul eerst een rubriek in.'); return false; }
+    if(!code && !name){ alert('Vul minimaal een code of naam in. Lege rubrieken worden niet opgeslagen.'); return false; }
+
+    var s = getState();
+    s.materials = cleanMaterialList(s.materials || []);
+    // Exacte match: TO en TOIL zijn twee verschillende rubrieken.
+    var existing = s.materials.find(function(m){ return normCat(m.cat)===cat && normCode(m.code)===code && code; });
+    var obj = existing || { id: 'mat_' + cat.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '_' + (code || Math.random().toString(36).slice(2,8)).toLowerCase() };
+    obj.cat = cat;
+    obj.rubriek = cat;
+    obj.category = cat;
+    obj.code = code;
+    obj.nr = code;
+    obj.name = name;
+    obj.price = price;
+    obj.status = status || 'free';
+    obj.updatedAt = now();
+    if(existing) Object.assign(existing,obj);
+    else s.materials.push(obj);
+
+    s.materials = cleanMaterialList(s.materials);
+    cleanRubricSettings(s, Array.from(new Set(s.materials.map(function(m){ return normCat(m.cat); }))));
+    saveLocal(s);
+    refreshMaterialUi();
+    toast('Materiaal opgeslagen: rubriek ' + cat);
+    syncMaterialsToFirebase(s).then(function(ok){ if(ok) toast('Materiaal opgeslagen in Firebase'); }).catch(function(err){ console.warn('[BNS v917] Firebase opslaan mislukt', err); alert('Materiaal is lokaal opgeslagen, maar Firebase opslaan gaf een melding. Niet afsluiten tot sync hersteld is.'); });
+    return false;
+  }
+
+  function patchAdminSave(){
+    var btn=E('adminSaveMat');
+    if(btn && btn.dataset.bns917 !== '1'){
+      btn.dataset.bns917='1';
+      btn.addEventListener('click', saveMaterialFromAdmin, true);
+    }
+  }
+
+  // Exacte renders overschrijven waar oude prefix/lege-rubriek logica kan storen.
+  window.BNS917CleanupEmptyMaterialRubrics = function(){ var r=cleanupMaterials({sync:true}); refreshMaterialUi(); toast('Lege materiaalrubrieken opgeschoond'); return r; };
+  window.BNS917SaveMaterialsToFirebase = function(){ return syncMaterialsToFirebase(getState()); };
+
+  function run(){
+    cleanupMaterials({sync:false});
+    patchAdminSave();
+    refreshMaterialUi();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(run,120); });
+  else setTimeout(run,120);
+  setTimeout(run,800);
+  setTimeout(function(){ cleanupMaterials({sync:true}); },1800);
+
+  var oldRenderAll = window.renderAll;
+  if(typeof oldRenderAll === 'function' && !oldRenderAll.__bns917){
+    var patched = function(){
+      var r = oldRenderAll.apply(this, arguments);
+      setTimeout(function(){ patchAdminSave(); },0);
+      return r;
+    };
+    patched.__bns917 = true;
+    window.renderAll = patched;
+    try{ renderAll = patched; }catch(e){}
+  }
+
+  console.info('[BNS v917] Materiaalrubrieken schoon, exacte rubriek-match actief. TO en TOIL zijn apart.');
+})();
+
+/* ===== BNS V918 - UPDATE SAFE DATA GUARD =====
+   Doel: bij app-updates nooit klanten, opdrachten of materialen leeg overschrijven.
+   Backups mogen alleen herstelpunten zijn en mogen operationele data nooit vervangen.
+*/
+(function(){
+  'use strict';
+  if(window.__BNS_V918_UPDATE_SAFE_DATA_GUARD__) return;
+  window.__BNS_V918_UPDATE_SAFE_DATA_GUARD__ = true;
+
+  var PROTECTED = ['orders','materials','customers','locations'];
+  var cfg = window.EVENT_PLANNER_CUSTOMER || window.EPP_CUSTOMER_CONFIG || {};
+  var customerId = String(cfg.customerId || window.EPP_CUSTOMER_ID || window.BNS_RENTAL_CUSTOMER_ID || 'amsterdam-verhuur');
+  var storageKey = String((window.EVENT_PLANNER_CONFIG && window.EVENT_PLANNER_CONFIG.storageKey) || window.BNS_RENTAL_STORAGE_KEY || ('event-planner-pro-' + customerId + '-v1'));
+  var backupKey = storageKey + '__BNS_V918_BUSINESS_DATA_LATEST__';
+  var backupDayPrefix = storageKey + '__BNS_V918_BUSINESS_DATA_DAY__';
+  var allowReplaceFlag = '__BNS_ALLOW_EMPTY_BUSINESS_DATA_REPLACE__';
+
+  function now(){ return new Date().toISOString(); }
+  function dayKey(){
+    var d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0,10);
+  }
+  function parse(raw){
+    try{ return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
+  }
+  function clone(o){
+    try{ return JSON.parse(JSON.stringify(o)); }catch(e){ return o; }
+  }
+  function getAppStateObject(){
+    try{
+      if(window.state && typeof window.state === 'object') return window.state;
+    }catch(e){}
+    return parse(localStorage.getItem(storageKey)) || null;
+  }
+  function count(obj, field){
+    return Array.isArray(obj && obj[field]) ? obj[field].length : 0;
+  }
+  function hasAnyBusinessData(obj){
+    if(!obj || typeof obj !== 'object') return false;
+    return PROTECTED.some(function(k){ return count(obj,k) > 0; });
+  }
+  function latestBackup(){
+    var b = parse(localStorage.getItem(backupKey));
+    return b && b.data ? b : null;
+  }
+  function writeLocalBackup(source){
+    if(!hasAnyBusinessData(source)) return false;
+    var data = {};
+    PROTECTED.forEach(function(k){ data[k] = Array.isArray(source[k]) ? clone(source[k]) : []; });
+    var payload = {
+      type: 'business-data-guard',
+      customerId: customerId,
+      createdAt: now(),
+      day: dayKey(),
+      counts: PROTECTED.reduce(function(a,k){ a[k]=data[k].length; return a; },{}),
+      data: data
+    };
+    try{ localStorage.setItem(backupKey, JSON.stringify(payload)); }catch(e){}
+    try{ localStorage.setItem(backupDayPrefix + dayKey(), JSON.stringify(payload)); }catch(e){}
+    try{
+      // maximaal 14 lokale dagbackups bewaren
+      var keys=[];
+      for(var i=0;i<localStorage.length;i++){
+        var key=localStorage.key(i);
+        if(key && key.indexOf(backupDayPrefix)===0) keys.push(key);
+      }
+      keys.sort();
+      while(keys.length>14){ localStorage.removeItem(keys.shift()); }
+    }catch(e){}
+    return true;
+  }
+  function mergeProtected(incoming){
+    if(!incoming || typeof incoming !== 'object') return incoming;
+    if(incoming[allowReplaceFlag]) return incoming;
+    var b = latestBackup();
+    if(!b || !b.data) return incoming;
+    var changed = false;
+    var version = String(incoming.version || incoming.__version || '').toLowerCase();
+    var looksLikeEmptyBootstrap = /empty-bootstrap|initial_state|empty|bootstrap/.test(version);
+    PROTECTED.forEach(function(k){
+      var incIsArray = Array.isArray(incoming[k]);
+      var incCount = incIsArray ? incoming[k].length : 0;
+      var bak = Array.isArray(b.data[k]) ? b.data[k] : [];
+      if(!bak.length) return;
+      // Alleen beschermen tegen leeg/missend/bootstrap. Niet tegen normale bewuste wijzigingen.
+      if(!incIsArray || incCount === 0 || looksLikeEmptyBootstrap){
+        incoming[k] = clone(bak);
+        changed = true;
+      }
+    });
+    if(changed){
+      incoming.__BNS_V918_RESTORED_FROM_GUARD__ = now();
+      incoming.__BNS_V918_RESTORE_REASON__ = 'App-update of bootstrap probeerde klanten/opdrachten/materialen leeg te zetten.';
+    }
+    return incoming;
+  }
+
+  // Maak direct een backup van bestaande werkende data.
+  try{ writeLocalBackup(getAppStateObject()); }catch(e){}
+
+  // Bescherm localStorage tegen een update die lege INITIAL_STATE opslaat.
+  try{
+    var rawSet = Storage.prototype.setItem;
+    if(!Storage.prototype.__BNS_V918_GUARDED__){
+      Storage.prototype.__BNS_V918_GUARDED__ = true;
+      Storage.prototype.setItem = function(key, value){
+        try{
+          if(String(key) === storageKey){
+            var incoming = parse(String(value));
+            if(incoming && typeof incoming === 'object'){
+              incoming = mergeProtected(incoming);
+              value = JSON.stringify(incoming);
+              if(hasAnyBusinessData(incoming)) writeLocalBackup(incoming);
+            }
+          }
+        }catch(e){}
+        return rawSet.call(this, key, value);
+      };
+    }
+  }catch(e){}
+
+  function restoreFromLocalBackup(){
+    var b = latestBackup();
+    if(!b || !b.data) return false;
+    var s = getAppStateObject() || {};
+    var changed = false;
+    PROTECTED.forEach(function(k){
+      var currentCount = count(s,k);
+      var bak = Array.isArray(b.data[k]) ? b.data[k] : [];
+      if(currentCount === 0 && bak.length){
+        s[k] = clone(bak);
+        changed = true;
+      }
+    });
+    if(!changed) return false;
+    s.__BNS_V918_RESTORED_MANUAL__ = now();
+    try{ if(window.state && typeof window.state==='object') Object.assign(window.state, s); }catch(e){}
+    try{ localStorage.setItem(storageKey, JSON.stringify(s)); }catch(e){}
+    try{ if(typeof window.save === 'function') window.save(); }catch(e){}
+    try{ if(typeof window.renderAll === 'function') window.renderAll(); }catch(e){}
+    return true;
+  }
+
+  async function firebaseTools(){
+    var fbCfg = (window.EVENT_PLANNER_CUSTOMER && window.EVENT_PLANNER_CUSTOMER.firebaseConfig) || window.BNS_FIREBASE_CONFIG || window.FIREBASE_CONFIG || window.firebaseConfig;
+    if(!fbCfg || !fbCfg.databaseURL) return null;
+    var appMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    var dbMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js');
+    var app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(fbCfg);
+    return {db: dbMod.getDatabase(app), d: dbMod};
+  }
+
+  async function writeFirebaseBusinessBackup(){
+    var s = getAppStateObject();
+    if(!hasAnyBusinessData(s)) return false;
+    var data = {};
+    PROTECTED.forEach(function(k){ data[k] = Array.isArray(s[k]) ? clone(s[k]) : []; });
+    var payload = {
+      type: 'business-data-guard',
+      customerId: customerId,
+      createdAt: now(),
+      day: dayKey(),
+      counts: PROTECTED.reduce(function(a,k){ a[k]=data[k].length; return a; },{}),
+      data: data
+    };
+    writeLocalBackup(s);
+    try{
+      var t = await firebaseTools();
+      if(!t) return false;
+      var base = 'customers/' + customerId + '/backups';
+      await Promise.all([
+        t.d.set(t.d.ref(t.db, base + '/business_data_latest'), payload),
+        t.d.set(t.d.ref(t.db, base + '/business_data_daily/' + dayKey()), payload)
+      ]);
+      // verwijder oudere dan 14 dagen uit business_data_daily
+      try{
+        var snap = await t.d.get(t.d.ref(t.db, base + '/business_data_daily'));
+        var val = snap && snap.exists() ? snap.val() : null;
+        var keys = val ? Object.keys(val).sort() : [];
+        while(keys.length > 14){
+          await t.d.remove(t.d.ref(t.db, base + '/business_data_daily/' + keys.shift()));
+        }
+      }catch(e){}
+      return true;
+    }catch(e){
+      console.warn('[BNS V918] Firebase business backup niet gelukt:', e && e.message ? e.message : e);
+      return false;
+    }
+  }
+
+  // Controleer na laden of een bootstrap lege data heeft teruggezet.
+  [500,1500,3500,8000].forEach(function(ms){
+    setTimeout(function(){
+      try{
+        var s = getAppStateObject();
+        if(s && !hasAnyBusinessData(s)) restoreFromLocalBackup();
+        else writeLocalBackup(s);
+      }catch(e){}
+    }, ms);
+  });
+
+  // 1 keer per sessie backup naar Firebase, en daarna rustig periodiek.
+  setTimeout(function(){ writeFirebaseBusinessBackup(); }, 6000);
+  setInterval(function(){
+    try{ writeLocalBackup(getAppStateObject()); }catch(e){}
+  }, 60000);
+
+  window.BNS918BackupBusinessData = writeFirebaseBusinessBackup;
+  window.BNS918RestoreBusinessDataBackup = restoreFromLocalBackup;
+  window.BNS918BusinessDataGuardInfo = function(){
+    var s=getAppStateObject()||{}, b=latestBackup();
+    return {customerId:customerId, storageKey:storageKey, currentCounts:PROTECTED.reduce(function(a,k){a[k]=count(s,k);return a;},{}), backup:b && b.counts, backupAt:b && b.createdAt};
+  };
+  console.info('[BNS V918] Update-safe data guard actief: klanten, opdrachten, materialen en locaties worden beschermd tegen lege updates.');
+})();
