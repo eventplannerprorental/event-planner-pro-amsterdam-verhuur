@@ -48245,74 +48245,64 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   else setTimeout(install,80);
 })();
 
-(function AMSTERDAM_DOCUMENT_OUTPUT_V939(){
+(function DOCUMENT_OUTPUT_PATCH_V5(){
   'use strict';
-  if(window.__AMSTERDAM_DOCUMENT_OUTPUT_V939__) return;
-  window.__AMSTERDAM_DOCUMENT_OUTPUT_V939__ = true;
+  if(window.__DOCUMENT_OUTPUT_PATCH_V5__) return;
+  window.__DOCUMENT_OUTPUT_PATCH_V5__ = true;
 
   function css(){
-    return '<style id="amsterdamDocumentOutputCssV939">'+
-      '.ams-doc-toolbar{position:sticky;top:0;z-index:2147483647;background:#0f172a;color:#fff;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)}'+
-      '.ams-doc-toolbar button{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#2563eb;color:white;font-size:14px}'+
-      '.ams-doc-toolbar button.green{background:#16a34a}.ams-doc-toolbar button.orange{background:#f97316}.ams-doc-toolbar button.grey{background:#64748b}.ams-doc-toolbar button.red{background:#dc2626}'+
-      '.ams-doc-toolbar .hint{font-size:12px;opacity:.9;margin-left:auto}.ams-doc-toolbar .note{font-size:11px;opacity:.85}'+
-      'body>.actions:not(.ams-doc-toolbar),body>.doc-toolbar:not(.ams-doc-toolbar){display:none!important}'+
-      '@media print{.ams-doc-toolbar,body>.actions,body>.doc-toolbar{display:none!important}body{background:#fff!important}.page,main{box-shadow:none!important}}'+
+    return '<style id="documentOutputPatchCssV5">'+
+      '.doc-toolbar{position:sticky;top:0;z-index:2147483647;background:#0f172a;color:#fff;padding:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:Arial,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25)}'+
+      '.doc-toolbar button{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;background:#2563eb;color:white;font-size:14px}'+
+      '.doc-toolbar button.green{background:#16a34a}.doc-toolbar button.orange{background:#f97316}.doc-toolbar button.grey{background:#64748b}.doc-toolbar button.red{background:#dc2626}'+
+      '.doc-toolbar .hint{font-size:12px;opacity:.9;margin-left:auto}.doc-toolbar .note{font-size:11px;opacity:.85}'+
+      'body>.actions:not(.doc-toolbar){display:none!important}'+
+      '@media print{.doc-toolbar,body>.actions{display:none!important}body{background:#fff!important}.page,main{box-shadow:none!important}}'+
       '</style>';
   }
 
   function toolbar(){
-    return '<div class="actions ams-doc-toolbar" id="amsterdamDocumentToolbarV939">'+
-      '<button type="button" class="green" data-ams-doc-action="pdf">PDF downloaden</button>'+
-      '<button type="button" data-ams-doc-action="print">Print / PDF</button>'+
-      '<button type="button" class="orange" data-ams-doc-action="mail">Mail</button>'+
-      '<button type="button" class="green" data-ams-doc-action="whatsapp">WhatsApp</button>'+
-      '<button type="button" class="grey" data-ams-doc-action="eml">Download mailbestand</button>'+
-      '<button type="button" class="grey" data-ams-doc-action="copy">Kopieer tekst</button>'+
-      '<button type="button" class="red" data-ams-doc-action="close">Sluiten</button>'+
-      '<span class="hint">Powered by Tapwagen.nl <span class="note" id="amsDocPatchNoteV939"></span></span>'+
+    return '<div class="actions doc-toolbar" id="documentToolbarV5">'+
+      '<button type="button" class="green" data-doc-action="pdf">PDF downloaden</button>'+
+      '<button type="button" data-doc-action="print">Print / PDF</button>'+
+      '<button type="button" class="orange" data-doc-action="mail">Mail</button>'+
+      '<button type="button" class="green" data-doc-action="whatsapp">WhatsApp</button>'+
+      '<button type="button" class="grey" data-doc-action="eml">Download mailbestand</button>'+
+      '<button type="button" class="grey" data-doc-action="copy">Kopieer tekst</button>'+
+      '<button type="button" class="red" data-doc-action="close">Sluiten</button>'+
+      '<span class="hint">Powered by Tapwagen.nl <span class="note" id="docPatchNoteV5"></span></span>'+
       '</div>';
   }
 
   function script(){
-    return '<script id="amsterdamDocumentOutputScriptV939">(function(){'+
-      'if(window.__AMS_DOC_POPUP_HELPERS_V939__)return;window.__AMS_DOC_POPUP_HELPERS_V939__=true;'+
+    return '<script id="documentOutputPatchScriptV5">(function(){'+
+      'if(window.__DOC_POPUP_HELPERS_V5__)return;window.__DOC_POPUP_HELPERS_V5__=true;'+
       'var PDF_CDN="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";'+
-      'function note(t){var n=document.getElementById("amsDocPatchNoteV939");if(n)n.textContent=t||""}'+
-      'function systemMessage(msg){var old=document.getElementById("amsDocSystemMessageV939");if(old)old.remove();var wrap=document.createElement("div");wrap.id="amsDocSystemMessageV939";wrap.style.cssText="position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:2147483647;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif";wrap.innerHTML="<div style=\\"width:min(520px,92vw);background:white;color:#172033;border-radius:20px;padding:24px;box-shadow:0 20px 70px rgba(0,0,0,.3)\\"><h2 style=\\"margin:0 0 12px;font-size:24px\\">Systeemmelding</h2><div style=\\"font-size:16px;line-height:1.45;color:#475569\\">"+String(msg||"").replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})+"</div><button type=\\"button\\" id=\\"amsDocSystemOkV939\\" style=\\"float:right;margin-top:18px;border:0;border-radius:12px;padding:10px 18px;background:#2563eb;color:white;font-weight:900\\">OK</button></div>";document.body.appendChild(wrap);document.getElementById("amsDocSystemOkV939").onclick=function(){wrap.remove()}}'+
-      'function cleanupOld(){try{Array.prototype.slice.call(document.querySelectorAll("body>.actions,body>.doc-toolbar")).forEach(function(el){if(el.id!=="amsterdamDocumentToolbarV939"&&!el.classList.contains("ams-doc-toolbar")){el.remove();}})}catch(e){}}'+
-      'cleanupOld();setTimeout(cleanupOld,50);setTimeout(cleanupOld,250);setTimeout(cleanupOld,900);'+
+      'function note(t){var n=document.getElementById("docPatchNoteV5");if(n)n.textContent=t||""}'+
       'function safe(v){return String(v||"document").replace(/[^a-z0-9\\-_. ]/gi,"_").replace(/\\s+/g,"_").slice(0,80)||"document"}'+
-      'function cloneDoc(){cleanupOld();var c=document.documentElement.cloneNode(true);c.querySelectorAll(".ams-doc-toolbar,#amsterdamDocumentToolbarV939,#amsterdamDocumentOutputScriptV939,#amsterdamDocumentOutputCssV939,#amsDocSystemMessageV939,body>.actions,body>.doc-toolbar").forEach(function(e){e.remove()});return c}'+
+      'function cloneDoc(){var c=document.documentElement.cloneNode(true);c.querySelectorAll(".doc-toolbar,body>.actions,script#documentOutputPatchScriptV5,style#documentOutputPatchCssV5").forEach(function(e){e.remove()});return c}'+
       'function html(){return "<!doctype html>\\n"+cloneDoc().outerHTML}'+
       'function text(){var c=cloneDoc();return ((c.querySelector("main,.page,.invoice-preview,.document,.doc,body")||c).innerText||"").trim()}'+
       'function main(){return document.querySelector("main,.page,.invoice-preview,.document,.doc,body")||document.body}'+
       'function subject(){return (document.title||document.querySelector("h1,h2")&&document.querySelector("h1,h2").innerText||"Document").trim()}'+
       'function blob(name,type,content){var b=new Blob([content],{type:type});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){try{URL.revokeObjectURL(a.href);a.remove()}catch(e){}},1000)}'+
       'function loadPdf(cb){if(window.html2pdf)return cb(true);var s=document.createElement("script");s.src=PDF_CDN;s.async=true;s.onload=function(){cb(!!window.html2pdf)};s.onerror=function(){cb(false)};document.head.appendChild(s)}'+
-      'function doPrint(){systemMessage("Kies in het printervenster bij Bestemming/Printer: Opslaan als PDF.");setTimeout(function(){try{window.print()}catch(e){systemMessage("Printvenster kon niet openen: "+e.message)}},80)}'+
-      'function doPdf(){note("PDF wordt gemaakt...");loadPdf(function(ok){if(!ok||!window.html2pdf){note("PDF-generator niet geladen; Print/PDF geopend.");doPrint();return}try{var opt={margin:[8,8,8,8],filename:safe(subject())+".pdf",image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollX:0,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}};window.html2pdf().set(opt).from(main()).save().then(function(){note("PDF gedownload.")}).catch(function(err){note("PDF mislukt; Print/PDF geopend.");systemMessage("PDF maken mislukt. Gebruik Print / PDF.");});}catch(e){note("PDF mislukt; Print/PDF geopend.");systemMessage("PDF maken mislukt. Gebruik Print / PDF.");}})}'+
-      'function doCopy(){var t=text();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){systemMessage("Documenttekst gekopieerd.")}).catch(function(){prompt("Kopieer de tekst:",t)})}else prompt("Kopieer de tekst:",t)}'+
+      'function doPrint(){alert("Kies in het printervenster bij Bestemming/Printer: Opslaan als PDF.");setTimeout(function(){try{window.print()}catch(e){alert("Printvenster kon niet openen: "+e.message)}},80)}'+
+      'function doPdf(){note("PDF wordt gemaakt...");loadPdf(function(ok){if(!ok||!window.html2pdf){note("PDF-generator niet geladen; Print/PDF geopend.");doPrint();return}try{var opt={margin:[8,8,8,8],filename:safe(subject())+".pdf",image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:"#ffffff",scrollX:0,scrollY:0},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"},pagebreak:{mode:["css","legacy"]}};window.html2pdf().set(opt).from(main()).save().then(function(){note("PDF gedownload.")}).catch(function(err){note("PDF mislukt; Print/PDF geopend.");alert("PDF maken mislukt. We openen Print/PDF.");doPrint()});}catch(e){note("PDF mislukt; Print/PDF geopend.");alert("PDF maken mislukt. We openen Print/PDF.");doPrint()}})}'+
+      'function doCopy(){var t=text();if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){alert("Documenttekst gekopieerd.")}).catch(function(){prompt("Kopieer de tekst:",t)})}else prompt("Kopieer de tekst:",t)}'+
       'function doEml(){var subj=subject();var eml="To: \\r\\nSubject: "+subj.replace(/[\\r\\n]/g," ")+"\\r\\nMIME-Version: 1.0\\r\\nContent-Type: text/html; charset=UTF-8\\r\\nContent-Transfer-Encoding: 8bit\\r\\n\\r\\n"+html();blob(safe(subj)+".eml","message/rfc822;charset=utf-8",eml)}'+
-      'function doMail(){var subj=subject(), body=text(), url="mailto:?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);if(url.length<1800){try{window.location.href=url}catch(e){window.open(url,"_self")}}else{doEml();systemMessage("De e-mailtekst is te groot voor direct mailen. Er is een mailbestand gedownload.")}}'+
-      'function doWhatsApp(){var msg=subject()+"\\n\\n"+text();if(msg.length>4500){doCopy();systemMessage("De tekst is te lang voor WhatsApp. De tekst is gekopieerd.");return}window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}'+
-      'function handle(action){cleanupOld();if(action==="pdf")doPdf();else if(action==="print")doPrint();else if(action==="mail")doMail();else if(action==="whatsapp")doWhatsApp();else if(action==="eml")doEml();else if(action==="copy")doCopy();else if(action==="close")try{window.close()}catch(e){}}'+
-      'document.addEventListener("click",function(ev){var b=ev.target&&ev.target.closest&&ev.target.closest("[data-ams-doc-action]");if(!b)return;ev.preventDefault();ev.stopPropagation();handle(b.getAttribute("data-ams-doc-action"));},true);'+
-      'window.amsDocDownloadPdf=doPdf;window.amsDocPrintPdf=doPrint;window.amsDocMail=doMail;window.amsDocWhatsApp=doWhatsApp;window.amsDocDownloadEml=doEml;window.amsDocCopyText=doCopy;'+
+      'function doMail(){var subj=subject(), body=text(), url="mailto:?subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body);if(url.length<1800){try{window.location.href=url}catch(e){window.open(url,"_self")}}else{doEml();alert("De e-mailtekst is te groot voor direct mailen. Er is een mailbestand gedownload.")}}'+
+      'function doWhatsApp(){var msg=subject()+"\\n\\n"+text();if(msg.length>4500){doCopy();alert("De tekst is te lang voor WhatsApp. De tekst is gekopieerd.");return}window.open("https://wa.me/?text="+encodeURIComponent(msg),"_blank")}'+
+      'function handle(action){if(action==="pdf")doPdf();else if(action==="print")doPrint();else if(action==="mail")doMail();else if(action==="whatsapp")doWhatsApp();else if(action==="eml")doEml();else if(action==="copy")doCopy();else if(action==="close")try{window.close()}catch(e){}}'+
+      'document.addEventListener("click",function(ev){var b=ev.target&&ev.target.closest&&ev.target.closest("[data-doc-action]");if(!b)return;ev.preventDefault();ev.stopPropagation();handle(b.getAttribute("data-doc-action"));},true);'+
+      'window.docDownloadPdf=doPdf;window.docPrintPdf=doPrint;window.docMail=doMail;window.docWhatsApp=doWhatsApp;window.docDownloadEml=doEml;window.docCopyText=doCopy;'+
       '})();<\/script>';
-  }
-
-  function stripOldToolbars(h){
-    return String(h || '')
-      .replace(/<div\s+class=["']actions["'][\s\S]*?<\/div>\s*(?=<main|<section|<div\s+class=["']page|<main\s+class=["']page)/ig, '')
-      .replace(/<div\s+class=["']doc-toolbar["'][\s\S]*?<\/div>/ig, '');
   }
 
   function inject(html){
     html = String(html == null ? '' : html);
-    if(!html) return html;
-    if(html.indexOf('amsterdamDocumentToolbarV939') >= 0 || html.indexOf('__AMS_DOC_POPUP_HELPERS_V939__') >= 0) return html;
-    var h = stripOldToolbars(html);
+    if(!html || html.indexOf('documentToolbarV5') >= 0 || html.indexOf('__DOC_POPUP_HELPERS_V5__') >= 0) return html;
+    var h = html;
     if(/<\/head>/i.test(h)) h = h.replace(/<\/head>/i, css()+script()+'</head>');
     else h = css()+script()+h;
     if(/<body([^>]*)>/i.test(h)) h = h.replace(/<body([^>]*)>/i, '<body$1>'+toolbar());
@@ -48323,8 +48313,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function shouldPatch(s){ return /<html|<body|<main|class=["']page|FACTUUR|OPDRACHT|OFFERTE|Opdrachtbevestiging|Factuur|Offerte/i.test(String(s||'')); }
 
   function patchDoc(doc){
-    if(!doc || doc.__amsterdamDocumentOutputPatchedV939) return;
-    doc.__amsterdamDocumentOutputPatchedV939 = true;
+    if(!doc || doc.__documentOutputPatchedV5) return;
+    doc.__documentOutputPatchedV5 = true;
     var oldWrite = doc.write;
     var oldWriteln = doc.writeln;
     doc.write = function(){
@@ -48344,10 +48334,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return w;
   };
 
-  window.AmsterdamV939Info = function(){ return {version:'v939', base:'uploaded Amsterdam zip', scope:'documents only', oldToolbar:'removed'}; };
-  console.info('[Amsterdam v939] documentknoppen actief, oude documentbalk wordt verwijderd.');
+  console.info('[Documenten] v5 PDF, mail en WhatsApp actief - alleen documentvensters.');
 })();
-
 
 /* =========================================================
    BNS v914 - Verwijderde opdrachten blijven verwijderd
@@ -49981,4 +49969,112 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', hookAdminSave); else hookAdminSave();
   setTimeout(function(){ window.BNS922RebuildMaterialsNode().catch(function(e){ console.warn('[BNS v922] auto rebuild overgeslagen:', e.message||e); }); }, 2500);
   console.info('[BNS v922] Firebase config/materialen herstel actief. Gebruik BNS922RebuildMaterialsNode().');
+})();
+
+
+/* Amsterdam v941 - documentknoppen exact en veilig
+   Alleen Amsterdam-documentvensters: oude en eerdere dubbele knoppenbalken eruit, 1 werkende balk erin.
+   Geen Tapwagen/Rental code, geen data/Firebase/opdrachten/materialen wijziging. */
+(function AmsterdamV941DocumentButtonsOnly(){
+  "use strict";
+  if(window.__AMSTERDAM_V941_DOC_BUTTONS_ONLY__) return;
+  window.__AMSTERDAM_V941_DOC_BUTTONS_ONLY__ = true;
+
+  var CDN = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+
+  function isDocumentHtml(html){
+    html = String(html || "");
+    if(!/<html[\s>]/i.test(html) && !/<body[\s>]/i.test(html)) return false;
+    return /\b(OFFERTE|FACTUUR|OPDRACHTBEVESTIGING|Opdrachtbevestiging|Factuur|Offerte)\b/i.test(html)
+      || /class=["'][^"']*actions[^"']*["']/i.test(html)
+      || /id=["']bnsPrintDocV73["']/i.test(html)
+      || /PDF downloaden|Download mailbestand|Kopieer tekst/i.test(html);
+  }
+
+  function extraCss(){
+    return '\n<style id="ams-v941-doc-style">\n'+
+      '.ams-v941-toolbar{position:fixed;top:8px;left:8px;right:8px;z-index:999999;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:Arial,Helvetica,sans-serif}\n'+
+      '.ams-v941-toolbar button{border:0;border-radius:8px;color:#fff;padding:9px 13px;font-weight:900;cursor:pointer;box-shadow:0 2px 7px rgba(0,0,0,.16)}\n'+
+      '.ams-v941-pdf{background:#16a34a}.ams-v941-print{background:#2563eb}.ams-v941-mail{background:#ea580c}.ams-v941-wa{background:#16a34a}.ams-v941-share{background:#475569}.ams-v941-copy{background:#475569}.ams-v941-close{background:#dc2626}\n'+
+      'body{padding-top:52px}.ams-v941-system{position:fixed;inset:0;z-index:1000000;background:rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;font-family:Arial,Helvetica,sans-serif}\n'+
+      '.ams-v941-system-card{background:white;color:#172033;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.25);padding:24px;max-width:520px;width:calc(100% - 36px)}\n'+
+      '.ams-v941-system-card h2{margin:0 0 12px;font-size:24px}.ams-v941-system-card p{margin:0 0 18px;line-height:1.45;color:#475569}.ams-v941-system-card button{float:right;border:0;border-radius:12px;background:#2563eb;color:white;font-weight:900;padding:10px 18px}\n'+
+      '@media print{.ams-v941-toolbar,.ams-v941-system{display:none!important}body{padding-top:0!important}}\n'+
+      '</style>\n';
+  }
+
+  function toolbar(){
+    return '<div class="ams-v941-toolbar" id="amsV941Toolbar">'
+      + '<button class="ams-v941-pdf" type="button" onclick="AmsterdamV941DocPdf()">PDF downloaden</button>'
+      + '<button class="ams-v941-print" type="button" onclick="window.print()">Print / PDF</button>'
+      + '<button class="ams-v941-mail" type="button" onclick="AmsterdamV941DocMail()">Mail</button>'
+      + '<button class="ams-v941-wa" type="button" onclick="AmsterdamV941DocWhatsApp()">WhatsApp</button>'
+      + '<button class="ams-v941-share" type="button" onclick="AmsterdamV941DocShare()">Delen</button>'
+      + '<button class="ams-v941-copy" type="button" onclick="AmsterdamV941DocDownloadMail()">Download mailbestand</button>'
+      + '<button class="ams-v941-copy" type="button" onclick="AmsterdamV941DocCopy()">Kopieer tekst</button>'
+      + '<button class="ams-v941-close" type="button" onclick="AmsterdamV941DocClose()">Sluiten</button>'
+      + '</div>';
+  }
+
+  function helperScript(){
+    return '<script id="ams-v941-doc-script">(function(){\n'
+      + 'if(window.__AMSTERDAM_V941_DOC_HELPERS__)return;window.__AMSTERDAM_V941_DOC_HELPERS__=true;\n'
+      + 'var CDN='+JSON.stringify(CDN)+';\n'
+      + 'function cleanText(){var clone=document.body.cloneNode(true);Array.prototype.slice.call(clone.querySelectorAll(".ams-v941-toolbar,.ams-v941-system,script,style")).forEach(function(x){x.remove();});return (clone.innerText||clone.textContent||"").replace(/\\n{3,}/g,"\\n\\n").trim();}\n'
+      + 'function fileBase(){return (document.title||"Amsterdam-document").replace(/[^a-z0-9_-]+/gi,"_").replace(/^_+|_+$/g,"")||"Amsterdam-document";}\n'
+      + 'window.AmsterdamV941SystemMessage=function(msg){var old=document.getElementById("amsV941System");if(old)old.remove();var d=document.createElement("div");d.id="amsV941System";d.className="ams-v941-system";d.innerHTML="<div class=\\"ams-v941-system-card\\"><h2>Systeemmelding</h2><p>"+String(msg||"").replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];})+"</p><button type=\\"button\\" onclick=\\"document.getElementById(\\\'amsV941System\\\').remove()\\">OK</button></div>";document.body.appendChild(d);};\n'
+      + 'function loadPdf(cb){if(window.html2pdf){cb();return;}var s=document.createElement("script");s.src=CDN;s.onload=cb;s.onerror=function(){AmsterdamV941SystemMessage("PDF-bibliotheek kon niet laden. Gebruik Print / PDF en kies Opslaan als PDF.");};document.head.appendChild(s);}\n'
+      + 'window.AmsterdamV941DocPdf=function(){loadPdf(function(){try{var target=document.querySelector(".page")||document.querySelector("main")||document.body;var opt={margin:8,filename:fileBase()+".pdf",image:{type:"jpeg",quality:0.98},html2canvas:{scale:2,useCORS:true,logging:false},jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}};window.html2pdf().set(opt).from(target).save();}catch(e){AmsterdamV941SystemMessage("PDF maken mislukt. Gebruik Print / PDF en kies Opslaan als PDF.");}});};\n'
+      + 'window.AmsterdamV941DocMail=function(){var subject=encodeURIComponent(document.title||"Amsterdam document");var body=encodeURIComponent(cleanText());location.href="mailto:?subject="+subject+"&body="+body;};\n'
+      + 'window.AmsterdamV941DocWhatsApp=function(){location.href="https://wa.me/?text="+encodeURIComponent(cleanText());};\n'
+      + 'window.AmsterdamV941DocShare=function(){var txt=cleanText();if(navigator.share){navigator.share({title:document.title||"Amsterdam document",text:txt}).catch(function(){AmsterdamV941DocCopy();});}else{AmsterdamV941DocCopy();}};\n'
+      + 'window.AmsterdamV941DocCopy=function(){var txt=cleanText();function ok(){AmsterdamV941SystemMessage("Tekst gekopieerd.");}function fail(){AmsterdamV941SystemMessage("Kopiëren lukt niet automatisch. Selecteer de tekst handmatig.");}try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(ok).catch(fail);}else{var ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();ok();}}catch(e){fail();}};\n'
+      + 'window.AmsterdamV941DocDownloadMail=function(){var blob=new Blob([cleanText()],{type:"text/plain;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fileBase()+"-mailtekst.txt";document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},400);};\n'
+      + 'window.AmsterdamV941DocClose=function(){try{window.close();}catch(e){}setTimeout(function(){try{if(!window.closed){if(window.opener){location.replace("about:blank");}else{history.back();}}}catch(e){}},120);};\n'
+      + '})();<\/script>';
+  }
+
+  function removeActionBars(html){
+    var s=String(html||"");
+    // Verwijder oude en eerdere documentbalken. Alleen in document-HTML, niet in hoofdapp.
+    s=s.replace(/<div\b[^>]*class=["'][^"']*(?:actions|ams-v\d+-toolbar|ams-v941-toolbar)[^"']*["'][^>]*>[\s\S]*?<\/div>/ig,'');
+    s=s.replace(/<nav\b[^>]*class=["'][^"']*(?:actions|toolbar|doc)[^"']*["'][^>]*>[\s\S]*?<\/nav>/ig,'');
+    return s;
+  }
+
+  function transformDocumentHtml(html){
+    if(!isDocumentHtml(html)) return html;
+    var s=removeActionBars(html);
+    if(!/ams-v941-doc-style/.test(s)){
+      s=s.replace(/<\/head>/i, extraCss()+helperScript()+'</head>');
+    }
+    if(!/id=["']amsV941Toolbar["']/.test(s)){
+      s=s.replace(/<body([^>]*)>/i, '<body$1>'+toolbar());
+    }
+    return s;
+  }
+
+  var originalOpen = window.open;
+  window.open = function(){
+    var w = originalOpen.apply(window, arguments);
+    try{
+      if(w && w.document && !w.__AMSTERDAM_V941_WRITE_PATCHED__){
+        w.__AMSTERDAM_V941_WRITE_PATCHED__ = true;
+        var doc = w.document;
+        var originalWrite = doc.write.bind(doc);
+        doc.write = function(){
+          var args = Array.prototype.slice.call(arguments).map(function(x){
+            return (typeof x === 'string') ? transformDocumentHtml(x) : x;
+          });
+          return originalWrite.apply(doc, args);
+        };
+      }
+    }catch(e){}
+    return w;
+  };
+
+  window.AmsterdamV941Info = function(){
+    return {version:'v941', scope:'Amsterdam documenten only', base:'hhhhevent-planner-pro-amsterdam-verhuur-main.zip', tapwagen:false, rental:false, dataChanged:false};
+  };
+  console.info('[Amsterdam v941] documentknoppen actief: oude balken eruit, één PDF-balk in documentvensters.');
 })();
