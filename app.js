@@ -50262,3 +50262,94 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.AmsterdamV948DeleteInfo=function(){return {app:'Amsterdam Verhuur',tapwagen:'bevroren en niet gebruikt',materials:'Firebase delete + tombstone + backups gefilterd',rubrics:'lege rubriek + kleur + geheugen tombstone'};};
   console.info('[Amsterdam v948] materiaal en lege rubriek definitief wissen actief; Tapwagen niet gebruikt.');
 })();
+
+/* =========================================================
+   Amsterdam v949 - definitieve lege-rubriek verwijderfix
+   Oorzaak v948: v391 onderschept de eerste klik op "Wis rubriek"
+   met stopImmediatePropagation, waardoor pendingRubric leeg blijft.
+   Deze fix leest de rubriek rechtstreeks uit het bevestigingsvenster,
+   bewaart de tombstone voor de oude callback draait en onderdrukt
+   hardcoded lege standaardrubrieken na iedere renderer-run.
+   Alleen Amsterdam Verhuur; geen Tapwagen-routes.
+========================================================= */
+(function AmsterdamV949RubricDeleteFix(){
+  'use strict';
+  if(window.__AMSTERDAM_V949_RUBRIC_DELETE_FIX__) return;
+  window.__AMSTERDAM_V949_RUBRIC_DELETE_FIX__ = true;
+
+  var CAT_TOMBS_KEY='amsterdam_v948_deleted_rubrics';
+  var STATE_KEY='event-planner-pro-amsterdam-verhuur-v1';
+  function T(v){return String(v==null?'':v).trim();}
+  function U(v){return T(v).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24);}
+  function read(k,d){try{var x=JSON.parse(localStorage.getItem(k)||'');return x&&typeof x==='object'?x:d;}catch(e){return d;}}
+  function write(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+  function tombs(){return read(CAT_TOMBS_KEY,{});}
+  function addTomb(c){c=U(c);if(!c)return;var m=tombs();m[c]={at:Date.now(),source:'v949-confirm'};write(CAT_TOMBS_KEY,m);}
+  function stateObj(){try{if(typeof state!=='undefined'&&state)return state;}catch(e){}return window.state||null;}
+  function catOf(m){return U(m&&(m.cat||m.rubriek||m.category||m.categorie));}
+  function hasMaterials(c){var s=stateObj();return !!(s&&Array.isArray(s.materials)&&s.materials.some(function(m){return catOf(m)===c;}));}
+  function removeStoredRubric(c){
+    c=U(c);if(!c)return;
+    ['bns_rubriek_kleuren_v12_pro','bnsCatColors','bns.categoryColors'].forEach(function(k){
+      var m=read(k,{});if(m&&!Array.isArray(m)){delete m[c];delete m[c.toLowerCase()];write(k,m);}
+    });
+    var s=stateObj();
+    if(s){
+      s.settings=s.settings||{};
+      ['catColors','categoryColors','rubricColors','rubriekKleuren'].forEach(function(k){
+        if(s.settings[k]){delete s.settings[k][c];delete s.settings[k][c.toLowerCase()];}
+      });
+      try{if(typeof save==='function')save();}catch(e){}
+      try{localStorage.setItem(STATE_KEY,JSON.stringify(s));}catch(e){}
+    }
+    try{if(U(window.currentCat)===c)window.currentCat='';}catch(e){}
+    try{if(typeof currentCat!=='undefined'&&U(currentCat)===c)currentCat='';}catch(e){}
+  }
+  function rubricFromOverlay(ov){
+    if(!ov)return '';
+    var text=T(ov.textContent);
+    var m=text.match(/Rubriek\s+([A-Z0-9_-]{1,24})\s+bevat\s+geen\s+materialen/i);
+    if(!m)m=text.match(/rubriek[,\s:]+([A-Z0-9_-]{1,24})/i);
+    return U(m&&m[1]);
+  }
+  function hideDeleted(){
+    var map=tombs();
+    document.querySelectorAll('#bns391Cats button,#bns390Cats button,#materialCats button,[data-bns611-cat]').forEach(function(b){
+      var c=U(b.getAttribute('data-cat')||b.getAttribute('data-bns611-cat')||b.textContent);
+      if(c&&map[c]&&!hasMaterials(c))b.remove();
+    });
+  }
+  function refresh(){
+    hideDeleted();
+    try{if(typeof adminRender==='function')adminRender();}catch(e){}
+    try{if(typeof renderCats==='function')renderCats();}catch(e){}
+    setTimeout(hideDeleted,0);setTimeout(hideDeleted,80);setTimeout(hideDeleted,350);
+  }
+
+  // Het bevestigingsvenster wordt niet door v391 geblokkeerd. Lees daarom
+  // de rubriek uit de zichtbare melding in plaats van pendingRubric.
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('.bns391-confirm-ok');
+    if(!b)return;
+    var ov=b.closest('#bns391ConfirmOverlay');
+    var title=T(ov&&ov.querySelector('h3')&&ov.querySelector('h3').textContent).toLowerCase();
+    if(!/lege rubriek wissen/.test(title))return;
+    var c=rubricFromOverlay(ov);
+    if(!c)return;
+    if(hasMaterials(c))return; // veiligheid: nooit een gevulde rubriek wissen
+    addTomb(c);
+    removeStoredRubric(c);
+    setTimeout(refresh,0);setTimeout(refresh,250);setTimeout(refresh,1200);
+  },true);
+
+  // Ook na oude hardcoded renderers blijven gewiste lege rubrieken weg.
+  var mo=new MutationObserver(function(){hideDeleted();});
+  try{mo.observe(document.documentElement,{childList:true,subtree:true});}catch(e){}
+  ['bns:firebase-updated','epp:firebase-updated','bns:materials-saved-firebase','storage'].forEach(function(evt){
+    window.addEventListener(evt,function(){setTimeout(refresh,20);});
+    document.addEventListener(evt,function(){setTimeout(refresh,20);});
+  });
+  setTimeout(refresh,300);setTimeout(refresh,1400);
+  window.AmsterdamV949RubricDeleteInfo=function(){return {fixed:true,source:'confirm-overlay',tapwagen:false};};
+  console.info('[Amsterdam v949] lege rubriek verwijderen hersteld via bevestigingsvenster; Tapwagen niet gebruikt.');
+})();
