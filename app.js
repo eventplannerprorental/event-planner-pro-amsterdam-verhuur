@@ -50072,3 +50072,193 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.AmsterdamV942Info = function(){ return {version:'v942', basis:'Amsterdam upload', doel:'1 documentbalk, oude onderste balk verwijderd'}; };
   console.info('[Amsterdam v942] document PDF-balk actief; oude dubbele documentbalk verwijderd.');
 })();
+
+/* =========================================================
+   Amsterdam v948 - Admin materiaal en lege rubriek definitief wissen
+   Alleen Amsterdam Verhuur.
+   - Verwijderd materiaal blijft verwijderd na Firebase pull/backup restore.
+   - Lege rubriek, kleur en actieve-rubriek geheugen blijven verwijderd.
+   - Tapwagen wordt niet gelezen of aangeraakt.
+========================================================= */
+(function AmsterdamV948MaterialRubricDeleteFix(){
+  'use strict';
+  if(window.__AMSTERDAM_V948_MATERIAL_RUBRIC_DELETE_FIX__) return;
+  window.__AMSTERDAM_V948_MATERIAL_RUBRIC_DELETE_FIX__ = true;
+
+  var STATE_KEY = 'event-planner-pro-amsterdam-verhuur-v1';
+  var MAT_TOMBS_KEY = 'amsterdam_v948_deleted_materials';
+  var CAT_TOMBS_KEY = 'amsterdam_v948_deleted_rubrics';
+  var pendingRubric = '';
+
+  function T(v){ return String(v == null ? '' : v).trim(); }
+  function U(v){ return T(v).toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,24); }
+  function read(k, def){ try{ var x=JSON.parse(localStorage.getItem(k)||''); return x && typeof x==='object' ? x : def; }catch(e){ return def; } }
+  function write(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+  function stateObj(){ try{ if(typeof state!=='undefined' && state) return state; }catch(e){} return window.state || null; }
+  function idOf(m){ return T(m && (m.id||m.docId||m.materialId||m.key)); }
+  function codeOf(m){ return U(m && (m.code||m.productCode||m.productNr||m.nr||m.number)); }
+  function catOf(m){ return U(m && (m.cat||m.rubriek||m.category||m.categorie)); }
+  function matTombs(){ return read(MAT_TOMBS_KEY,{}); }
+  function catTombs(){ return read(CAT_TOMBS_KEY,{}); }
+  function toastSafe(msg){ try{ if(typeof toast==='function') return toast(msg); }catch(e){} try{ if(typeof toastMsg==='function') return toastMsg(msg); }catch(e){} }
+
+  function addMaterialTomb(m){
+    if(!m) return;
+    var map=matTombs(), id=idOf(m), code=codeOf(m);
+    if(id) map['id:'+id.toLowerCase()]={at:Date.now(),id:id,code:code};
+    if(code) map['code:'+code.toLowerCase()]={at:Date.now(),id:id,code:code};
+    write(MAT_TOMBS_KEY,map);
+  }
+  function materialDeleted(m){
+    var map=matTombs(), id=idOf(m).toLowerCase(), code=codeOf(m).toLowerCase();
+    return !!((id&&map['id:'+id]) || (code&&map['code:'+code]));
+  }
+  function addRubricTomb(c){ c=U(c); if(!c)return; var m=catTombs(); m[c]={at:Date.now()}; write(CAT_TOMBS_KEY,m); }
+  function rubricDeleted(c){ return !!catTombs()[U(c)]; }
+  function reviveRubric(c){ c=U(c); if(!c)return; var m=catTombs(); if(m[c]){ delete m[c]; write(CAT_TOMBS_KEY,m); } }
+
+  function purgeMaterials(list){ return Array.isArray(list) ? list.filter(function(m){ return m && !materialDeleted(m); }) : list; }
+  function purgeEverywhere(){
+    try{ var s=stateObj(); if(s&&Array.isArray(s.materials)) s.materials=purgeMaterials(s.materials); }catch(e){}
+    ['__BNS608_MATERIALS','__BNS611_MATERIALS','__BNS915_MATERIALS'].forEach(function(k){ try{ if(Array.isArray(window[k])) window[k]=purgeMaterials(window[k]); }catch(e){} });
+    try{ if(typeof INITIAL_STATE!=='undefined'&&INITIAL_STATE&&Array.isArray(INITIAL_STATE.materials)) INITIAL_STATE.materials=purgeMaterials(INITIAL_STATE.materials); }catch(e){}
+    try{ if(window.INITIAL_STATE&&Array.isArray(window.INITIAL_STATE.materials)) window.INITIAL_STATE.materials=purgeMaterials(window.INITIAL_STATE.materials); }catch(e){}
+    try{ var raw=read(STATE_KEY,{}); if(Array.isArray(raw.materials)){ raw.materials=purgeMaterials(raw.materials); write(STATE_KEY,raw); } }catch(e){}
+    purgeMaterialBackups();
+  }
+  function purgeMaterialBackups(){
+    try{
+      for(var i=localStorage.length-1;i>=0;i--){
+        var k=localStorage.key(i)||'';
+        if(k.indexOf(STATE_KEY+'::materials-backup::')!==0) continue;
+        try{
+          var p=JSON.parse(localStorage.getItem(k)||'{}');
+          if(Array.isArray(p.materials)){
+            var n=purgeMaterials(p.materials);
+            if(n.length!==p.materials.length){ p.materials=n; p.count=n.length; localStorage.setItem(k,JSON.stringify(p)); }
+          }
+        }catch(e){}
+      }
+    }catch(e){}
+  }
+
+  function removeRubricStorage(c){
+    c=U(c); if(!c)return;
+    ['bns_rubriek_kleuren_v12_pro','bnsCatColors','bns_v391_fav_colors'].forEach(function(k){
+      try{
+        var m=read(k,Array.isArray(read(k,null))?[]:{});
+        if(m && !Array.isArray(m)){ delete m[c]; delete m[c.toLowerCase()]; write(k,m); }
+      }catch(e){}
+    });
+    try{
+      var s=stateObj();
+      if(s&&s.settings){
+        ['catColors','categoryColors','rubricColors','rubriekKleuren'].forEach(function(k){ if(s.settings[k]){ delete s.settings[k][c]; delete s.settings[k][c.toLowerCase()]; } });
+      }
+    }catch(e){}
+    ['bns613LastMaterialCat'].forEach(function(k){ try{ if(U(localStorage.getItem(k))===c)localStorage.removeItem(k); }catch(e){} });
+    ['__BNS629_KEEP_CAT','__BNS626_KEEP_CAT','__BNS613_LAST_CAT'].forEach(function(k){ try{ if(U(window[k])===c)window[k]=''; }catch(e){} });
+    try{ if(U(window.currentCat)===c) window.currentCat=''; }catch(e){}
+    try{ if(typeof currentCat!=='undefined'&&U(currentCat)===c) currentCat=''; }catch(e){}
+    try{ if(typeof activeCat!=='undefined'&&U(activeCat)===c) activeCat=''; }catch(e){}
+  }
+
+  function hideDeletedRubricButtons(){
+    var tombs=catTombs();
+    document.querySelectorAll('#bns391Cats [data-cat],#bns390Cats [data-cat],#materialCats [data-cat],#materialCats [data-bns611-cat],#materialCats button').forEach(function(b){
+      var c=U(b.getAttribute('data-cat')||b.getAttribute('data-bns611-cat')||b.textContent);
+      if(c&&tombs[c]) b.remove();
+    });
+  }
+  function refresh(){
+    purgeEverywhere();
+    hideDeletedRubricButtons();
+    try{ if(typeof save==='function') save(); }catch(e){}
+    try{ if(typeof adminRender==='function') adminRender(); }catch(e){}
+    try{ if(typeof renderCats==='function') renderCats(); }catch(e){}
+    try{ if(typeof renderMaterials==='function') renderMaterials(window.currentCat||''); }catch(e){}
+    setTimeout(hideDeletedRubricButtons,50);
+    setTimeout(hideDeletedRubricButtons,350);
+  }
+
+  function selectedMaterialFromAdmin(){
+    var id='';
+    try{ if(typeof adminEditMatId!=='undefined') id=T(adminEditMatId); }catch(e){}
+    try{ id=id||T(window.__bnsSelectedMaterialId||window.bnsSelectedMaterialId||window.__BNS_SELECTED_MATERIAL_ID); }catch(e){}
+    var card=document.getElementById('bns391AdminCard');
+    var code='';
+    if(card){
+      var c=U((document.getElementById('bns391Cat')||{}).value), n=U((document.getElementById('bns391Nr')||{}).value);
+      code=n.indexOf(c)===0?n:(c+n);
+    }
+    var s=stateObj(), list=s&&Array.isArray(s.materials)?s.materials:[];
+    return list.find(function(m){return (id&&idOf(m)===id)||(code&&codeOf(m)===code);})||null;
+  }
+
+  // Vóór de oude delete-laag: materiaal onthouden en tombstone klaarzetten.
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('button,input[type="button"],input[type="submit"]');
+    if(!b)return;
+    var txt=T(b.textContent||b.value).toLowerCase();
+    var id=T(b.id);
+    var inMat=!!b.closest('#bns391AdminCard,#bns390AdminCard,#bnsV56AdminCard,#adminMatList,#adminMaterials,.admin-materials,.materials-admin');
+
+    if(inMat && (/^(bns391Delete|bns390Delete|bnsV56Delete|adminDeleteMat)$/i.test(id) || (/wis|verwijder|delete/.test(txt)&&/materiaal/.test(txt)))){
+      var m=selectedMaterialFromAdmin();
+      if(m){
+        addMaterialTomb(m);
+        try{ if(typeof window.BNS637HardDeleteMaterial==='function') window.BNS637HardDeleteMaterial(idOf(m),codeOf(m)); }catch(e){}
+        setTimeout(refresh,100); setTimeout(refresh,1200); setTimeout(refresh,5000);
+      }
+    }
+
+    if(id==='bns391DeleteCat' || (inMat && /wis|verwijder|delete/.test(txt)&&/rubriek/.test(txt))){
+      pendingRubric=U((document.getElementById('bns391Cat')||document.getElementById('bns390Cat')||{}).value || window.currentCat);
+    }
+
+    // Bevestigingsknop van "Lege rubriek wissen".
+    if(b.classList.contains('bns391-confirm-ok')){
+      var ov=b.closest('#bns391ConfirmOverlay');
+      var title=T(ov&&ov.querySelector('h3')&&ov.querySelector('h3').textContent).toLowerCase();
+      if(pendingRubric && /lege rubriek wissen/.test(title)){
+        var c=pendingRubric; pendingRubric='';
+        addRubricTomb(c);
+        removeRubricStorage(c);
+        setTimeout(refresh,20); setTimeout(refresh,500); setTimeout(refresh,2500);
+        toastSafe('Lege rubriek '+c+' definitief gewist');
+      }
+    }
+
+    // Een nieuw materiaal in een eerder gewiste rubriek maakt die rubriek bewust opnieuw aan.
+    if(inMat && (/opslaan|bewaar|save/.test(txt)&&/materiaal/.test(txt))){
+      var c2=U((document.getElementById('bns391Cat')||document.getElementById('bns390Cat')||document.getElementById('adminMatCat')||{}).value);
+      if(c2) reviveRubric(c2);
+    }
+  },true);
+
+  // Alle latere state/localStorage restores blijven door de tombstones gefilterd.
+  try{
+    var rawSet=localStorage.setItem.bind(localStorage);
+    localStorage.setItem=function(k,v){
+      try{
+        if(k===STATE_KEY && typeof v==='string' && v.indexOf('materials')>=0){
+          var p=JSON.parse(v); if(p&&Array.isArray(p.materials)){p.materials=purgeMaterials(p.materials);v=JSON.stringify(p);}
+        }
+      }catch(e){}
+      return rawSet(k,v);
+    };
+  }catch(e){}
+
+  var observer=new MutationObserver(function(){ hideDeletedRubricButtons(); });
+  try{ observer.observe(document.documentElement,{childList:true,subtree:true}); }catch(e){}
+  ['bns:firebase-updated','epp:firebase-updated','bns:materials-saved-firebase','storage'].forEach(function(evt){
+    window.addEventListener(evt,function(){setTimeout(refresh,50);});
+    document.addEventListener(evt,function(){setTimeout(refresh,50);});
+  });
+  setTimeout(refresh,400);
+  setTimeout(refresh,1800);
+  setInterval(function(){ purgeEverywhere(); hideDeletedRubricButtons(); },3000);
+
+  window.AmsterdamV948DeleteInfo=function(){return {app:'Amsterdam Verhuur',tapwagen:'bevroren en niet gebruikt',materials:'Firebase delete + tombstone + backups gefilterd',rubrics:'lege rubriek + kleur + geheugen tombstone'};};
+  console.info('[Amsterdam v948] materiaal en lege rubriek definitief wissen actief; Tapwagen niet gebruikt.');
+})();
