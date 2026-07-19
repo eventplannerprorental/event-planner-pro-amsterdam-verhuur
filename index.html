@@ -389,12 +389,40 @@
     5. firebase-sync   — Firebase synchronisatie
     6. bns-stabilizer  — opruimen na alles: Wis knop, boekhouding mappen, intervals
   -->
+  <script>
+  /* Amsterdam v38: PIN-invoer is al actief terwijl app.js wordt geladen. */
+  (function(){
+    var queue=[];
+    window.__AMS_EARLY_PIN_QUEUE__=queue;
+    document.addEventListener('click',function(ev){
+      if(window.__AMS_APP_READY_V38__) return;
+      var b=ev.target && ev.target.closest && ev.target.closest('[data-pin],#pinClear,#pinOk');
+      if(!b) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      queue.push(b.id || b.getAttribute('data-pin'));
+      var digits=queue.filter(function(x){return /^\d$/.test(x);});
+      if(b.id==='pinClear'){ queue.length=0; digits=[]; }
+      var view=document.getElementById('pinView');
+      if(view) view.textContent=(digits.join(' ')+' - - - -').trim().split(/\s+/).slice(0,4).join(' ');
+    },true);
+    window.addEventListener('ams-app-ready-v38',function(){
+      var copy=queue.slice(); queue.length=0;
+      copy.forEach(function(x){
+        var el=/^\d$/.test(x)?document.querySelector('[data-pin="'+x+'"]'):document.getElementById(x);
+        if(el) el.click();
+      });
+    },{once:true});
+  })();
+  </script>
   <script src="bns-preloader.js"></script>
-  <script>document.write('<script src="app.js?v=' + Date.now() + '"><\/script>');</script>
+  <!-- Vaste versie: browsercache mag app.js hergebruiken; geen Date.now()-download bij iedere start. -->
+  <script src="app.js?v=950" defer></script>
   <!-- v840: Firebase RTDB/Auth zit veilig in app.js via EPP-config; oude BNS_FIREBASE_CONFIG blijft geblokkeerd. -->
   <!-- v840: firebase-sync.js blijft UIT om oude Firestore-sync niet te starten. -->
   <!-- v43: licentiecontrole toegevoegd. Laadt NA app.js, verandert de bestaande scriptvolgorde niet. -->
-  <script src="license-overlay.js"></script>
+  <script src="license-overlay.js" defer></script>
+  <script src="amsterdam-ui-fix-v38.js" defer></script>
 
  </body>
 </html>
