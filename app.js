@@ -279,6 +279,13 @@ ensure();
   window.__BNS_V921_FORCE_MATERIALS_VISIBLE__=true;
   window.__AMS_V922_CONFIG_MATERIALS__=true;
 
+  // V41: oude Firestore-bootstrap en langste-lijst caches uitschakelen.
+  // Deze lagen konden een bewust verwijderd materiaal na wissen/F5 terugzetten.
+  window.__BNS600_FIREBASE_BOOTSTRAP_ONCE__=true;
+  window.__BNS600B_ADMIN_MATERIALS_FIREBASE_SAVE__=true;
+  window.__BNS608_FIREBASE_MATERIALS_LEADING__=true;
+  window.__BNS609_MATERIAL_CATEGORY_FIX__=true;
+
   var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE='customers/amsterdam-verhuur';
   var busy=false;
@@ -336,6 +343,57 @@ ensure();
     if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
     return true;
   }
+  async function get(path){
+    var res=await fetch(DB+'/'+path+'.json',{cache:'no-store'});
+    if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
+    return await res.json();
+  }
+  function listFromFirebase(value){
+    if(Array.isArray(value)) return value.filter(Boolean);
+    if(value && typeof value==='object') return Object.keys(value).map(function(k){return value[k];}).filter(Boolean);
+    return [];
+  }
+  function tombstoneCodes(value){
+    var map={};
+    if(value && typeof value==='object') Object.keys(value).forEach(function(k){
+      var t=value[k]||{}; var c=T(t.code||k).toUpperCase().replace(/\s+/g,''); if(c) map[c]=true;
+    });
+    return map;
+  }
+  function setLocalMaterials(mats){
+    mats=Array.isArray(mats)?mats:[];
+    state.materials=mats;
+    try{
+      var raw=localStorage.getItem(KEY), obj=raw?JSON.parse(raw):{};
+      if(!obj||typeof obj!=='object') obj={};
+      obj.materials=mats;
+      localStorage.setItem(KEY,JSON.stringify(obj));
+    }catch(e){ try{save();}catch(_){} }
+    // Oude globale materiaalcaches expliciet gelijkmaken; nooit een langere oude lijst laten winnen.
+    try{window.__BNS608_MATERIALS=mats;}catch(e){}
+    try{window.__BNS609_MATERIALS=mats;}catch(e){}
+    try{window.__BNS611_MATERIALS=mats;}catch(e){}
+  }
+  async function loadFirebaseAuthoritative(){
+    try{
+      var values=await Promise.all([
+        get(BASE+'/appState/state/materials'),
+        get(BASE+'/deletedMaterials')
+      ]);
+      var deleted=tombstoneCodes(values[1]);
+      var mats=listFromFirebase(values[0]).filter(function(m){return !deleted[codeOf(m)];});
+      // Een succesvolle online Firebase-read is leidend, ook als de lijst leeg is.
+      setLocalMaterials(mats);
+      try{renderCats();}catch(e){}
+      try{renderMaterials(currentCat||'');}catch(e){}
+      try{adminRender();}catch(e){}
+      console.info('[Amsterdam v41] Firebase materialen leidend geladen:',mats.length);
+      return true;
+    }catch(e){
+      console.warn('[Amsterdam v41] Firebase start-read niet beschikbaar; lokale lijst blijft actief.',e&&e.message||e);
+      return false;
+    }
+  }
   async function syncAll(reason){
     var mats=Array.isArray(state.materials)?state.materials:[];
     var payload={};
@@ -345,6 +403,7 @@ ensure();
     await patch('',payload);
   }
   function persistAndRender(){
+    setLocalMaterials(Array.isArray(state.materials)?state.materials:[]);
     save();
     try{renderCats();}catch(e){}
     try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
@@ -388,7 +447,11 @@ ensure();
     return false;
   },true);
   window.AMS_V39_SYNC_MATERIALEN=function(){return syncAll('handmatige-sync');};
-  console.info('[Amsterdam v39] Eén materiaalroute en leesbare Firebase-boom actief.');
+  window.AMS_V41_HERLAAD_MATERIALEN=function(){return loadFirebaseAuthoritative();};
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(loadFirebaseAuthoritative,80);});
+  else setTimeout(loadFirebaseAuthoritative,80);
+  window.addEventListener('online',function(){setTimeout(loadFirebaseAuthoritative,200);});
+  console.info('[Amsterdam v41] Eén materiaalroute actief; Firebase + tombstones zijn leidend en oude langste-lijst caches zijn uitgeschakeld.');
 })();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
 function load(){
