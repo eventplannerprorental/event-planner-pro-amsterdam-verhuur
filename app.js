@@ -1,59 +1,5 @@
 
-/* =========================================================
-   BNS EARLY ADMIN STABILITY GUARD v913
-   Doel: oude setInterval/MutationObserver patches rustiger maken in Admin.
-   ========================================================= */
-(function BNS_EARLY_ADMIN_STABILITY_GUARD_V913(){
-  'use strict';
-  if(window.__BNS_EARLY_ADMIN_STABILITY_V913__) return;
-  window.__BNS_EARLY_ADMIN_STABILITY_V913__ = true;
-  function adminActive(){
-    try{ var a=document.getElementById('admin'); return !!(a && a.classList.contains('active')); }catch(e){ return false; }
-  }
-  function adminEditing(){
-    try{
-      if(!adminActive()) return false;
-      var el=document.activeElement;
-      return !!(el && el.closest && el.closest('#admin') && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/i.test(el.tagName));
-    }catch(e){ return false; }
-  }
-  var nativeSetInterval = window.setInterval;
-  if(nativeSetInterval && !nativeSetInterval.__bnsV913){
-    var wrappedSetInterval = function(fn, delay){
-      var args = Array.prototype.slice.call(arguments,2);
-      var lastRun = 0;
-      var safeFn = function(){
-        try{
-          if(adminActive()){
-            var now = Date.now();
-            if(adminEditing() && Number(delay||0) < 6000) return;
-            if(now - lastRun < 2500) return;
-            lastRun = now;
-          }
-        }catch(e){}
-        if(typeof fn === 'function') return fn.apply(this,args);
-        try{ return (new Function(String(fn)))(); }catch(e){}
-      };
-      return nativeSetInterval.call(window, safeFn, delay);
-    };
-    wrappedSetInterval.__bnsV913 = true;
-    window.setInterval = wrappedSetInterval;
-  }
-  try{
-    var NativeMO = window.MutationObserver;
-    if(NativeMO && !NativeMO.__bnsV913){
-      var WrappedMO = function(cb){
-        return new NativeMO(function(mutations, observer){
-          try{ if(adminEditing()) return; }catch(e){}
-          return cb.call(this, mutations, observer);
-        });
-      };
-      WrappedMO.prototype = NativeMO.prototype;
-      WrappedMO.__bnsV913 = true;
-      window.MutationObserver = WrappedMO;
-    }
-  }catch(e){}
-})();
+/* BNS v913 globale timer/MutationObserver-wrapper verwijderd in v39. */
 
 // ===== EPP AMSTERDAM VERHUUR v16: klantconfig uit customer-config.js =====
 (function(){
@@ -306,8 +252,144 @@ try{
   }
 }catch(e){}
 const KEY='event-planner-pro-amsterdam-verhuur-v1';
+
 let state=load();
 ensure();
+
+/* =========================================================
+   AMSTERDAM v39 - EEN MATERIAALROUTE + LEESBARE FIREBASE-BOOM
+   - Schakelt overlappende herstel/sync-patches v915 en v917-v922 uit.
+   - Materiaal opslaan/wissen wordt voor de v391 beheerkaart eenmaal afgehandeld.
+   - Actuele lijst blijft compatibel onder appState/state/materials.
+   - Leesbare boom: customers/amsterdam-verhuur/materialen_per_rubriek/
+       RUBRIEK / NAAM / PRODUCTNUMMER
+   - Verwijderingen krijgen een tombstone en worden niet uit backups hersteld.
+   ========================================================= */
+(function AMS_V39_MATERIALEN(){
+  'use strict';
+  if(window.__AMS_V39_MATERIALEN__) return;
+  window.__AMS_V39_MATERIALEN__=true;
+
+  // Oude overlappende materiaalherstel- en sync-lagen niet laten starten.
+  window.__BNS915_MATERIALEN_UPDATE_SAFETY__=true;
+  window.__BNS_V917_MATERIAL_RUBRIC_CLEAN__=true;
+  window.__BNS_V918_UPDATE_SAFE_DATA_GUARD__=true;
+  window.__BNS_V919_MATERIALS_RTD_SYNC__=true;
+  window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__=true;
+  window.__BNS_V921_FORCE_MATERIALS_VISIBLE__=true;
+  window.__AMS_V922_CONFIG_MATERIALS__=true;
+
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  var busy=false;
+  function T(v){return String(v==null?'':v).trim();}
+  function cat(v){return T(v).toUpperCase().replace(/[^A-Z0-9_-]/g,'').slice(0,30)||'OVERIG';}
+  function safeKey(v,fallback){
+    var x=T(v).replace(/[.#$\[\]\/]/g,'-').replace(/\s+/g,' ').trim();
+    return (x||fallback||'onbekend').slice(0,120);
+  }
+  function E(id){return document.getElementById(id);}
+  function codeOf(m){return T(m&&(m.code||((m.cat||m.rubriek||'')+(m.productNr||m.nr||'')))).toUpperCase().replace(/\s+/g,'');}
+  function nameOf(m){return T(m&&(m.product||m.searchName||m.zoeknaam||m.type||m.name||m.description||m.beschrijving))||'Naam ontbreekt';}
+  function nrOf(m){
+    var c=cat(m&&(m.cat||m.rubriek||m.category));
+    var n=T(m&&(m.productNr||m.nr||m.number));
+    if(n) return n.toUpperCase().replace(new RegExp('^'+c,'i'),'').replace(/\s+/g,'');
+    return codeOf(m).replace(new RegExp('^'+c,'i'),'')||codeOf(m)||'zonder-nummer';
+  }
+  function descOf(m){return T(m&&(m.description||m.beschrijving||m.desc||m.notes));}
+  function form(){
+    var c=cat(E('bns391Cat')&&E('bns391Cat').value);
+    var n=T(E('bns391Nr')&&E('bns391Nr').value).toUpperCase().replace(/\s+/g,'');
+    var product=T(E('bns391Product')&&E('bns391Product').value);
+    var description=T(E('bns391Desc')&&E('bns391Desc').value);
+    var price=T(E('bns391Price')&&E('bns391Price').value);
+    var status=T(E('bns391Status')&&E('bns391Status').value)||'free';
+    var color=T(E('bns391ColorInput')&&E('bns391ColorInput').value)||'#0ea5e9';
+    if(!c||!n) return null;
+    return {cat:c,nr:n,code:(n.indexOf(c)===0?n:c+n),product:product,description:description,price:price,status:status,color:color};
+  }
+  function toastV39(msg){try{toastMsg(msg);return;}catch(e){} try{alert(msg);}catch(e){}}
+  function materialTree(list){
+    var tree={};
+    (Array.isArray(list)?list:[]).forEach(function(m){
+      var r=cat(m.cat||m.rubriek||m.category);
+      var nm=safeKey(nameOf(m),'Naam ontbreekt');
+      var nr=safeKey(nrOf(m),'zonder-nummer');
+      tree[r]=tree[r]||{};
+      tree[r][nm]=tree[r][nm]||{};
+      tree[r][nm][nr]={
+        id:T(m.id), rubriek:r, naam:nameOf(m), productnummer:nrOf(m), code:codeOf(m),
+        omschrijving:descOf(m), prijs:T(m.price||m.prijs), status:T(m.status)||'free',
+        kleur:T(m.color||m.catColor||m.rubricColor), bijgewerkt:new Date().toISOString()
+      };
+    });
+    return tree;
+  }
+  async function put(path,value){
+    var res=await fetch(DB+'/'+path+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+    if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
+    return true;
+  }
+  async function patch(path,value){
+    var res=await fetch(DB+'/'+path+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+    if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
+    return true;
+  }
+  async function syncAll(reason){
+    var mats=Array.isArray(state.materials)?state.materials:[];
+    var payload={};
+    payload[BASE+'/appState/state/materials']=mats;
+    payload[BASE+'/materialen_per_rubriek']=materialTree(mats);
+    payload[BASE+'/materiaal_sync_info']={laatsteSync:new Date().toISOString(),reden:reason||'wijziging',aantal:mats.length,versie:'v39'};
+    await patch('',payload);
+  }
+  function persistAndRender(){
+    save();
+    try{renderCats();}catch(e){}
+    try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
+    try{adminRender();}catch(e){}
+  }
+  async function saveMaterial(){
+    var f=form(); if(!f){toastV39('Vul rubriek en product nr in.');return;}
+    var existing=(state.materials||[]).find(function(m){return codeOf(m)===f.code;});
+    var created=!existing;
+    var m=existing||{id:'mat_'+Date.now()+'_'+Math.floor(Math.random()*10000)};
+    Object.assign(m,{cat:f.cat,rubriek:f.cat,category:f.cat,code:f.code,productNr:f.nr,nr:f.nr,number:f.nr,
+      product:f.product,searchName:f.product,zoeknaam:f.product,type:f.product,name:f.product,
+      description:f.description,beschrijving:f.description,desc:f.description,price:f.price,status:f.status,
+      color:f.color,catColor:f.color,rubricColor:f.color,updatedAt:new Date().toISOString()});
+    if(created) state.materials.push(m);
+    persistAndRender();
+    await syncAll(created?'materiaal-toegevoegd':'materiaal-gewijzigd');
+    toastV39(created?'Nieuw materiaal opgeslagen':'Materiaal opgeslagen');
+  }
+  async function deleteMaterial(){
+    var f=form(); if(!f){toastV39('Kies eerst een materiaal via Wijzig.');return;}
+    var matches=(state.materials||[]).filter(function(m){return codeOf(m)===f.code;});
+    if(!matches.length){toastV39('Materiaal niet gevonden. Kies het opnieuw via Wijzig.');return;}
+    var m=matches[0];
+    if(!confirm('Weet je zeker dat je dit materiaal wilt verwijderen?\n\n'+codeOf(m)+' '+nameOf(m))) return;
+    state.materials=(state.materials||[]).filter(function(x){return codeOf(x)!==f.code;});
+    persistAndRender();
+    var tomb={id:T(m.id),code:codeOf(m),rubriek:cat(m.cat||m.rubriek),naam:nameOf(m),productnummer:nrOf(m),verwijderdOp:new Date().toISOString(),versie:'v39'};
+    await Promise.all([syncAll('materiaal-verwijderd'),put(BASE+'/deletedMaterials/'+safeKey(codeOf(m),'materiaal'),tomb)]);
+    ['bns391Nr','bns391Product','bns391Desc','bns391Price'].forEach(function(id){if(E(id))E(id).value='';});
+    toastV39('Materiaal definitief verwijderd');
+  }
+  document.addEventListener('click',function(ev){
+    var t=ev.target&&ev.target.closest?ev.target.closest('#bns391Save,#bns391Delete'):null;
+    if(!t) return;
+    ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+    if(busy){toastV39('Even wachten, materiaal wordt verwerkt.');return false;}
+    busy=true;
+    var job=t.id==='bns391Delete'?deleteMaterial():saveMaterial();
+    Promise.resolve(job).catch(function(err){console.error('[Amsterdam v39]',err);toastV39('Firebase melding: '+(err.message||err));}).finally(function(){busy=false;});
+    return false;
+  },true);
+  window.AMS_V39_SYNC_MATERIALEN=function(){return syncAll('handmatige-sync');};
+  console.info('[Amsterdam v39] Eén materiaalroute en leesbare Firebase-boom actief.');
+})();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
 function load(){
   try{
@@ -48516,7 +48598,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var editUntil = 0;
   var lastBackupSig = '';
   var restoring = false;
-  var intentionalDeleteUntil = 0;
 
   function log(t){ try{ console.info('[BNS v915 materialen] ' + t); }catch(e){} }
   function A(v){ return Array.isArray(v) ? v : []; }
@@ -48634,10 +48715,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   function protectAgainstShortOverwrite(incomingState){
     if(restoring || !incomingState || typeof incomingState !== 'object') return incomingState;
-    if(Date.now() < intentionalDeleteUntil){
-      log('bewuste verwijdering toegestaan; kortere materialenlijst wordt geaccepteerd.');
-      return incomingState;
-    }
     if(!Array.isArray(incomingState.materials)) return incomingState;
     var incoming = cleanMaterials(incomingState.materials);
     var current = getMaterials();
@@ -48697,34 +48774,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(!b || !isMaterialAdminElement(b)) return;
     var txt = S(b.textContent || b.value || '').toLowerCase();
     if(!/opslaan|bewaar|save|toevoegen|wijzig|verwijder|wis|delete/.test(txt)) return;
-    var isIntentionalDelete = /verwijder|wis|delete/.test(txt);
-    if(isIntentionalDelete){
-      intentionalDeleteUntil = Date.now() + 15000;
-      window.__BNS915_INTENTIONAL_DELETE_UNTIL = intentionalDeleteUntil;
-      log('bewuste verwijdering gestart: '+txt);
-    }
     markEdit(120000);
+    setTimeout(function(){ backupMaterials('admin knop '+txt); }, 400);
     setTimeout(function(){
-      if(isIntentionalDelete){
-        try{
-          var index = JSON.parse(localStorage.getItem(BK_PREFIX + 'index') || '[]');
-          index.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
-          localStorage.removeItem(BK_PREFIX + 'index');
-          localStorage.removeItem(BK_LATEST);
-          lastBackupSig = '';
-        }catch(e){}
-        backupMaterials('bewuste verwijdering nieuwe basis');
-      } else {
-        backupMaterials('admin knop '+txt);
-      }
-    }, 700);
-    setTimeout(function(){
-      if(isIntentionalDelete){
-        lastBackupSig = '';
-        backupMaterials('bewuste verwijdering bevestigd');
-      } else {
-        backupMaterials('admin knop '+txt+' nasync');
-      }
+      backupMaterials('admin knop '+txt+' nasync');
       if(typeof window.BNS600SyncMaterialsNow === 'function'){
         try{ window.BNS600SyncMaterialsNow(); log('Firebase materiaal-sync opnieuw aangeroepen na admin actie.'); }catch(e){ log('sync call mislukt: '+(e&&e.message||e)); }
       }
@@ -49451,8 +49504,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   if(window.__BNS_V919_MATERIALS_RTD_SYNC__) return;
   window.__BNS_V919_MATERIALS_RTD_SYNC__ = true;
-  console.info('[BNS v919] uitgeschakeld in stabiele wis/snelheidsfix');
-  return;
 
   function cid(){
     try{
@@ -49566,8 +49617,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   if(window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__) return;
   window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__ = true;
-  console.info('[BNS v920] uitgeschakeld in stabiele wis/snelheidsfix');
-  return;
 
   function cid(){
     try{
@@ -49739,8 +49788,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   if(window.__BNS_V921_FORCE_MATERIALS_VISIBLE__) return;
   window.__BNS_V921_FORCE_MATERIALS_VISIBLE__ = true;
-  console.info('[BNS v921] uitgeschakeld in stabiele wis/snelheidsfix');
-  return;
   console.info('[BNS v921] Materialen force-sync helpers actief');
   function cid(){ try{return String(window.EPP_CUSTOMER_ID || (window.EVENT_PLANNER_CUSTOMER&&window.EVENT_PLANNER_CUSTOMER.customerId) || (window.EPP_CUSTOMER_CONFIG&&window.EPP_CUSTOMER_CONFIG.customerId) || 'amsterdam-verhuur').trim() || 'amsterdam-verhuur';}catch(e){return 'amsterdam-verhuur';} }
   function key(){ return window.BNS_RENTAL_STORAGE_KEY || window.EPP_STORAGE_KEY || ('event-planner-pro-' + cid() + '-v1'); }
@@ -49856,8 +49903,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   'use strict';
   if(window.__AMS_V922_CONFIG_MATERIALS__) return;
   window.__AMS_V922_CONFIG_MATERIALS__ = true;
-  console.info('[BNS v922] uitgeschakeld in stabiele wis/snelheidsfix');
-  return;
 
   var CUSTOMER_ID = (window.EPP_CUSTOMER_ID || (window.EPP_CUSTOMER_CONFIG && window.EPP_CUSTOMER_CONFIG.customerId) || 'amsterdam-verhuur');
   var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
