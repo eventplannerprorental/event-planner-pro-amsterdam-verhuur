@@ -1,18 +1,22 @@
-/* Event Planner PRO Amsterdam - licentiecontrole v37
-   De app start direct. De licentie wordt onzichtbaar maximaal eenmaal per 24 uur
-   gecontroleerd, ook wanneer de app onafgebroken open blijft.
-   Alleen een expliciet ongeldige licentie blokkeert de app met de bestaande tekst. */
+/* Event Planner PRO Amsterdam - licentiecontrole v40
+   - App start direct zonder zichtbare controle.
+   - Geldige licentie wordt maximaal eenmaal per 24 uur gecontroleerd.
+   - Een online blokkade wordt lokaal onthouden en blijft ook offline actief.
+   - Bij een tijdelijke netwerkfout volgt onzichtbaar na 1 uur een nieuwe poging.
+   - Zodra een geldige online controle slaagt, wordt een lokale blokkade opgeheven. */
 (function(){
   'use strict';
-  if(window.__EPP_AMS_LICENSE_OVERLAY_V37__) return;
-  window.__EPP_AMS_LICENSE_OVERLAY_V37__ = true;
+  if(window.__EPP_AMS_LICENSE_OVERLAY_V40__) return;
+  window.__EPP_AMS_LICENSE_OVERLAY_V40__ = true;
 
   var DATABASE_URL = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var LICENSE_PATH = 'customers/amsterdam-verhuur/license';
   var CUSTOMER_ID = 'amsterdam-verhuur';
   var DAY_MS = 24 * 60 * 60 * 1000;
+  var RETRY_MS = 60 * 60 * 1000;
   var FETCH_TIMEOUT_MS = 5000;
-  var LAST_CHECK_KEY = 'epp-license-last-check-v37';
+  var STATE_KEY = 'epp-license-state-v40';
+  var OLD_LAST_CHECK_KEY = 'epp-license-last-check-v37';
   var timer = null;
   var checking = false;
 
@@ -35,7 +39,7 @@
     if(!el){
       el=document.createElement('div');
       el.id='eppLicenseOverlay';
-      document.body.appendChild(el);
+      (document.body||document.documentElement).appendChild(el);
     }
     el.innerHTML='<div class="box"><h2>'+esc(title)+'</h2><p>'+esc(msg)+'</p><div class="muted">'+CUSTOMER_ID+' · licentiecontrole</div></div>';
   }
@@ -83,40 +87,70 @@
     return DATABASE_URL.replace(/\/$/,'') + '/' + LICENSE_PATH.split('/').map(encodeURIComponent).join('/') + '.json';
   }
 
-  function getLastCheck(){
+  function getState(){
     try{
-      var n=Number(localStorage.getItem(LAST_CHECK_KEY)||0);
-      return isFinite(n) && n>0 ? n : 0;
-    }catch(e){ return 0; }
+      var raw=localStorage.getItem(STATE_KEY);
+      if(raw){
+        var parsed=JSON.parse(raw);
+        if(parsed && typeof parsed==='object') return parsed;
+      }
+      var old=Number(localStorage.getItem(OLD_LAST_CHECK_KEY)||0);
+      if(isFinite(old) && old>0) return {status:'valid',checkedAt:old,message:''};
+    }catch(e){}
+    return {status:'unknown',checkedAt:0,message:''};
   }
 
-  function setLastCheck(ts){
-    try{ localStorage.setItem(LAST_CHECK_KEY,String(ts)); }catch(e){}
+  function setState(status,message,checkedAt){
+    var state={
+      status:status,
+      message:String(message||''),
+      checkedAt:Number(checkedAt||Date.now())
+    };
+    try{
+      localStorage.setItem(STATE_KEY,JSON.stringify(state));
+      localStorage.removeItem(OLD_LAST_CHECK_KEY);
+    }catch(e){}
+    return state;
   }
 
-  function scheduleNext(){
+  function applyStoredBlock(){
+    var state=getState();
+    if(state.status==='blocked'){
+      showBlocked('Licentie geblokkeerd',(state.message||'Licentie is geblokkeerd.')+' Neem contact op met de beheerder.');
+      return true;
+    }
+    return false;
+  }
+
+  function schedule(delay){
     if(timer) clearTimeout(timer);
-    var last=getLastCheck();
-    var delay=last ? Math.max(1000, DAY_MS-(Date.now()-last)) : 1000;
     timer=setTimeout(function(){
       timer=null;
       checkLicense(true);
-    },delay);
+    },Math.max(1000,Number(delay)||1000));
+  }
+
+  function scheduleFromState(){
+    var state=getState();
+    var age=Date.now()-Number(state.checkedAt||0);
+    if(state.status==='blocked'){
+      schedule(RETRY_MS);
+    }else if(state.checkedAt && age < DAY_MS){
+      schedule(DAY_MS-age);
+    }else{
+      schedule(1000);
+    }
   }
 
   function checkLicense(force){
     if(location.protocol==='file:' || checking) return;
-    var last=getLastCheck();
-    if(!force && last && Date.now()-last < DAY_MS){
-      scheduleNext();
+    var state=getState();
+    if(!force && state.status!=='blocked' && state.checkedAt && Date.now()-state.checkedAt < DAY_MS){
+      scheduleFromState();
       return;
     }
 
     checking=true;
-    /* De dagelijkse poging telt direct, zodat er nooit meerdere zichtbare of
-       onzichtbare controles binnen dezelfde 24 uur worden uitgevoerd. */
-    setLastCheck(Date.now());
-
     var controller=typeof AbortController==='function' ? new AbortController() : null;
     var timeout=setTimeout(function(){ if(controller) controller.abort(); },FETCH_TIMEOUT_MS);
     var options={cache:'no-cache'};
@@ -130,36 +164,57 @@
       .then(function(lic){
         var result=validate(lic);
         if(result.ok){
+          setState('valid','',Date.now());
           removeOverlay();
+          schedule(DAY_MS);
         }else{
+          setState('blocked',result.msg,Date.now());
           showBlocked('Licentie geblokkeerd',result.msg+' Neem contact op met de beheerder.');
+          schedule(RETRY_MS);
         }
       })
       .catch(function(err){
-        /* Bij een tijdelijke verbindingsfout blijft de app bruikbaar.
-           De volgende automatische poging is 24 uur later. */
-        try{ console.warn('[Licentie v37] Dagelijkse controle tijdelijk mislukt:',err&&err.message?err.message:err); }catch(e){}
+        try{ console.warn('[Licentie v40] Controle tijdelijk mislukt:',err&&err.message?err.message:err); }catch(e){}
+        /* De laatst bekende status blijft leidend. Een bestaande blokkade blijft
+           dus zichtbaar; zonder blokkade blijft de app bruikbaar. */
+        if(getState().status==='blocked') applyStoredBlock();
+        schedule(RETRY_MS);
       })
       .finally(function(){
         clearTimeout(timeout);
         checking=false;
-        scheduleNext();
       });
   }
 
   function start(){
-    /* Geen opstartmelding of controle-overlay: de app is direct bruikbaar. */
-    removeOverlay();
-    if(getLastCheck() && Date.now()-getLastCheck() < DAY_MS){
-      scheduleNext();
+    var blocked=applyStoredBlock();
+    var state=getState();
+
+    /* Een lokaal geblokkeerde installatie controleert bij iedere online start
+       opnieuw, zodat een door de beheerder opgeheven blokkade snel verdwijnt. */
+    if(blocked){
+      setTimeout(function(){ checkLicense(true); },300);
       return;
     }
+
+    if(state.checkedAt && Date.now()-state.checkedAt < DAY_MS){
+      removeOverlay();
+      scheduleFromState();
+      return;
+    }
+
+    removeOverlay();
     if('requestIdleCallback' in window){
       window.requestIdleCallback(function(){ checkLicense(false); },{timeout:1500});
     }else{
       setTimeout(function(){ checkLicense(false); },300);
     }
   }
+
+  window.addEventListener('online',function(){
+    if(getState().status==='blocked') checkLicense(true);
+    else if(!checking) checkLicense(false);
+  });
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start,{once:true});
   else start();
