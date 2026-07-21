@@ -50493,3 +50493,106 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.AMSTERDAM_V46_SAFE_REFRESH=safeRefresh;
   console.info('[Amsterdam V46] herstel actief: lege bronnen overschrijven niets en polling is verwijderd.');
 })();
+
+/* ============================================================
+   AMSTERDAM V47 HERSTEL - STATUS, OPDRACHTEN, DATUM EN SCHOON FORMULIER
+   - Firestore orders is herstelbron; lege spiegelmappen wissen niets.
+   - Systeem stabiel is nooit rood zonder echte fout.
+   - Geen automatische einddatum +3 bij een nieuwe opdracht.
+   - Na opslaan/nieuwe opdracht: volledig leeg, rubrieken dicht, focus startdatum.
+   ============================================================ */
+(function AmsterdamV47FinalRecovery(){
+  'use strict';
+  if(window.__AMSTERDAM_V47_FINAL_RECOVERY__) return;
+  window.__AMSTERDAM_V47_FINAL_RECOVERY__=true;
+  function E(id){return document.getElementById(id);}
+  function S(){try{return typeof state!=='undefined'?state:window.state;}catch(e){return window.state;}}
+  function nice(d){d=d instanceof Date?d:new Date(d||Date.now());return d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});}
+  function setStatus(text,bad){var b=E('syncBtn');if(!b)return;b.textContent=text;b.style.background=bad?'#dc2626':'#16a34a';b.style.color='#fff';b.title=text;}
+  function realErrorText(){var b=E('syncBtn');var t=String(b&&b.textContent||'');return /fout|invalid|api-key|auth\/|permission|config ontbreekt|geen verbinding/i.test(t);}
+  function saveLocal(){try{if(typeof save==='function')save();}catch(e){}}
+  function render(){try{if(typeof renderOrders==='function')renderOrders();}catch(e){}try{if(typeof renderAll==='function')renderAll();}catch(e){}try{if(typeof adminRender==='function')adminRender();}catch(e){}}
+
+  async function restoreAllOrders(){
+    try{
+      if(window.BNS&&typeof window.BNS.reloadFromFirebase==='function') await Promise.resolve(window.BNS.reloadFromFirebase());
+      var n=0;
+      while(n++<20 && !(window.BNS&&window.BNS.fs&&window.BNS.db)) await new Promise(function(r){setTimeout(r,250);});
+      if(!(window.BNS&&window.BNS.fs&&window.BNS.db)) throw new Error('Firestore nog niet beschikbaar');
+      var fs=window.BNS.fs, snap=await fs.getDocs(fs.collection(window.BNS.db,'orders'));
+      var rows=snap.docs.map(function(d){return Object.assign({id:d.id},d.data()||{});});
+      if(rows.length){
+        var s=S(); if(!s) throw new Error('Lokale state ontbreekt');
+        var map={}; (Array.isArray(s.orders)?s.orders:[]).forEach(function(o){var id=String(o&&(o.id||o.number)||'');if(id)map[id]=o;});
+        rows.forEach(function(o){var id=String(o&&(o.id||o.number)||'');if(id)map[id]=Object.assign({},map[id]||{},o);});
+        s.orders=Object.keys(map).map(function(k){return map[k];});
+        saveLocal(); render();
+      }
+      var at=new Date(); try{localStorage.setItem('amsLastFirebaseRead',at.toISOString());}catch(e){}
+      setStatus('Firebase OK • '+nice(at),false);
+      return rows.length;
+    }catch(e){
+      console.warn('[Amsterdam V47] opdrachten herstellen mislukt',e);
+      if(realErrorText()) return 0;
+      setStatus('Firebase: controle mislukt',true);
+      return 0;
+    }
+  }
+
+  function clearInput(id){var el=E(id);if(el){el.value='';try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}}}
+  function closePanels(){
+    ['customerBox','locationBox','materialBox','driverBox','extraBox','documentsBox','customerResults','locationResults'].forEach(function(id){var el=E(id);if(el)el.classList.add('hidden');});
+    document.querySelectorAll('.order-section.open,.panel.open,.accordion.open,[aria-expanded="true"]').forEach(function(el){el.classList.remove('open');if(el.hasAttribute('aria-expanded'))el.setAttribute('aria-expanded','false');});
+  }
+  function cleanNewOrder(){
+    try{window.__bnsEditingOrder=false;}catch(e){}
+    try{editing=null;}catch(e){}
+    ['orderTitle','dateStart','dateEnd','orderBrand','customerName','customerStreet','customerZip','customerCity','customerPhone','customerEmail','locationName','locationStreet','locationZip','locationCity','locationContact','locationPhone','orderDriver','orderVehicle','orderExtra','materialSearch','customerSearch','locationSearch'].forEach(clearInput);
+    try{chosen=[];}catch(e){}; try{window.chosen=[];}catch(e){}
+    try{if(typeof renderChosen==='function')renderChosen();}catch(e){}
+    try{currentCat='';window.currentCat='';}catch(e){}
+    try{localStorage.removeItem('bns613LastMaterialCat');}catch(e){}
+    ['priceExcl','discountAmount','depositAmount'].forEach(function(id){var el=E(id);if(el)el.value='0.00';});
+    var vat=E('vatPercent');if(vat)vat.value='21';
+    try{if(typeof calcTotals==='function')calcTotals();}catch(e){}
+    try{if(typeof newNo==='function')newNo();}catch(e){}
+    try{if(typeof summaryRender==='function')summaryRender();}catch(e){}
+    closePanels();
+    setTimeout(function(){var ds=E('dateStart');if(ds){ds.value='';ds.focus();}},50);
+  }
+
+  function installDateRule(){
+    var ds=E('dateStart'),de=E('dateEnd');
+    if(ds&&!ds.__amsV47Date){ds.__amsV47Date=true;ds.addEventListener('change',function(){if(!window.__bnsEditingOrder&&de&&de.value&&de.value<ds.value)de.value=ds.value;},true);}
+    // Oude on-change handler zet +3. In capture herstellen we een lege einddatum na de wijziging.
+    if(ds&&!ds.__amsV47NoPlus3){ds.__amsV47NoPlus3=true;ds.addEventListener('change',function(){if(!window.__bnsEditingOrder){var wasEmpty=!de||!de.dataset.amsUserEnd;if(wasEmpty)setTimeout(function(){if(de)de.value='';},0);}},true);}
+    if(de&&!de.__amsV47Track){de.__amsV47Track=true;de.addEventListener('input',function(){de.dataset.amsUserEnd=de.value?'1':'';},true);}
+  }
+
+  function fixStableButton(){
+    var b=E('syncBtn');if(!b)return;
+    var t=String(b.textContent||'');
+    if(/^Systeem stabiel$/i.test(t)&&!realErrorText()){
+      var last='';try{last=localStorage.getItem('amsLastFirebaseRead')||'';}catch(e){}
+      setStatus(last?'Firebase OK • '+nice(last):'Firebase controleren...',false);
+    }
+    if(!b.__amsV47Click){b.__amsV47Click=true;b.addEventListener('click',function(){setTimeout(restoreAllOrders,100);},false);}
+  }
+
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('button,a,input[type="button"],input[type="submit"]');if(!b)return;
+    var txt=String((b.textContent||b.value||'')+' '+(b.id||'')).toLowerCase();
+    if(/nieuwe opdracht|nieuw opdracht|new order/.test(txt)) setTimeout(cleanNewOrder,120);
+    if(/opslaan/.test(txt)&&!/materiaal|rubriek|favoriet|gebruiker/.test(txt)) setTimeout(cleanNewOrder,450);
+  },true);
+  document.addEventListener('bns:order-saved',function(){setTimeout(cleanNewOrder,100);},true);
+
+  function boot(){installDateRule();fixStableButton();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,200);setTimeout(restoreAllOrders,1000);});
+  else{setTimeout(boot,200);setTimeout(restoreAllOrders,1000);}
+  setTimeout(boot,1200);setTimeout(boot,3000);
+  window.addEventListener('online',function(){setTimeout(restoreAllOrders,300);});
+  window.AMSTERDAM_V47_RESTORE_ORDERS=restoreAllOrders;
+  window.AMSTERDAM_V47_CLEAN_NEW_ORDER=cleanNewOrder;
+  console.info('[Amsterdam V47] status/opdrachten/datum/schoon formulier herstel actief');
+})();
