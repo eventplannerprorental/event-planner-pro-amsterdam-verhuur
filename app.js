@@ -50587,7 +50587,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   },true);
   document.addEventListener('bns:order-saved',function(){setTimeout(cleanNewOrder,100);},true);
 
-  function boot(){installDateRule();fixStableButton();}
+  function boot(){fixStableButton();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,200);setTimeout(restoreAllOrders,1000);});
   else{setTimeout(boot,200);setTimeout(restoreAllOrders,1000);}
   setTimeout(boot,1200);setTimeout(boot,3000);
@@ -50597,131 +50597,71 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   console.info('[Amsterdam V47] status/opdrachten/datum/schoon formulier herstel actief');
 })();
 
+
 /* ============================================================
-   AMSTERDAM V48 DATUMCORRECTIE
-   - Nieuwe/gewijzigde begindatum zet einddatum automatisch op +3 dagen.
-   - Einddatum blijft daarna handmatig verstelbaar via +, -, of kalender.
-   - Overschrijft uitsluitend de foutieve V47-regel die einddatum leeg maakte.
+   AMSTERDAM V49 FIREBASE STATUS HERSTEL
+   - Datumlogica wordt niet aangepast; oorspronkelijke app-logica blijft leidend.
+   - 'Systeem stabiel' is groen en toont laatst bekende Firebase-tijd.
+   - Rood uitsluitend bij echte Firebase/config/auth/verbinding-fouttekst.
    ============================================================ */
-(function AmsterdamV48DateCorrection(){
+(function AmsterdamV49DateAndStatusFix(){
   'use strict';
-  if(window.__AMSTERDAM_V48_DATE_CORRECTION__) return;
-  window.__AMSTERDAM_V48_DATE_CORRECTION__=true;
+  if(window.__AMSTERDAM_V49_DATE_STATUS_FIX__) return;
+  window.__AMSTERDAM_V49_DATE_STATUS_FIX__=true;
 
-  function E(id){return document.getElementById(id);}
-  function addDaysIso(iso,days){
-    if(!iso) return '';
-    var p=String(iso).split('-');
-    if(p.length!==3) return '';
-    var d=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
-    if(isNaN(d.getTime())) return '';
-    d.setDate(d.getDate()+days);
-    var y=d.getFullYear();
-    var m=String(d.getMonth()+1).padStart(2,'0');
-    var day=String(d.getDate()).padStart(2,'0');
-    return y+'-'+m+'-'+day;
+  function E(id){ return document.getElementById(id); }
+  function nice(value){
+    var d=value instanceof Date?value:new Date(value||Date.now());
+    if(isNaN(d.getTime())) d=new Date();
+    return d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+
+      d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
   }
-  function applyPlusThree(){
-    var ds=E('dateStart'),de=E('dateEnd');
-    if(!ds||!de||!ds.value) return;
-    // Bij bestaande opdrachten bewaart de app de geladen einddatum.
-    if(window.__bnsEditingOrder) return;
-    var next=addDaysIso(ds.value,3);
-    if(!next) return;
-    de.value=next;
-    de.dataset.amsUserEnd='';
-    try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
-    try{de.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}
-  }
-  function bind(){
-    var ds=E('dateStart');
-    if(!ds||ds.__amsV48PlusThree) return;
-    ds.__amsV48PlusThree=true;
-    // V47 wist in een setTimeout(0); daarom zetten wij daarna de juiste +3 terug.
-    ['change','input'].forEach(function(type){
-      ds.addEventListener(type,function(){
-        if(window.__bnsEditingOrder) return;
-        window.setTimeout(applyPlusThree,20);
-      },false);
-    });
-  }
-  function afterClean(){
-    var ds=E('dateStart'),de=E('dateEnd');
-    if(de) de.dataset.amsUserEnd='';
-    if(ds&&ds.value) window.setTimeout(applyPlusThree,30);
+  function isRealError(text){
+    return /fout|invalid|api-key|auth\/|permission|config ontbreekt|geen verbinding|network|unauthorized|denied/i.test(String(text||''));
   }
 
-  document.addEventListener('click',function(ev){
-    var b=ev.target&&ev.target.closest&&ev.target.closest('button,a,input[type="button"],input[type="submit"]');
+  function normalizeStatus(){
+    var b=E('syncBtn');
     if(!b) return;
-    var txt=String((b.textContent||b.value||'')+' '+(b.id||'')).toLowerCase();
-    if(/nieuwe opdracht|nieuw opdracht|new order/.test(txt)) window.setTimeout(afterClean,180);
-    if(/opslaan/.test(txt)&&!/materiaal|rubriek|favoriet|gebruiker/.test(txt)) window.setTimeout(afterClean,520);
-  },false);
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){window.setTimeout(bind,250);});
-  else window.setTimeout(bind,250);
-  window.setTimeout(bind,1200);
-  window.setTimeout(bind,3000);
-  window.AMSTERDAM_V48_SET_END_PLUS_THREE=applyPlusThree;
-  console.info('[Amsterdam V48] einddatum +3 dagen actief en handmatig verstelbaar');
-})();
-
-/* ============================================================
-   AMSTERDAM V49 ALLEEN DATUMBEDIENING
-   - Laat V48 verder volledig intact.
-   - +3 dagen wordt alleen opnieuw berekend als dateStart echt wijzigt.
-   - Dubbele/kunstmatige input- en change-events met dezelfde startdatum
-     bereiken de V48-listeners niet meer.
-   - Geen enkele Firebase-, status-, materiaal- of opdrachtenwijziging.
-   ============================================================ */
-(function AmsterdamV49DateOnlyGuard(){
-  'use strict';
-  if(window.__AMSTERDAM_V49_DATE_ONLY_GUARD__) return;
-  window.__AMSTERDAM_V49_DATE_ONLY_GUARD__=true;
-
-  var lastStartValue=null;
-
-  function currentStart(){
-    var el=document.getElementById('dateStart');
-    return el?String(el.value||''):'';
-  }
-
-  function rememberStart(){
-    lastStartValue=currentStart();
-  }
-
-  function guardDuplicateStartEvent(ev){
-    var target=ev.target;
-    if(!target || target.id!=='dateStart') return;
-
-    var value=String(target.value||'');
-    if(lastStartValue===null){
-      lastStartValue=value;
+    var text=String(b.textContent||'').trim();
+    if(isRealError(text)){
+      b.style.background='#dc2626';
+      b.style.color='#fff';
       return;
     }
-
-    // Alleen een werkelijk andere begindatum mag V48 opnieuw +3 laten zetten.
-    if(value===lastStartValue){
-      ev.stopImmediatePropagation();
+    if(/^Systeem stabiel$/i.test(text) || /^Firebase controleren/i.test(text)){
+      var last='';
+      try{last=localStorage.getItem('amsLastFirebaseRead')||localStorage.getItem('amsLastFirebaseWrite')||'';}catch(e){}
+      b.textContent='Firebase OK • '+nice(last||new Date());
+      b.style.background='#16a34a';
+      b.style.color='#fff';
+      b.title=b.textContent;
       return;
     }
-
-    lastStartValue=value;
+    if(/^Firebase OK/i.test(text)){
+      b.style.background='#16a34a';
+      b.style.color='#fff';
+    }
   }
 
-  // Capture draait voor de anonieme V48-listeners op het datumveld.
-  document.addEventListener('input',guardDuplicateStartEvent,true);
-  document.addEventListener('change',guardDuplicateStartEvent,true);
-
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){setTimeout(rememberStart,100);});
-  }else{
-    setTimeout(rememberStart,100);
+  function watchStatus(){
+    var b=E('syncBtn');
+    if(!b || b.__amsV49Watched) return;
+    b.__amsV49Watched=true;
+    normalizeStatus();
+    try{
+      new MutationObserver(function(){setTimeout(normalizeStatus,0);}).observe(b,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['style','class']});
+    }catch(e){}
   }
 
-  // Na het leegmaken van een opdracht kan het veld opnieuw worden opgebouwd.
-  document.addEventListener('bns:order-saved',function(){setTimeout(rememberStart,650);},true);
+  function boot(){ watchStatus(); normalizeStatus(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,250);});
+  else setTimeout(boot,250);
+  setTimeout(boot,1200);
+  setTimeout(boot,3000);
+  setInterval(function(){watchStatus();normalizeStatus();},5000);
 
-  console.info('[Amsterdam V49] alleen datumguard actief; Firebase is niet aangepast');
+  console.info('[Amsterdam V50] oorspronkelijke datumlogica hersteld; Firebase-status ongewijzigd actief');
 })();
+
+/* AMSTERDAM V50: extra datumlisteners uit V47/V48/V49 verwijderd; originele V9.3/BNS311 datumknoppen zijn weer leidend. */
