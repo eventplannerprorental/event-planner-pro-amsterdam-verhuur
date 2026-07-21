@@ -5795,10 +5795,24 @@ setTimeout(()=>{
     return String(cat || '').toUpperCase() === 'TW' ? '#dc2626' : '#60a5fa';
   }
   function calendarDateOnly(value, addDays){
-    var safe = value || new Date().toISOString().slice(0, 10);
-    var d = new Date(safe + 'T00:00:00');
+    // Datum als lokale kalenderdatum verwerken; geen toISOString(), want dat kan
+    // door de tijdzone de afspraak een dag terugzetten.
+    var m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    var d;
+    if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+    else {
+      d = new Date();
+      d.setHours(12, 0, 0, 0);
+    }
     if (addDays) d.setDate(d.getDate() + addDays);
-    return d.toISOString().slice(0,10).replaceAll('-', '');
+    return String(d.getFullYear())
+      + String(d.getMonth() + 1).padStart(2, '0')
+      + String(d.getDate()).padStart(2, '0');
+  }
+  function calendarDateLabel(value){
+    var m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(value || '');
+    return Number(m[3]) + '-' + Number(m[2]) + '-' + String(m[1]).slice(-2);
   }
   function openCalendarForCurrentOrder(type){
     const number = fieldValue("orderNumber");
@@ -5827,14 +5841,12 @@ setTimeout(()=>{
     }
     var customerPhone = fieldValue("customerPhone");
     details = [
-    type === "pickup" ? "Opdracht: ophalen  " + number : "Opdracht: brengen  " + number,
-    "Titel: " + title,
+    "Opdrachtnummer: " + number,
     "Klant: " + customer,
+    "Adres: " + address,
     customerPhone ? "Telefoon: " + customerPhone : "",
-    "Materialen: " + (materialCodes.join(", ") || "Nog geen materialen"),
-    "Levering: " + (start || ""),
-    "Ophalen: " + (end || ""),
-    "Adres: " + address
+    "Brengdatum: " + calendarDateLabel(start),
+    "Ophaaldatum: " + calendarDateLabel(end)
     ].filter(Boolean).join("\n");
     const url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
     + "&text=" + encodeURIComponent(eventTitle)
