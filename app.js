@@ -1,3 +1,13 @@
+/* ============================================================
+   AMSTERDAM V55 - HERBOUW VANAF V42, ZONDER DATUM/TIJD-CONTROLE
+   - V42 opdrachtenoverzicht als basis
+   - Firebase mappen/schrijfroutes behouden
+   - Geen 15/30 seconden polling
+   - Geen Firebase datum/tijd in status en geen status-observer
+   - Agenda datumfix, TR/titel, materialen en datumformaat behouden
+   - Einddatum plus/min herstel behouden
+   - Tapwagen-code en Tapwagen-data niet gebruikt
+   ============================================================ */
 
 /* BNS v913 globale timer/MutationObserver-wrapper verwijderd in v39. */
 
@@ -279,6 +289,13 @@ ensure();
   window.__BNS_V921_FORCE_MATERIALS_VISIBLE__=true;
   window.__AMS_V922_CONFIG_MATERIALS__=true;
 
+  // V41: oude Firestore-bootstrap en langste-lijst caches uitschakelen.
+  // Deze lagen konden een bewust verwijderd materiaal na wissen/F5 terugzetten.
+  window.__BNS600_FIREBASE_BOOTSTRAP_ONCE__=true;
+  window.__BNS600B_ADMIN_MATERIALS_FIREBASE_SAVE__=true;
+  window.__BNS608_FIREBASE_MATERIALS_LEADING__=true;
+  window.__BNS609_MATERIAL_CATEGORY_FIX__=true;
+
   var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE='customers/amsterdam-verhuur';
   var busy=false;
@@ -336,6 +353,67 @@ ensure();
     if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
     return true;
   }
+  async function get(path){
+    var res=await fetch(DB+'/'+path+'.json',{cache:'no-store'});
+    if(!res.ok) throw new Error('Firebase '+res.status+' bij '+path);
+    return await res.json();
+  }
+  function listFromFirebase(value){
+    if(Array.isArray(value)) return value.filter(Boolean);
+    if(value && typeof value==='object') return Object.keys(value).map(function(k){return value[k];}).filter(Boolean);
+    return [];
+  }
+  function tombstoneCodes(value){
+    var map={};
+    if(value && typeof value==='object') Object.keys(value).forEach(function(k){
+      var t=value[k]||{}; var c=T(t.code||k).toUpperCase().replace(/\s+/g,''); if(c) map[c]=true;
+    });
+    return map;
+  }
+  function setLocalMaterials(mats){
+    mats=Array.isArray(mats)?mats:[];
+    state.materials=mats;
+    try{
+      var raw=localStorage.getItem(KEY), obj=raw?JSON.parse(raw):{};
+      if(!obj||typeof obj!=='object') obj={};
+      obj.materials=mats;
+      localStorage.setItem(KEY,JSON.stringify(obj));
+    }catch(e){ try{save();}catch(_){} }
+    // Oude globale materiaalcaches expliciet gelijkmaken; nooit een langere oude lijst laten winnen.
+    try{window.__BNS608_MATERIALS=mats;}catch(e){}
+    try{window.__BNS609_MATERIALS=mats;}catch(e){}
+    try{window.__BNS611_MATERIALS=mats;}catch(e){}
+  }
+  async function loadFirebaseAuthoritative(){
+    try{
+      var values=await Promise.all([
+        get(BASE+'/appState/state/materials'),
+        get(BASE+'/deletedMaterials')
+      ]);
+      var deleted=tombstoneCodes(values[1]);
+      var mats=listFromFirebase(values[0]).filter(function(m){return !deleted[codeOf(m)];});
+      var local=Array.isArray(state.materials)?state.materials:[];
+      // V46 herstel: een lege Firebase-node mag een gevulde lokale/plannerlijst nooit wissen.
+      if(!mats.length && local.length){
+        mats=local.slice();
+        console.warn('[Amsterdam v46] Firebase materialen leeg; gevulde lokale lijst behouden:',mats.length);
+        setLocalMaterials(mats);
+        try{await syncAll('herstel-lege-firebase-materialen');}catch(syncErr){console.warn('[Amsterdam v46] materiaalherstel naar Firebase uitgesteld',syncErr&&syncErr.message||syncErr);}
+      }else{
+        setLocalMaterials(mats);
+      }
+      try{renderCats();}catch(e){}
+      try{renderMaterials(currentCat||'');}catch(e){}
+      try{adminRender();}catch(e){}
+      try{if(typeof window.BNS_V12_PRO_renderAdminMaterials==='function')window.BNS_V12_PRO_renderAdminMaterials();}catch(e){}
+      try{if(typeof window.BNS_V391_ADMIN_MATERIAL_FULL==='object'&&typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function')window.BNS_V391_ADMIN_MATERIAL_FULL.install();}catch(e){}
+      console.info('[Amsterdam v46] Firebase/materialen geladen:',mats.length);
+      return true;
+    }catch(e){
+      console.warn('[Amsterdam v41] Firebase start-read niet beschikbaar; lokale lijst blijft actief.',e&&e.message||e);
+      return false;
+    }
+  }
   async function syncAll(reason){
     var mats=Array.isArray(state.materials)?state.materials:[];
     var payload={};
@@ -345,6 +423,7 @@ ensure();
     await patch('',payload);
   }
   function persistAndRender(){
+    setLocalMaterials(Array.isArray(state.materials)?state.materials:[]);
     save();
     try{renderCats();}catch(e){}
     try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
@@ -388,7 +467,11 @@ ensure();
     return false;
   },true);
   window.AMS_V39_SYNC_MATERIALEN=function(){return syncAll('handmatige-sync');};
-  console.info('[Amsterdam v39] Eén materiaalroute en leesbare Firebase-boom actief.');
+  window.AMS_V41_HERLAAD_MATERIALEN=function(){return loadFirebaseAuthoritative();};
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(loadFirebaseAuthoritative,80);});
+  else setTimeout(loadFirebaseAuthoritative,80);
+  window.addEventListener('online',function(){setTimeout(loadFirebaseAuthoritative,200);});
+  console.info('[Amsterdam v41] Eén materiaalroute actief; Firebase + tombstones zijn leidend en oude langste-lijst caches zijn uitgeschakeld.');
 })();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
 function load(){
@@ -5722,10 +5805,24 @@ setTimeout(()=>{
     return String(cat || '').toUpperCase() === 'TW' ? '#dc2626' : '#60a5fa';
   }
   function calendarDateOnly(value, addDays){
-    var safe = value || new Date().toISOString().slice(0, 10);
-    var d = new Date(safe + 'T00:00:00');
+    // Datum als lokale kalenderdatum verwerken; geen toISOString(), want dat kan
+    // door de tijdzone de afspraak een dag terugzetten.
+    var m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    var d;
+    if (m) d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+    else {
+      d = new Date();
+      d.setHours(12, 0, 0, 0);
+    }
     if (addDays) d.setDate(d.getDate() + addDays);
-    return d.toISOString().slice(0,10).replaceAll('-', '');
+    return String(d.getFullYear())
+      + String(d.getMonth() + 1).padStart(2, '0')
+      + String(d.getDate()).padStart(2, '0');
+  }
+  function calendarDateLabel(value){
+    var m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(value || '');
+    return Number(m[3]) + '-' + Number(m[2]) + '-' + String(m[1]).slice(-2);
   }
   function openCalendarForCurrentOrder(type){
     const number = fieldValue("orderNumber");
@@ -5752,16 +5849,15 @@ setTimeout(()=>{
       eventStart = calendarDateOnly(start, 0);
       eventEnd = calendarDateOnly(start, 1);
     }
+    var customerPhone = fieldValue("customerPhone");
     details = [
-    "Tapwagen.nl planner",
-    "Opdracht: " + number,
-    "Titel: " + title,
+    "Opdrachtnummer: " + number,
     "Klant: " + customer,
+    "Adres: " + address,
+    customerPhone ? "Telefoon: " + customerPhone : "",
     "Materialen: " + (materialCodes.join(", ") || "Nog geen materialen"),
-    type === "pickup" ? "Rubriek kleur: licht blauw / TR ophalen" : "Rubriek: " + (materialCat || "onbekend"),
-    type === "pickup" ? "Kleurcode: #60a5fa" : "Kleurcode rubriek: " + materialColor,
-    "Let op: Google Agenda laat kleur niet automatisch zetten via de normale agenda-link. Kies eventueel dezelfde kleur in Google Agenda.",
-    "Adres: " + address
+    "Brengdatum: " + calendarDateLabel(start),
+    "Ophaaldatum: " + calendarDateLabel(end)
     ].filter(Boolean).join("\n");
     const url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
     + "&text=" + encodeURIComponent(eventTitle)
@@ -37833,7 +37929,11 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }catch(e){}
   }
   function filterStatusCards(){
-    var active=window.__bnsV474ActiveFolder; if(!active) return;
+    var active=window.__bnsV474ActiveFolder || 'lopend';
+    window.__bnsV474ActiveFolder=active;
+    A('#bnsV474StatusTabs button').forEach(function(btn){
+      btn.style.background=(btn.dataset.folder===active)?'#0ea5e9':'#1f3b5b';
+    });
     var os=orders();
     A('.order-card,[data-order-id],[data-id]').forEach(function(card){
       var id=T(card.getAttribute('data-order-id')||card.getAttribute('data-id')||card.dataset.orderId||card.dataset.id); if(!id) return;
@@ -47135,16 +47235,13 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function install(){
-    wrapSave();
-    manualSyncButton();
+    // V46 herstel: geen automatische volledige RTDB-push en geen 15-secondenlus.
+    // Alleen een veilige eenmalige merge voor bezorgerstatussen.
     pullAll();
   }
 
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
-  setTimeout(install, 1500);
-  setTimeout(install, 3500);
-  setInterval(pullAll, 15000);
 })();
 
 /* ============================================================
@@ -47246,6 +47343,53 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return r.json().catch(function(){return null;});
   }
 
+  async function getRemote(path){
+    var token = await getToken();
+    var url = DB + '/' + path + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + 'ts=' + Date.now();
+    var r = await fetch(url, {method:'GET', cache:'no-store'});
+    if(!r.ok){
+      var msg = await r.text().catch(function(){return '';});
+      throw new Error('GET ' + path + ' HTTP ' + r.status + ' ' + msg);
+    }
+    return r.json().catch(function(){return null;});
+  }
+  function itemTime(x){
+    return Date.parse(x && (x.updatedAt || x.deletedAt || x.createdAt || x.modifiedAt) || '') || 0;
+  }
+  function objectValues(obj){
+    if(!obj || typeof obj !== 'object') return [];
+    return Object.keys(obj).map(function(k){
+      var v=obj[k];
+      if(v && typeof v==='object' && !v.id) v=Object.assign({id:k},v);
+      return v;
+    }).filter(Boolean);
+  }
+  function mergeRemoteList(local, remote, idFn){
+    var map={};
+    (Array.isArray(local)?local:[]).forEach(function(x){var id=idFn(x);if(id)map[id]=x;});
+    objectValues(remote).forEach(function(r){
+      var id=idFn(r); if(!id)return;
+      var l=map[id];
+      if(!l || itemTime(r)>itemTime(l)) map[id]=Object.assign({},l||{},r);
+    });
+    return Object.keys(map).map(function(k){return map[k];});
+  }
+  async function pullLatestBeforeWrite(){
+    var s=S(); if(!s) throw new Error('Geen lokale state gevonden');
+    var remoteUsers=await getRemote(BASE+'/users');
+    var remoteOrders=await getRemote(BASE+'/orders');
+    s.users=mergeRemoteList(s.users,remoteUsers,function(u){return T(u&&(u.id||u.pin||u.name));});
+    s.orders=mergeRemoteList(s.orders,remoteOrders,function(o){return T(o&&(o.id||o.orderId||o.number||o.orderNumber));});
+    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+    return {remoteUsers:objectValues(remoteUsers).length,remoteOrders:objectValues(remoteOrders).length};
+  }
+  function niceSyncTime(iso){
+    var d=new Date(iso||'');
+    if(!isFinite(d.getTime())) return 'onbekend';
+    return d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  }
+
   function userMap(users){
     var out = {};
     (Array.isArray(users) ? users : []).forEach(function(u){
@@ -47311,20 +47455,39 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   async function hardSync(reason){
     var s = S();
     if(!s) throw new Error('Geen lokale state gevonden');
+    var why=reason||'manual';
+    var pulled={remoteUsers:0,remoteOrders:0};
+    // Bij de knop eerst veilig de nieuwste Firebase-data ophalen. Automatische saves
+    // blijven snel en schrijven alleen de actuele lokale wijziging via dezelfde route.
+    if(why==='button' || why==='doubleclick' || why==='manual'){
+      status('Firebase: controleren...', false);
+      pulled=await pullLatestBeforeWrite();
+    }
     captureAdminFormIntoState();
     var users = userMap(s.users || []);
     var orders = orderMap(s.orders || []);
     await put(BASE + '/users', users);
-    await put(BASE + '/orders', orders);
+    // V46 herstel: bij personeelsbeheer nooit de volledige opdrachtenmap overschrijven.
+    if(why!=='admin-user') await put(BASE + '/orders', orders);
+    var now=new Date().toISOString();
     await patch(BASE + '/syncDebug', {
-      lastMainSync: new Date().toISOString(),
-      reason: reason || 'manual',
+      lastMainSync: now,
+      reason: why,
       usersCount: Object.keys(users).length,
       ordersCount: Object.keys(orders).length,
-      version: 'v46'
+      remoteUsersChecked: pulled.remoteUsers,
+      remoteOrdersChecked: pulled.remoteOrders,
+      version: 'v45-amsterdam'
+    });
+    await patch(BASE + '/syncStatus/app', {
+      lastSuccessfulWrite: now,
+      kind: why,
+      usersCount: Object.keys(users).length,
+      ordersCount: Object.keys(orders).length,
+      version: 'v45-amsterdam'
     });
     status('Firebase: ok', false);
-    return {users:Object.keys(users).length, orders:Object.keys(orders).length};
+    return {users:Object.keys(users).length, orders:Object.keys(orders).length, time:now};
   }
   window.EPP_FORCE_FIREBASE_SYNC = hardSync;
 
@@ -47414,8 +47577,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function install(){
-    wrapSave();
-    bindManual();
+    // V46 herstel: bestaande Firebase-diagnoseknop en bestaande save-route blijven leidend.
+    // Geen volledige users/orders PUT bij iedere lokale save of klik.
     bindUserButton();
     updateDriverSelect();
   }
@@ -50153,4 +50316,261 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   window.AmsterdamV942Info = function(){ return {version:'v942', basis:'Amsterdam upload', doel:'1 documentbalk, oude onderste balk verwijderd'}; };
   console.info('[Amsterdam v942] document PDF-balk actief; oude dubbele documentbalk verwijderd.');
+})();
+
+
+/* ============================================================
+   AMSTERDAM V42 - CENTRALE OPDRACHTSYNC + LEESBAAR OVERZICHT
+   - Behoudt technische orders/{id} voor bestaande koppelingen.
+   - Schrijft daarnaast orders_overzicht per map/jaar/opdrachtnummer.
+   - Bundelt herhaalde sync-aanroepen per opdracht tot één schrijfroute.
+   - Haalt RTDB-opdrachten zonder datumfilter terug na F5.
+   - Bestaande appmappen/statussen blijven behouden.
+   ============================================================ */
+(function AmsterdamV42OrderSync(){
+  'use strict';
+  if(window.__AMSTERDAM_V42_ORDER_SYNC__) return;
+  window.__AMSTERDAM_V42_ORDER_SYNC__ = true;
+
+  var CUSTOMER_ID='amsterdam-verhuur';
+  var BASE='customers/'+CUSTOMER_ID;
+  var VERSION='10.12.5';
+  var CONFIG={
+    apiKey:'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain:'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL:'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId:'epp-amsterdam-verhuur',
+    storageBucket:'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId:'484128911122',
+    appId:'1:484128911122:web:b2ba741c7a0a2511054dcb'
+  };
+  function T(v){ return String(v==null?'':v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function clone(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} }
+  function S(){ try{return typeof state!=='undefined'?state:window.state;}catch(e){return window.state;} }
+  function safe(v){ var x=T(v).replace(/[.$#\[\]\/]/g,'-').replace(/[^a-zA-Z0-9_-]/g,'-').replace(/-+/g,'-'); return (x||'onbekend').slice(0,140); }
+  function iso(){ return new Date().toISOString(); }
+  function orderId(o){ return T(o&&(o.id||o.orderId||o.number||o.orderNumber)); }
+  function orderNo(o){ return T(o&&(o.number||o.orderNumber||o.id)); }
+  function status(o){ return L(o&&(o.status||o.orderStatus||o.documentStatus)); }
+  function deleted(o){ return !!(o&&(o.deleted===true||o._deleted===true||o.deletedAt||/verwijderd|deleted|gewist|trash/.test(status(o)))); }
+  function folder(o){
+    var st=status(o), f=L(o&&(o.folder||o.map||o.orderFolder));
+    if(deleted(o)||/verwijderd/.test(st+f)) return 'verwijderd';
+    if(/geannuleerd|gecancel|cancel/.test(st+f)) return 'geannuleerd';
+    if(/uitgevoerd|afgerond|completed|geleverd/.test(st+f)) return 'uitgevoerd';
+    if(/14\s*dagen|optie\s*14|optie14/.test(st+f)) return 'optie_14_dagen';
+    if(/offerte/.test(st+f)) return 'offerte';
+    return 'lopende_opdrachten';
+  }
+  function year(o){ var d=T(o&&(o.start||o.dateStart||o.createdAt)); var m=d.match(/(20\d{2})/); if(m)return m[1]; var n=orderNo(o).match(/^(20\d{2})/); return n?n[1]:String(new Date().getFullYear()); }
+  function materialOverview(o){
+    var out={};
+    (Array.isArray(o&&o.materials)?o.materials:[]).forEach(function(m,i){
+      if(!m)return;
+      var code=T(m.code||m.nr||m.productNr||m.number)||('regel-'+(i+1));
+      out[safe(code)]={
+        code:code,
+        naam:T(m.name||m.productName||m.title||m.omschrijving||m.description),
+        aantal:Number(m.qty||m.quantity||m.aantal||1)||1,
+        omschrijving:T(m.description||m.omschrijving||m.note||m.notes),
+        rubriek:T(m.cat||m.rubriek||m.category)
+      };
+    });
+    return out;
+  }
+  function overview(o){
+    var c=(o&&o.customer)||{}, l=(o&&o.location)||{};
+    return {
+      technischId:orderId(o),
+      opdrachtnummer:orderNo(o),
+      map:folder(o),
+      status:T(o&&(o.status||o.orderStatus||o.documentStatus)),
+      titel:T(o&&o.title),
+      klant:{naam:T(c.name||o.customerName),telefoon:T(c.phone||o.customerPhone),email:T(c.email||o.customerEmail)},
+      adres:T([l.street||o.locationStreet,l.zip||o.locationZip,l.city||o.locationCity].filter(Boolean).join(' ')),
+      levering:T(o&&(o.start||o.dateStart)),
+      ophalen:T(o&&(o.end||o.dateEnd)),
+      materialen:materialOverview(o),
+      verwijderd:deleted(o),
+      deletedAt:T(o&&o.deletedAt),
+      updatedAt:T(o&&o.updatedAt)||iso()
+    };
+  }
+
+  var appMod,authMod,dbMod,app,auth,db,ready=false;
+  async function init(){
+    if(ready)return true;
+    appMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
+    authMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
+    dbMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-database.js');
+    app=appMod.getApps().find(function(a){return a&&a.name==='ams-v42-orders';})||appMod.initializeApp(CONFIG,'ams-v42-orders');
+    auth=authMod.getAuth(app); db=dbMod.getDatabase(app);
+    if(!auth.currentUser){ try{await authMod.signInAnonymously(auth);}catch(e){} }
+    ready=true; return true;
+  }
+
+  var originalSync=window.BNS&&window.BNS.syncOrder;
+  var timers={}, waiters={};
+  async function writeOne(o){
+    if(!o||!orderId(o))return false;
+    await init();
+    var copy=clone(o); copy.updatedAt=copy.updatedAt||iso();
+    var id=safe(orderId(copy)), path=folder(copy)+'/'+year(copy)+'/'+safe(orderNo(copy));
+    var idxRef=dbMod.ref(db,BASE+'/orders_overzicht_index/'+id);
+    var oldSnap=await dbMod.get(idxRef); var oldPath=oldSnap.exists()?T(oldSnap.val()):'';
+    var jobs=[];
+    jobs.push(dbMod.set(dbMod.ref(db,BASE+'/orders/'+id),copy));
+    jobs.push(dbMod.set(dbMod.ref(db,BASE+'/orders_overzicht/'+path),overview(copy)));
+    jobs.push(dbMod.set(idxRef,path));
+    if(oldPath&&oldPath!==path) jobs.push(dbMod.remove(dbMod.ref(db,BASE+'/orders_overzicht/'+oldPath)));
+    await Promise.all(jobs);
+    if(typeof originalSync==='function'){
+      try{ await Promise.resolve(originalSync.call(window.BNS,copy)); }catch(e){ console.warn('[Amsterdam V42] Firestore compatibiliteit:',e); }
+    }
+    return true;
+  }
+  function centralSync(o){
+    if(!o||!orderId(o))return Promise.resolve(false);
+    var id=orderId(o); window.clearTimeout(timers[id]);
+    return new Promise(function(resolve){
+      (waiters[id]=waiters[id]||[]).push(resolve);
+      timers[id]=window.setTimeout(function(){
+        delete timers[id]; var latest=null, s=S();
+        if(s&&Array.isArray(s.orders)) latest=s.orders.find(function(x){return orderId(x)===id;});
+        writeOne(latest||o).then(function(ok){(waiters[id]||[]).splice(0).forEach(function(r){r(ok);});}).catch(function(err){console.error('[Amsterdam V42] opdracht sync mislukt',err);(waiters[id]||[]).splice(0).forEach(function(r){r(false);});});
+      },350);
+    });
+  }
+  centralSync.__amsterdamV42=true;
+  window.BNS=window.BNS||{};
+  window.BNS.syncOrder=centralSync;
+
+  function newer(a,b){ var ta=Date.parse(a&&a.updatedAt||a&&a.deletedAt||a&&a.createdAt||'')||0, tb=Date.parse(b&&b.updatedAt||b&&b.deletedAt||b&&b.createdAt||'')||0; return tb>=ta?Object.assign({},a||{},b||{}):a; }
+  async function pull(){
+    try{
+      await init(); var snap=await dbMod.get(dbMod.ref(db,BASE+'/orders')); if(!snap.exists())return;
+      var remote=snap.val()||{}, s=S(); if(!s)return;
+      var map={}; (Array.isArray(s.orders)?s.orders:[]).forEach(function(o){if(o&&orderId(o))map[orderId(o)]=o;});
+      Object.keys(remote).forEach(function(k){var o=remote[k];if(!o)return;var id=orderId(o)||k;map[id]=newer(map[id],o);});
+      s.orders=Object.keys(map).map(function(k){return map[k];});
+      try{if(typeof save==='function')save();}catch(e){}
+      try{if(typeof renderAll==='function')renderAll();}catch(e){}
+    }catch(e){console.warn('[Amsterdam V42] opdrachten ophalen mislukt',e);}
+  }
+  async function rebuild(){ var s=S(); if(!s||!Array.isArray(s.orders))return; for(var i=0;i<s.orders.length;i++){try{await centralSync(s.orders[i]);}catch(e){}} }
+  window.AMSTERDAM_V42_SYNC_ORDERS=rebuild;
+  // V46 herstel: geen lege RTDB-map bij start inladen en geen volledige rebuild/polling.
+  // De oorspronkelijke Firestore-loader herstelt opdrachten; centralSync blijft actief bij echte wijzigingen.
+  function restoreFromFirestore(){
+    try{if(window.BNS&&typeof window.BNS.reloadFromFirebase==='function')window.BNS.reloadFromFirebase();}catch(e){}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(restoreFromFirestore,1200);});
+  else setTimeout(restoreFromFirestore,1200);
+  window.addEventListener('online',function(){setTimeout(restoreFromFirestore,300);});
+  console.info('[Amsterdam V46] centrale opdrachtsync actief zonder automatische RTDB overschrijf-loop');
+})();
+
+
+/* ============================================================
+   AMSTERDAM V46 HERSTEL - GEEN LEGE BRON / GEEN POLLING
+   - Bestaande Firebase diagnose blijft volledig intact.
+   - Klik voegt alleen een veilige refresh toe, zonder volledige PUT.
+   - Admin materialen worden uit dezelfde state.materials als Nieuwe opdracht getoond.
+   ============================================================ */
+(function AmsterdamV46Recovery(){
+  'use strict';
+  if(window.__AMSTERDAM_V46_RECOVERY__) return;
+  window.__AMSTERDAM_V46_RECOVERY__=true;
+  function E(id){return document.getElementById(id);}
+  function S(){try{return typeof state!=='undefined'?state:window.state;}catch(e){return window.state;}}
+  function refreshViews(){
+    var s=S();
+    if(!s)return;
+    try{window.state=s;}catch(e){}
+    try{if(typeof renderCats==='function')renderCats();}catch(e){}
+    try{if(typeof renderMaterials==='function')renderMaterials(window.currentCat||currentCat||'');}catch(e){}
+    try{if(typeof adminRender==='function')adminRender();}catch(e){}
+    try{if(typeof window.BNS_V12_PRO_renderAdminMaterials==='function')window.BNS_V12_PRO_renderAdminMaterials();}catch(e){}
+    try{if(window.BNS_V391_ADMIN_MATERIAL_FULL&&typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function')window.BNS_V391_ADMIN_MATERIAL_FULL.install();}catch(e){}
+    try{if(typeof renderOrders==='function')renderOrders();}catch(e){}
+    try{if(typeof renderAll==='function')renderAll();}catch(e){}
+  }
+  async function safeRefresh(){
+    var jobs=[];
+    try{if(window.BNS&&typeof window.BNS.reloadFromFirebase==='function')jobs.push(Promise.resolve(window.BNS.reloadFromFirebase()));}catch(e){}
+    try{if(typeof window.AMS_V41_HERLAAD_MATERIALEN==='function')jobs.push(Promise.resolve(window.AMS_V41_HERLAAD_MATERIALEN()));}catch(e){}
+    await Promise.allSettled(jobs);
+    refreshViews();
+  }
+  function bind(){
+    var b=E('syncBtn');
+    if(!b||b.__amsV46SafeRefresh)return;
+    b.__amsV46SafeRefresh=true;
+    // Niet in capture: eerst mogen alle bestaande diagnose- en foutcontroles draaien.
+    b.addEventListener('click',function(){setTimeout(function(){safeRefresh().catch(function(e){console.warn('[Amsterdam V46] veilige refresh mislukt',e);});},250);},false);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(bind,500);setTimeout(refreshViews,1800);});
+  else{setTimeout(bind,500);setTimeout(refreshViews,1800);}
+  document.addEventListener('click',function(ev){
+    var t=ev.target;
+    if(t&&t.closest&&t.closest('#adminBtn,[data-admin],#adminMaterials'))setTimeout(refreshViews,300);
+  },false);
+  window.AMSTERDAM_V46_SAFE_REFRESH=safeRefresh;
+  console.info('[Amsterdam V46] herstel actief: lege bronnen overschrijven niets en polling is verwijderd.');
+})();
+
+/* AMSTERDAM V55: V47 status/datumcontrolelaag verwijderd; V42/V46 basis blijft leidend. */
+
+/* AMSTERDAM V55: Firebase datum/tijd-statuscontrole volledig verwijderd. */
+
+/* AMSTERDAM V50: extra datumlisteners uit V47/V48/V49 verwijderd; originele V9.3/BNS311 datumknoppen zijn weer leidend. */
+
+/* ============================================================
+   AMSTERDAM V51 - ALLEEN EINDDATUM PLUS/MIN HERSTEL
+   - Firebase en overige functies ongewijzigd.
+   - Plus/min op einddatum gelden direct als handmatige keuze.
+   - Na alle oudere listeners wordt exact de bedoelde +/- 1 dag hersteld.
+   ============================================================ */
+(function AmsterdamV51EndDateButtonsFix(){
+  'use strict';
+  if(window.__AMSTERDAM_V51_ENDDATE_BUTTONS_FIX__) return;
+  window.__AMSTERDAM_V51_ENDDATE_BUTTONS_FIX__=true;
+
+  function E(id){ return document.getElementById(id); }
+  function isoAdd(value,delta){
+    var m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return value||'';
+    var d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),12,0,0,0);
+    d.setDate(d.getDate()+delta);
+    var y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return y+'-'+mo+'-'+da;
+  }
+  function handle(ev){
+    var btn=ev.target&&ev.target.closest&&ev.target.closest('#endPlus,#endMinus');
+    if(!btn) return;
+    var de=E('dateEnd'), ds=E('dateStart');
+    if(!de) return;
+    var base=de.value || (ds&&ds.value) || '';
+    if(!base) return;
+    var delta=btn.id==='endMinus'?-1:1;
+    var wanted=isoAdd(base,delta);
+    de.dataset.amsUserEnd='1';
+    de.dataset.amsManualEnd='1';
+    setTimeout(function(){
+      if(!wanted) return;
+      de.value=wanted;
+      try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+      try{de.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}
+      // Oudere +3-listeners kunnen nog later lopen; nog eenmaal definitief herstellen.
+      setTimeout(function(){
+        if(de.value!==wanted){
+          de.value=wanted;
+          try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+        }
+      },40);
+    },0);
+  }
+  document.addEventListener('click',handle,true);
+  console.info('[Amsterdam V51] alleen einddatum plus/min hersteld');
 })();
