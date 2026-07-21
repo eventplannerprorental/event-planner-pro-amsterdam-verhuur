@@ -50666,3 +50666,62 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.AMSTERDAM_V48_SET_END_PLUS_THREE=applyPlusThree;
   console.info('[Amsterdam V48] einddatum +3 dagen actief en handmatig verstelbaar');
 })();
+
+/* ============================================================
+   AMSTERDAM V49 ALLEEN DATUMBEDIENING
+   - Laat V48 verder volledig intact.
+   - +3 dagen wordt alleen opnieuw berekend als dateStart echt wijzigt.
+   - Dubbele/kunstmatige input- en change-events met dezelfde startdatum
+     bereiken de V48-listeners niet meer.
+   - Geen enkele Firebase-, status-, materiaal- of opdrachtenwijziging.
+   ============================================================ */
+(function AmsterdamV49DateOnlyGuard(){
+  'use strict';
+  if(window.__AMSTERDAM_V49_DATE_ONLY_GUARD__) return;
+  window.__AMSTERDAM_V49_DATE_ONLY_GUARD__=true;
+
+  var lastStartValue=null;
+
+  function currentStart(){
+    var el=document.getElementById('dateStart');
+    return el?String(el.value||''):'';
+  }
+
+  function rememberStart(){
+    lastStartValue=currentStart();
+  }
+
+  function guardDuplicateStartEvent(ev){
+    var target=ev.target;
+    if(!target || target.id!=='dateStart') return;
+
+    var value=String(target.value||'');
+    if(lastStartValue===null){
+      lastStartValue=value;
+      return;
+    }
+
+    // Alleen een werkelijk andere begindatum mag V48 opnieuw +3 laten zetten.
+    if(value===lastStartValue){
+      ev.stopImmediatePropagation();
+      return;
+    }
+
+    lastStartValue=value;
+  }
+
+  // Capture draait voor de anonieme V48-listeners op het datumveld.
+  document.addEventListener('input',guardDuplicateStartEvent,true);
+  document.addEventListener('change',guardDuplicateStartEvent,true);
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',function(){setTimeout(rememberStart,100);});
+  }else{
+    setTimeout(rememberStart,100);
+  }
+
+  // Na het leegmaken van een opdracht kan het veld opnieuw worden opgebouwd.
+  document.addEventListener('bns:order-saved',function(){setTimeout(rememberStart,650);},true);
+
+  console.info('[Amsterdam V49] alleen datumguard actief; Firebase is niet aangepast');
+})();
