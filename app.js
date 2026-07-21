@@ -37929,7 +37929,11 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }catch(e){}
   }
   function filterStatusCards(){
-    var active=window.__bnsV474ActiveFolder; if(!active) return;
+    var active=window.__bnsV474ActiveFolder || 'lopend';
+    window.__bnsV474ActiveFolder=active;
+    A('#bnsV474StatusTabs button').forEach(function(btn){
+      btn.style.background=(btn.dataset.folder===active)?'#0ea5e9':'#1f3b5b';
+    });
     var os=orders();
     A('.order-card,[data-order-id],[data-id]').forEach(function(card){
       var id=T(card.getAttribute('data-order-id')||card.getAttribute('data-id')||card.dataset.orderId||card.dataset.id); if(!id) return;
@@ -47236,9 +47240,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     pullAll();
   }
 
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
-  setTimeout(install, 1800);
 })();
 
 /* ============================================================
