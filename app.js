@@ -50665,3 +50665,52 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 })();
 
 /* AMSTERDAM V50: extra datumlisteners uit V47/V48/V49 verwijderd; originele V9.3/BNS311 datumknoppen zijn weer leidend. */
+
+/* ============================================================
+   AMSTERDAM V51 - ALLEEN EINDDATUM PLUS/MIN HERSTEL
+   - Firebase en overige functies ongewijzigd.
+   - Plus/min op einddatum gelden direct als handmatige keuze.
+   - Na alle oudere listeners wordt exact de bedoelde +/- 1 dag hersteld.
+   ============================================================ */
+(function AmsterdamV51EndDateButtonsFix(){
+  'use strict';
+  if(window.__AMSTERDAM_V51_ENDDATE_BUTTONS_FIX__) return;
+  window.__AMSTERDAM_V51_ENDDATE_BUTTONS_FIX__=true;
+
+  function E(id){ return document.getElementById(id); }
+  function isoAdd(value,delta){
+    var m=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return value||'';
+    var d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]),12,0,0,0);
+    d.setDate(d.getDate()+delta);
+    var y=d.getFullYear(), mo=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return y+'-'+mo+'-'+da;
+  }
+  function handle(ev){
+    var btn=ev.target&&ev.target.closest&&ev.target.closest('#endPlus,#endMinus');
+    if(!btn) return;
+    var de=E('dateEnd'), ds=E('dateStart');
+    if(!de) return;
+    var base=de.value || (ds&&ds.value) || '';
+    if(!base) return;
+    var delta=btn.id==='endMinus'?-1:1;
+    var wanted=isoAdd(base,delta);
+    de.dataset.amsUserEnd='1';
+    de.dataset.amsManualEnd='1';
+    setTimeout(function(){
+      if(!wanted) return;
+      de.value=wanted;
+      try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+      try{de.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}
+      // Oudere +3-listeners kunnen nog later lopen; nog eenmaal definitief herstellen.
+      setTimeout(function(){
+        if(de.value!==wanted){
+          de.value=wanted;
+          try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+        }
+      },40);
+    },0);
+  }
+  document.addEventListener('click',handle,true);
+  console.info('[Amsterdam V51] alleen einddatum plus/min hersteld');
+})();
