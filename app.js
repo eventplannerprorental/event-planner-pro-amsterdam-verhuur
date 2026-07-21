@@ -50596,3 +50596,73 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.AMSTERDAM_V47_CLEAN_NEW_ORDER=cleanNewOrder;
   console.info('[Amsterdam V47] status/opdrachten/datum/schoon formulier herstel actief');
 })();
+
+/* ============================================================
+   AMSTERDAM V48 DATUMCORRECTIE
+   - Nieuwe/gewijzigde begindatum zet einddatum automatisch op +3 dagen.
+   - Einddatum blijft daarna handmatig verstelbaar via +, -, of kalender.
+   - Overschrijft uitsluitend de foutieve V47-regel die einddatum leeg maakte.
+   ============================================================ */
+(function AmsterdamV48DateCorrection(){
+  'use strict';
+  if(window.__AMSTERDAM_V48_DATE_CORRECTION__) return;
+  window.__AMSTERDAM_V48_DATE_CORRECTION__=true;
+
+  function E(id){return document.getElementById(id);}
+  function addDaysIso(iso,days){
+    if(!iso) return '';
+    var p=String(iso).split('-');
+    if(p.length!==3) return '';
+    var d=new Date(Number(p[0]),Number(p[1])-1,Number(p[2]));
+    if(isNaN(d.getTime())) return '';
+    d.setDate(d.getDate()+days);
+    var y=d.getFullYear();
+    var m=String(d.getMonth()+1).padStart(2,'0');
+    var day=String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+  function applyPlusThree(){
+    var ds=E('dateStart'),de=E('dateEnd');
+    if(!ds||!de||!ds.value) return;
+    // Bij bestaande opdrachten bewaart de app de geladen einddatum.
+    if(window.__bnsEditingOrder) return;
+    var next=addDaysIso(ds.value,3);
+    if(!next) return;
+    de.value=next;
+    de.dataset.amsUserEnd='';
+    try{de.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+    try{de.dispatchEvent(new Event('change',{bubbles:true}));}catch(e){}
+  }
+  function bind(){
+    var ds=E('dateStart');
+    if(!ds||ds.__amsV48PlusThree) return;
+    ds.__amsV48PlusThree=true;
+    // V47 wist in een setTimeout(0); daarom zetten wij daarna de juiste +3 terug.
+    ['change','input'].forEach(function(type){
+      ds.addEventListener(type,function(){
+        if(window.__bnsEditingOrder) return;
+        window.setTimeout(applyPlusThree,20);
+      },false);
+    });
+  }
+  function afterClean(){
+    var ds=E('dateStart'),de=E('dateEnd');
+    if(de) de.dataset.amsUserEnd='';
+    if(ds&&ds.value) window.setTimeout(applyPlusThree,30);
+  }
+
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('button,a,input[type="button"],input[type="submit"]');
+    if(!b) return;
+    var txt=String((b.textContent||b.value||'')+' '+(b.id||'')).toLowerCase();
+    if(/nieuwe opdracht|nieuw opdracht|new order/.test(txt)) window.setTimeout(afterClean,180);
+    if(/opslaan/.test(txt)&&!/materiaal|rubriek|favoriet|gebruiker/.test(txt)) window.setTimeout(afterClean,520);
+  },false);
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){window.setTimeout(bind,250);});
+  else window.setTimeout(bind,250);
+  window.setTimeout(bind,1200);
+  window.setTimeout(bind,3000);
+  window.AMSTERDAM_V48_SET_END_PLUS_THREE=applyPlusThree;
+  console.info('[Amsterdam V48] einddatum +3 dagen actief en handmatig verstelbaar');
+})();
