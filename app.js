@@ -5815,15 +5815,15 @@ setTimeout(()=>{
       eventStart = calendarDateOnly(start, 0);
       eventEnd = calendarDateOnly(start, 1);
     }
+    var customerPhone = fieldValue("customerPhone");
     details = [
-    "Tapwagen.nl planner",
-    "Opdracht: " + number,
+    type === "pickup" ? "Opdracht: ophalen  " + number : "Opdracht: brengen  " + number,
     "Titel: " + title,
     "Klant: " + customer,
+    customerPhone ? "Telefoon: " + customerPhone : "",
     "Materialen: " + (materialCodes.join(", ") || "Nog geen materialen"),
-    type === "pickup" ? "Rubriek kleur: licht blauw / TR ophalen" : "Rubriek: " + (materialCat || "onbekend"),
-    type === "pickup" ? "Kleurcode: #60a5fa" : "Kleurcode rubriek: " + materialColor,
-    "Let op: Google Agenda laat kleur niet automatisch zetten via de normale agenda-link. Kies eventueel dezelfde kleur in Google Agenda.",
+    "Levering: " + (start || ""),
+    "Ophalen: " + (end || ""),
     "Adres: " + address
     ].filter(Boolean).join("\n");
     const url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
@@ -47309,6 +47309,53 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return r.json().catch(function(){return null;});
   }
 
+  async function getRemote(path){
+    var token = await getToken();
+    var url = DB + '/' + path + '.json' + (token ? '?auth=' + encodeURIComponent(token) : '');
+    url += (url.indexOf('?') >= 0 ? '&' : '?') + 'ts=' + Date.now();
+    var r = await fetch(url, {method:'GET', cache:'no-store'});
+    if(!r.ok){
+      var msg = await r.text().catch(function(){return '';});
+      throw new Error('GET ' + path + ' HTTP ' + r.status + ' ' + msg);
+    }
+    return r.json().catch(function(){return null;});
+  }
+  function itemTime(x){
+    return Date.parse(x && (x.updatedAt || x.deletedAt || x.createdAt || x.modifiedAt) || '') || 0;
+  }
+  function objectValues(obj){
+    if(!obj || typeof obj !== 'object') return [];
+    return Object.keys(obj).map(function(k){
+      var v=obj[k];
+      if(v && typeof v==='object' && !v.id) v=Object.assign({id:k},v);
+      return v;
+    }).filter(Boolean);
+  }
+  function mergeRemoteList(local, remote, idFn){
+    var map={};
+    (Array.isArray(local)?local:[]).forEach(function(x){var id=idFn(x);if(id)map[id]=x;});
+    objectValues(remote).forEach(function(r){
+      var id=idFn(r); if(!id)return;
+      var l=map[id];
+      if(!l || itemTime(r)>itemTime(l)) map[id]=Object.assign({},l||{},r);
+    });
+    return Object.keys(map).map(function(k){return map[k];});
+  }
+  async function pullLatestBeforeWrite(){
+    var s=S(); if(!s) throw new Error('Geen lokale state gevonden');
+    var remoteUsers=await getRemote(BASE+'/users');
+    var remoteOrders=await getRemote(BASE+'/orders');
+    s.users=mergeRemoteList(s.users,remoteUsers,function(u){return T(u&&(u.id||u.pin||u.name));});
+    s.orders=mergeRemoteList(s.orders,remoteOrders,function(o){return T(o&&(o.id||o.orderId||o.number||o.orderNumber));});
+    try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
+    return {remoteUsers:objectValues(remoteUsers).length,remoteOrders:objectValues(remoteOrders).length};
+  }
+  function niceSyncTime(iso){
+    var d=new Date(iso||'');
+    if(!isFinite(d.getTime())) return 'onbekend';
+    return d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});
+  }
+
   function userMap(users){
     var out = {};
     (Array.isArray(users) ? users : []).forEach(function(u){
@@ -47374,20 +47421,38 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   async function hardSync(reason){
     var s = S();
     if(!s) throw new Error('Geen lokale state gevonden');
+    var why=reason||'manual';
+    var pulled={remoteUsers:0,remoteOrders:0};
+    // Bij de knop eerst veilig de nieuwste Firebase-data ophalen. Automatische saves
+    // blijven snel en schrijven alleen de actuele lokale wijziging via dezelfde route.
+    if(why==='button' || why==='doubleclick' || why==='manual'){
+      status('Firebase: controleren...', false);
+      pulled=await pullLatestBeforeWrite();
+    }
     captureAdminFormIntoState();
     var users = userMap(s.users || []);
     var orders = orderMap(s.orders || []);
     await put(BASE + '/users', users);
     await put(BASE + '/orders', orders);
+    var now=new Date().toISOString();
     await patch(BASE + '/syncDebug', {
-      lastMainSync: new Date().toISOString(),
-      reason: reason || 'manual',
+      lastMainSync: now,
+      reason: why,
       usersCount: Object.keys(users).length,
       ordersCount: Object.keys(orders).length,
-      version: 'v46'
+      remoteUsersChecked: pulled.remoteUsers,
+      remoteOrdersChecked: pulled.remoteOrders,
+      version: 'v45-amsterdam'
     });
-    status('Firebase: ok', false);
-    return {users:Object.keys(users).length, orders:Object.keys(orders).length};
+    await patch(BASE + '/syncStatus/app', {
+      lastSuccessfulWrite: now,
+      kind: why,
+      usersCount: Object.keys(users).length,
+      ordersCount: Object.keys(orders).length,
+      version: 'v45-amsterdam'
+    });
+    status('Firebase OK • ' + niceSyncTime(now), false);
+    return {users:Object.keys(users).length, orders:Object.keys(orders).length, time:now};
   }
   window.EPP_FORCE_FIREBASE_SYNC = hardSync;
 
@@ -47421,12 +47486,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     b.__eppV45Bound = true;
     b.addEventListener('click', function(){
       toast('Firebase sync starten...');
-      hardSync('button').then(function(res){ alert('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+      hardSync('button').then(function(res){ alert('Firebase sync ok\nLaatste opslag: ' + niceSyncTime(res.time) + '\n' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
         .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
     }, true);
     b.addEventListener('dblclick', function(){
       toast('Firebase sync starten...');
-      hardSync('doubleclick').then(function(res){ alert('Firebase sync ok: ' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
+      hardSync('doubleclick').then(function(res){ alert('Firebase sync ok\nLaatste opslag: ' + niceSyncTime(res.time) + '\n' + res.users + ' gebruikers, ' + res.orders + ' opdrachten'); })
         .catch(function(e){ console.error(e); status('Firebase: fout', true); alert('Firebase sync fout:\n' + (e && e.message ? e.message : e)); });
     }, true);
   }
@@ -50216,4 +50281,153 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   window.AmsterdamV942Info = function(){ return {version:'v942', basis:'Amsterdam upload', doel:'1 documentbalk, oude onderste balk verwijderd'}; };
   console.info('[Amsterdam v942] document PDF-balk actief; oude dubbele documentbalk verwijderd.');
+})();
+
+
+/* ============================================================
+   AMSTERDAM V42 - CENTRALE OPDRACHTSYNC + LEESBAAR OVERZICHT
+   - Behoudt technische orders/{id} voor bestaande koppelingen.
+   - Schrijft daarnaast orders_overzicht per map/jaar/opdrachtnummer.
+   - Bundelt herhaalde sync-aanroepen per opdracht tot één schrijfroute.
+   - Haalt RTDB-opdrachten zonder datumfilter terug na F5.
+   - Bestaande appmappen/statussen blijven behouden.
+   ============================================================ */
+(function AmsterdamV42OrderSync(){
+  'use strict';
+  if(window.__AMSTERDAM_V42_ORDER_SYNC__) return;
+  window.__AMSTERDAM_V42_ORDER_SYNC__ = true;
+
+  var CUSTOMER_ID='amsterdam-verhuur';
+  var BASE='customers/'+CUSTOMER_ID;
+  var VERSION='10.12.5';
+  var CONFIG={
+    apiKey:'AIzaSyADMGcbgIP2KSsP_LPR4XIuycw4npUc1Vs',
+    authDomain:'epp-amsterdam-verhuur.firebaseapp.com',
+    databaseURL:'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId:'epp-amsterdam-verhuur',
+    storageBucket:'epp-amsterdam-verhuur.firebasestorage.app',
+    messagingSenderId:'484128911122',
+    appId:'1:484128911122:web:b2ba741c7a0a2511054dcb'
+  };
+  function T(v){ return String(v==null?'':v).trim(); }
+  function L(v){ return T(v).toLowerCase(); }
+  function clone(v){ try{return JSON.parse(JSON.stringify(v));}catch(e){return v;} }
+  function S(){ try{return typeof state!=='undefined'?state:window.state;}catch(e){return window.state;} }
+  function safe(v){ var x=T(v).replace(/[.$#\[\]\/]/g,'-').replace(/[^a-zA-Z0-9_-]/g,'-').replace(/-+/g,'-'); return (x||'onbekend').slice(0,140); }
+  function iso(){ return new Date().toISOString(); }
+  function orderId(o){ return T(o&&(o.id||o.orderId||o.number||o.orderNumber)); }
+  function orderNo(o){ return T(o&&(o.number||o.orderNumber||o.id)); }
+  function status(o){ return L(o&&(o.status||o.orderStatus||o.documentStatus)); }
+  function deleted(o){ return !!(o&&(o.deleted===true||o._deleted===true||o.deletedAt||/verwijderd|deleted|gewist|trash/.test(status(o)))); }
+  function folder(o){
+    var st=status(o), f=L(o&&(o.folder||o.map||o.orderFolder));
+    if(deleted(o)||/verwijderd/.test(st+f)) return 'verwijderd';
+    if(/geannuleerd|gecancel|cancel/.test(st+f)) return 'geannuleerd';
+    if(/uitgevoerd|afgerond|completed|geleverd/.test(st+f)) return 'uitgevoerd';
+    if(/14\s*dagen|optie\s*14|optie14/.test(st+f)) return 'optie_14_dagen';
+    if(/offerte/.test(st+f)) return 'offerte';
+    return 'lopende_opdrachten';
+  }
+  function year(o){ var d=T(o&&(o.start||o.dateStart||o.createdAt)); var m=d.match(/(20\d{2})/); if(m)return m[1]; var n=orderNo(o).match(/^(20\d{2})/); return n?n[1]:String(new Date().getFullYear()); }
+  function materialOverview(o){
+    var out={};
+    (Array.isArray(o&&o.materials)?o.materials:[]).forEach(function(m,i){
+      if(!m)return;
+      var code=T(m.code||m.nr||m.productNr||m.number)||('regel-'+(i+1));
+      out[safe(code)]={
+        code:code,
+        naam:T(m.name||m.productName||m.title||m.omschrijving||m.description),
+        aantal:Number(m.qty||m.quantity||m.aantal||1)||1,
+        omschrijving:T(m.description||m.omschrijving||m.note||m.notes),
+        rubriek:T(m.cat||m.rubriek||m.category)
+      };
+    });
+    return out;
+  }
+  function overview(o){
+    var c=(o&&o.customer)||{}, l=(o&&o.location)||{};
+    return {
+      technischId:orderId(o),
+      opdrachtnummer:orderNo(o),
+      map:folder(o),
+      status:T(o&&(o.status||o.orderStatus||o.documentStatus)),
+      titel:T(o&&o.title),
+      klant:{naam:T(c.name||o.customerName),telefoon:T(c.phone||o.customerPhone),email:T(c.email||o.customerEmail)},
+      adres:T([l.street||o.locationStreet,l.zip||o.locationZip,l.city||o.locationCity].filter(Boolean).join(' ')),
+      levering:T(o&&(o.start||o.dateStart)),
+      ophalen:T(o&&(o.end||o.dateEnd)),
+      materialen:materialOverview(o),
+      verwijderd:deleted(o),
+      deletedAt:T(o&&o.deletedAt),
+      updatedAt:T(o&&o.updatedAt)||iso()
+    };
+  }
+
+  var appMod,authMod,dbMod,app,auth,db,ready=false;
+  async function init(){
+    if(ready)return true;
+    appMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-app.js');
+    authMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-auth.js');
+    dbMod=await import('https://www.gstatic.com/firebasejs/'+VERSION+'/firebase-database.js');
+    app=appMod.getApps().find(function(a){return a&&a.name==='ams-v42-orders';})||appMod.initializeApp(CONFIG,'ams-v42-orders');
+    auth=authMod.getAuth(app); db=dbMod.getDatabase(app);
+    if(!auth.currentUser){ try{await authMod.signInAnonymously(auth);}catch(e){} }
+    ready=true; return true;
+  }
+
+  var originalSync=window.BNS&&window.BNS.syncOrder;
+  var timers={}, waiters={};
+  async function writeOne(o){
+    if(!o||!orderId(o))return false;
+    await init();
+    var copy=clone(o); copy.updatedAt=copy.updatedAt||iso();
+    var id=safe(orderId(copy)), path=folder(copy)+'/'+year(copy)+'/'+safe(orderNo(copy));
+    var idxRef=dbMod.ref(db,BASE+'/orders_overzicht_index/'+id);
+    var oldSnap=await dbMod.get(idxRef); var oldPath=oldSnap.exists()?T(oldSnap.val()):'';
+    var jobs=[];
+    jobs.push(dbMod.set(dbMod.ref(db,BASE+'/orders/'+id),copy));
+    jobs.push(dbMod.set(dbMod.ref(db,BASE+'/orders_overzicht/'+path),overview(copy)));
+    jobs.push(dbMod.set(idxRef,path));
+    if(oldPath&&oldPath!==path) jobs.push(dbMod.remove(dbMod.ref(db,BASE+'/orders_overzicht/'+oldPath)));
+    await Promise.all(jobs);
+    if(typeof originalSync==='function'){
+      try{ await Promise.resolve(originalSync.call(window.BNS,copy)); }catch(e){ console.warn('[Amsterdam V42] Firestore compatibiliteit:',e); }
+    }
+    return true;
+  }
+  function centralSync(o){
+    if(!o||!orderId(o))return Promise.resolve(false);
+    var id=orderId(o); window.clearTimeout(timers[id]);
+    return new Promise(function(resolve){
+      (waiters[id]=waiters[id]||[]).push(resolve);
+      timers[id]=window.setTimeout(function(){
+        delete timers[id]; var latest=null, s=S();
+        if(s&&Array.isArray(s.orders)) latest=s.orders.find(function(x){return orderId(x)===id;});
+        writeOne(latest||o).then(function(ok){(waiters[id]||[]).splice(0).forEach(function(r){r(ok);});}).catch(function(err){console.error('[Amsterdam V42] opdracht sync mislukt',err);(waiters[id]||[]).splice(0).forEach(function(r){r(false);});});
+      },350);
+    });
+  }
+  centralSync.__amsterdamV42=true;
+  window.BNS=window.BNS||{};
+  window.BNS.syncOrder=centralSync;
+
+  function newer(a,b){ var ta=Date.parse(a&&a.updatedAt||a&&a.deletedAt||a&&a.createdAt||'')||0, tb=Date.parse(b&&b.updatedAt||b&&b.deletedAt||b&&b.createdAt||'')||0; return tb>=ta?Object.assign({},a||{},b||{}):a; }
+  async function pull(){
+    try{
+      await init(); var snap=await dbMod.get(dbMod.ref(db,BASE+'/orders')); if(!snap.exists())return;
+      var remote=snap.val()||{}, s=S(); if(!s)return;
+      var map={}; (Array.isArray(s.orders)?s.orders:[]).forEach(function(o){if(o&&orderId(o))map[orderId(o)]=o;});
+      Object.keys(remote).forEach(function(k){var o=remote[k];if(!o)return;var id=orderId(o)||k;map[id]=newer(map[id],o);});
+      s.orders=Object.keys(map).map(function(k){return map[k];});
+      try{if(typeof save==='function')save();}catch(e){}
+      try{if(typeof renderAll==='function')renderAll();}catch(e){}
+    }catch(e){console.warn('[Amsterdam V42] opdrachten ophalen mislukt',e);}
+  }
+  async function rebuild(){ var s=S(); if(!s||!Array.isArray(s.orders))return; for(var i=0;i<s.orders.length;i++){try{await centralSync(s.orders[i]);}catch(e){}} }
+  window.AMSTERDAM_V42_SYNC_ORDERS=rebuild;
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(pull,700);setTimeout(rebuild,3500);});
+  else{setTimeout(pull,700);setTimeout(rebuild,3500);}
+  window.addEventListener('online',function(){pull();rebuild();});
+  setInterval(pull,30000);
+  console.info('[Amsterdam V42] centrale opdrachtsync en leesbaar orders_overzicht actief');
 })();
