@@ -382,12 +382,22 @@ ensure();
       ]);
       var deleted=tombstoneCodes(values[1]);
       var mats=listFromFirebase(values[0]).filter(function(m){return !deleted[codeOf(m)];});
-      // Een succesvolle online Firebase-read is leidend, ook als de lijst leeg is.
-      setLocalMaterials(mats);
+      var local=Array.isArray(state.materials)?state.materials:[];
+      // V46 herstel: een lege Firebase-node mag een gevulde lokale/plannerlijst nooit wissen.
+      if(!mats.length && local.length){
+        mats=local.slice();
+        console.warn('[Amsterdam v46] Firebase materialen leeg; gevulde lokale lijst behouden:',mats.length);
+        setLocalMaterials(mats);
+        try{await syncAll('herstel-lege-firebase-materialen');}catch(syncErr){console.warn('[Amsterdam v46] materiaalherstel naar Firebase uitgesteld',syncErr&&syncErr.message||syncErr);}
+      }else{
+        setLocalMaterials(mats);
+      }
       try{renderCats();}catch(e){}
       try{renderMaterials(currentCat||'');}catch(e){}
       try{adminRender();}catch(e){}
-      console.info('[Amsterdam v41] Firebase materialen leidend geladen:',mats.length);
+      try{if(typeof window.BNS_V12_PRO_renderAdminMaterials==='function')window.BNS_V12_PRO_renderAdminMaterials();}catch(e){}
+      try{if(typeof window.BNS_V391_ADMIN_MATERIAL_FULL==='object'&&typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function')window.BNS_V391_ADMIN_MATERIAL_FULL.install();}catch(e){}
+      console.info('[Amsterdam v46] Firebase/materialen geladen:',mats.length);
       return true;
     }catch(e){
       console.warn('[Amsterdam v41] Firebase start-read niet beschikbaar; lokale lijst blijft actief.',e&&e.message||e);
@@ -47198,16 +47208,14 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function install(){
-    wrapSave();
-    manualSyncButton();
+    // V46 herstel: geen automatische volledige RTDB-push en geen 15-secondenlus.
+    // Alleen een veilige eenmalige merge voor bezorgerstatussen.
     pullAll();
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();
-  setTimeout(install, 1500);
-  setTimeout(install, 3500);
-  setInterval(pullAll, 15000);
+  setTimeout(install, 1800);
 })();
 
 /* ============================================================
@@ -47433,7 +47441,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var users = userMap(s.users || []);
     var orders = orderMap(s.orders || []);
     await put(BASE + '/users', users);
-    await put(BASE + '/orders', orders);
+    // V46 herstel: bij personeelsbeheer nooit de volledige opdrachtenmap overschrijven.
+    if(why!=='admin-user') await put(BASE + '/orders', orders);
     var now=new Date().toISOString();
     await patch(BASE + '/syncDebug', {
       lastMainSync: now,
@@ -47542,8 +47551,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function install(){
-    wrapSave();
-    bindManual();
+    // V46 herstel: bestaande Firebase-diagnoseknop en bestaande save-route blijven leidend.
+    // Geen volledige users/orders PUT bij iedere lokale save of klik.
     bindUserButton();
     updateDriverSelect();
   }
@@ -50425,9 +50434,62 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   async function rebuild(){ var s=S(); if(!s||!Array.isArray(s.orders))return; for(var i=0;i<s.orders.length;i++){try{await centralSync(s.orders[i]);}catch(e){}} }
   window.AMSTERDAM_V42_SYNC_ORDERS=rebuild;
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(pull,700);setTimeout(rebuild,3500);});
-  else{setTimeout(pull,700);setTimeout(rebuild,3500);}
-  window.addEventListener('online',function(){pull();rebuild();});
-  setInterval(pull,30000);
-  console.info('[Amsterdam V42] centrale opdrachtsync en leesbaar orders_overzicht actief');
+  // V46 herstel: geen lege RTDB-map bij start inladen en geen volledige rebuild/polling.
+  // De oorspronkelijke Firestore-loader herstelt opdrachten; centralSync blijft actief bij echte wijzigingen.
+  function restoreFromFirestore(){
+    try{if(window.BNS&&typeof window.BNS.reloadFromFirebase==='function')window.BNS.reloadFromFirebase();}catch(e){}
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(restoreFromFirestore,1200);});
+  else setTimeout(restoreFromFirestore,1200);
+  window.addEventListener('online',function(){setTimeout(restoreFromFirestore,300);});
+  console.info('[Amsterdam V46] centrale opdrachtsync actief zonder automatische RTDB overschrijf-loop');
+})();
+
+
+/* ============================================================
+   AMSTERDAM V46 HERSTEL - GEEN LEGE BRON / GEEN POLLING
+   - Bestaande Firebase diagnose blijft volledig intact.
+   - Klik voegt alleen een veilige refresh toe, zonder volledige PUT.
+   - Admin materialen worden uit dezelfde state.materials als Nieuwe opdracht getoond.
+   ============================================================ */
+(function AmsterdamV46Recovery(){
+  'use strict';
+  if(window.__AMSTERDAM_V46_RECOVERY__) return;
+  window.__AMSTERDAM_V46_RECOVERY__=true;
+  function E(id){return document.getElementById(id);}
+  function S(){try{return typeof state!=='undefined'?state:window.state;}catch(e){return window.state;}}
+  function refreshViews(){
+    var s=S();
+    if(!s)return;
+    try{window.state=s;}catch(e){}
+    try{if(typeof renderCats==='function')renderCats();}catch(e){}
+    try{if(typeof renderMaterials==='function')renderMaterials(window.currentCat||currentCat||'');}catch(e){}
+    try{if(typeof adminRender==='function')adminRender();}catch(e){}
+    try{if(typeof window.BNS_V12_PRO_renderAdminMaterials==='function')window.BNS_V12_PRO_renderAdminMaterials();}catch(e){}
+    try{if(window.BNS_V391_ADMIN_MATERIAL_FULL&&typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function')window.BNS_V391_ADMIN_MATERIAL_FULL.install();}catch(e){}
+    try{if(typeof renderOrders==='function')renderOrders();}catch(e){}
+    try{if(typeof renderAll==='function')renderAll();}catch(e){}
+  }
+  async function safeRefresh(){
+    var jobs=[];
+    try{if(window.BNS&&typeof window.BNS.reloadFromFirebase==='function')jobs.push(Promise.resolve(window.BNS.reloadFromFirebase()));}catch(e){}
+    try{if(typeof window.AMS_V41_HERLAAD_MATERIALEN==='function')jobs.push(Promise.resolve(window.AMS_V41_HERLAAD_MATERIALEN()));}catch(e){}
+    await Promise.allSettled(jobs);
+    refreshViews();
+  }
+  function bind(){
+    var b=E('syncBtn');
+    if(!b||b.__amsV46SafeRefresh)return;
+    b.__amsV46SafeRefresh=true;
+    // Niet in capture: eerst mogen alle bestaande diagnose- en foutcontroles draaien.
+    b.addEventListener('click',function(){setTimeout(function(){safeRefresh().catch(function(e){console.warn('[Amsterdam V46] veilige refresh mislukt',e);});},250);},false);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){setTimeout(bind,500);setTimeout(refreshViews,1800);});
+  else{setTimeout(bind,500);setTimeout(refreshViews,1800);}
+  document.addEventListener('click',function(ev){
+    var t=ev.target;
+    if(t&&t.closest&&t.closest('#adminBtn,[data-admin],#adminMaterials'))setTimeout(refreshViews,300);
+  },false);
+  window.AMSTERDAM_V46_SAFE_REFRESH=safeRefresh;
+  console.info('[Amsterdam V46] herstel actief: lege bronnen overschrijven niets en polling is verwijderd.');
 })();
