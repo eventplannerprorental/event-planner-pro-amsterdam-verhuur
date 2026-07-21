@@ -5845,6 +5845,7 @@ setTimeout(()=>{
     "Klant: " + customer,
     "Adres: " + address,
     customerPhone ? "Telefoon: " + customerPhone : "",
+    "Materialen: " + (materialCodes.join(", ") || "Nog geen materialen"),
     "Brengdatum: " + calendarDateLabel(start),
     "Ophaaldatum: " + calendarDateLabel(end)
     ].filter(Boolean).join("\n");
