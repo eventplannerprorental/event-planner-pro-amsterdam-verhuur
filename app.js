@@ -47213,22 +47213,29 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
         try{ if(typeof renderDriver === 'function') renderDriver(); }catch(e){}
       }
-      setFirebaseStatus(true);
+      var syncedAt = new Date().toLocaleString('nl-NL', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit', second:'2-digit'
+      });
+      setFirebaseStatus(true, 'Firebase eenmalig opgehaald bij openen: ' + syncedAt);
     }catch(err){
       console.warn('[EPP v43] ophalen mislukt (lokaal blijft werken):', err);
+      setFirebaseStatus(false, 'Firebase ophalen bij openen mislukt');
     }
     pulling = false;
   }
 
+  var installed = false;
   function install(){
-    // V46 herstel: geen automatische volledige RTDB-push en geen 15-secondenlus.
-    // Alleen een veilige eenmalige merge voor bezorgerstatussen.
+    if(installed) return;
+    installed = true;
+    // Alleen eenmaal ophalen bij het openen van de site.
+    // Geen timer, polling of tweede vertraagde ophaalactie.
     pullAll();
   }
 
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
-  setTimeout(install, 1800);
 })();
 
 /* ============================================================
