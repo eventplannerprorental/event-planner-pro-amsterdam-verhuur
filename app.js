@@ -5747,13 +5747,13 @@ setTimeout(()=>{
       eventStart = calendarDateOnly(end, 0);
       eventEnd = calendarDateOnly(end, 1);
     } else {
-      // Opdracht: alleen de titel van de opdracht op begindatum.
+      // Brengen: titel van de opdracht op de begindatum.
       eventTitle = title;
       eventStart = calendarDateOnly(start, 0);
       eventEnd = calendarDateOnly(start, 1);
     }
     details = [
-    "Tapwagen.nl planner",
+    "Amsterdam Verhuur planner",
     "Opdracht: " + number,
     "Titel: " + title,
     "Klant: " + customer,
@@ -5836,7 +5836,7 @@ setTimeout(()=>{
       <b>Planner snelknoppen</b>
       <button type="button" id="bnsWazePlannerBtn" class="bns-tool-green">Waze route naar opdracht</button>
       <button type="button" id="bnsMapsPlannerBtn" class="bns-tool-dark">Google Maps route</button>
-      <button type="button" id="bnsAgendaOrderBtn">Agenda opdracht maken</button>
+      <button type="button" id="bnsAgendaOrderBtn">Agenda brengen</button>
       <button type="button" id="bnsAgendaPickupBtn" class="bns-tool-orange">Agenda ophalen</button>
     `;
     if (orderHead && orderHead.insertAdjacentElement) {
@@ -5851,7 +5851,7 @@ setTimeout(()=>{
       openGoogleMaps(niceAddressFromForm());
     };
     byId("bnsAgendaOrderBtn").onclick = function(){
-      openCalendarForCurrentOrder("order");
+      openCalendarForCurrentOrder("delivery");
     };
     byId("bnsAgendaPickupBtn").onclick = function(){
       openCalendarForCurrentOrder("pickup");
@@ -47365,9 +47365,11 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return text(pickup ? (o.end || o.dateEnd || o.pickupDate || o.ophaalDatum) : (o.start || o.dateStart || o.deliveryDate || o.brengDatum));
   }
   function agendaItem(o,kind){
+    var baseTitle=text(o.title || o.name || 'Opdracht');
+    var agendaTitle=kind==='ophalen' ? ('TR '+baseTitle) : baseTitle;
     return cleanValue({
-      id:o.id || '', number:o.number || o.orderNumber || '', title:o.title || o.name || '',
-      status:o.status || o.orderStatus || '', date:orderDate(o,kind==='ophalen'),
+      id:o.id || '', number:o.number || o.orderNumber || '', title:agendaTitle,
+      orderTitle:baseTitle, status:o.status || o.orderStatus || '', date:orderDate(o,kind==='ophalen'),
       customer:o.customer || {}, location:o.location || {}, materials:o.materials || [],
       driver:o.driver || o.driverName || o.bezorger || '', vehicle:o.vehicle || '',
       kind:kind, updatedAt:o.updatedAt || now()
@@ -47397,7 +47399,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       'orders/geannuleerd':mapBy(orders.filter(cancelled),orderKey),
       'agenda/brengen':agendaMap(orders,'brengen'),
       'agenda/ophalen':agendaMap(orders,'ophalen'),
-      syncInfo:{version:'AMS_SYNC_V2',reason:reason||'save',updatedAt:now()}
+      syncInfo:{version:'AMS_SYNC_V3',reason:reason||'save',updatedAt:now()}
     };
   }
   function readQueue(){
@@ -47444,8 +47446,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       }
       replaceQueue(failed);
       window.AMS_FIREBASE_STATUS=failed.length ?
-        {ok:false,pending:failed.length,lastError:failed[0].lastError,version:'AMS_SYNC_V2'} :
-        {ok:true,pending:0,lastUpload:now(),version:'AMS_SYNC_V2'};
+        {ok:false,pending:failed.length,lastError:failed[0].lastError,version:'AMS_SYNC_V3'} :
+        {ok:true,pending:0,lastUpload:now(),version:'AMS_SYNC_V3'};
       if(failed.length) console.warn('[Amsterdam sync] lokale opslag gelukt; '+failed.length+' onderdeel/onderdelen wachten op Firebase.');
       return failed.length===0;
     }finally{ sending=false; }
@@ -47466,6 +47468,44 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       var x=v[k]; if(x&&typeof x==='object'&&!x.id)x.id=k; return x;
     }) : list(v);
   }
+  function materialIdentity(m,index){
+    return lower(m && (m.id || m.code || m.productCode || m.name || m.product || ('materiaal-'+index)));
+  }
+  function normalizeMaterial(m,category,key,index){
+    if(m == null) return null;
+    if(typeof m !== 'object') m={name:text(m)};
+    var copy=Object.assign({},m);
+    if(!copy.id) copy.id=text(key || copy.code || copy.productCode || ('materiaal-'+index));
+    if(!copy.cat && !copy.rubriek && !copy.category && category) copy.cat=text(category).toUpperCase();
+    if(!copy.code && copy.productCode) copy.code=copy.productCode;
+    if(!copy.name && copy.product) copy.name=copy.product;
+    return copy;
+  }
+  function flattenMaterialTree(tree){
+    var rows=[];
+    if(!tree || typeof tree!=='object') return rows;
+    Object.keys(tree).forEach(function(category){
+      var group=tree[category];
+      if(Array.isArray(group)){
+        group.forEach(function(item,index){ var m=normalizeMaterial(item,category,'',index); if(m) rows.push(m); });
+      }else if(group && typeof group==='object'){
+        Object.keys(group).forEach(function(key,index){ var m=normalizeMaterial(group[key],category,key,index); if(m) rows.push(m); });
+      }
+    });
+    return rows;
+  }
+  function mergeMaterials(primary,grouped){
+    var out=[], seen={};
+    objectValues(primary).concat(flattenMaterialTree(grouped)).forEach(function(item,index){
+      var m=normalizeMaterial(item,'','',index);
+      if(!m) return;
+      var key=materialIdentity(m,index);
+      if(!key || seen[key]) return;
+      seen[key]=true;
+      out.push(m);
+    });
+    return out;
+  }
   function useful(candidate){
     return candidate && (list(candidate.orders).length || list(candidate.materials).length || list(candidate.customers).length || list(candidate.users).length);
   }
@@ -47479,11 +47519,11 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     loadedOnce=true;
     try{
       var result=await Promise.all([
-        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('alerts'),getPart('orders/alle')
+        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('materialen_per_rubriek'),getPart('alerts'),getPart('orders/alle')
       ]);
       var candidate={
         users:objectValues(result[0]), customers:objectValues(result[1]), locations:objectValues(result[2]),
-        materials:objectValues(result[3]), alerts:objectValues(result[4]), orders:objectValues(result[5])
+        materials:mergeMaterials(result[3],result[4]), alerts:objectValues(result[5]), orders:objectValues(result[6])
       };
       if(!useful(candidate)) return;
       applyingRemote=true;
@@ -47496,9 +47536,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       if(previousSave) previousSave();
       try{ if(typeof ensure==='function') ensure(); }catch(e){}
       try{ if(typeof renderAll==='function') renderAll(); }catch(e){}
-      window.AMS_FIREBASE_STATUS={ok:true,pending:readQueue().length,lastLoad:now(),version:'AMS_SYNC_V2'};
+      window.AMS_FIREBASE_STATUS={ok:true,pending:readQueue().length,lastLoad:now(),materials:candidate.materials.length,version:'AMS_SYNC_V3'};
+      console.info('[Amsterdam sync] Firebase geladen: '+candidate.materials.length+' materialen; agenda brengen/ophalen gescheiden.');
     }catch(e){
-      window.AMS_FIREBASE_STATUS={ok:false,pending:readQueue().length,lastError:String(e&&e.message||e),version:'AMS_SYNC_V2'};
+      window.AMS_FIREBASE_STATUS={ok:false,pending:readQueue().length,lastError:String(e&&e.message||e),version:'AMS_SYNC_V3'};
       console.warn('[Amsterdam sync] Firebase ophalen niet gelukt; lokale gegevens blijven actief:',e);
     }finally{ applyingRemote=false; }
   }
@@ -47529,6 +47570,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.addEventListener('online',function(){ flushQueue(); });
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ bindSyncButton(); loadOnce(); flushQueue(); },{once:true});
   else { bindSyncButton(); loadOnce(); flushQueue(); }
-  console.info('[Amsterdam sync] Een lokale-eerst Firebase-route actief; onderdelen strikt gescheiden.');
+  console.info('[Amsterdam sync] V3 actief: materialen uit materials plus materialen_per_rubriek; agenda brengen/ophalen gescheiden.');
 })();
 
