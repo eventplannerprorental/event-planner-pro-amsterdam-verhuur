@@ -3,7 +3,7 @@
  <head>
   <meta charset="utf-8"/>
   <meta content="width=device-width,initial-scale=1" name="viewport"/>
-  <title>Event Planner PRO Rental v848</title>
+  <title>Event Planner PRO Rental AMS V6</title>
   <link href="styles.css" rel="stylesheet"/>
   <link href="material-fix.css" rel="stylesheet"/>
  </head>
@@ -51,6 +51,7 @@
      <input id="globalSearch" placeholder="Zoek opdracht, klant, materiaal, adres..."/>
      <button id="alertsBtn">Systeemmeldingen (0)</button>
      <button id="syncBtn">Systeem status</button>
+     <button id="amsterdamVersionStatus" type="button" style="border:0;border-radius:10px;padding:9px 12px;font-weight:800;background:#e2e8f0;color:#334155;white-space:nowrap">Versie controleren...</button>
      <div class="global-layout-tools" id="globalLayoutTools">
       <select id="globalThemeSelect">
        <option value="blue">Blauw</option>
@@ -390,7 +391,7 @@
     6. bns-stabilizer  — opruimen na alles: Wis knop, boekhouding mappen, intervals
   -->
   <script src="bns-preloader.js"></script>
-  <script>document.write('<script src="app.js?v=' + Date.now() + '"><\/script>');</script>
+  <script src="startup-loader.js"></script>
   <!-- v840: Firebase RTDB/Auth zit veilig in app.js via EPP-config; oude BNS_FIREBASE_CONFIG blijft geblokkeerd. -->
   <!-- v840: firebase-sync.js blijft UIT om oude Firestore-sync niet te starten. -->
   <!-- v43: licentiecontrole toegevoegd. Laadt NA app.js, verandert de bestaande scriptvolgorde niet. -->
