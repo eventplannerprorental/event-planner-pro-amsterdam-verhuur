@@ -5731,9 +5731,9 @@ setTimeout(()=>{
     const number = fieldValue("orderNumber");
     const title = fieldValue("orderTitle") || "Opdracht";
     const customer = fieldValue("customerName");
+    const customerPhone = fieldValue("customerPhone");
+    const locationPhone = fieldValue("locationPhone");
     const materialCodes = currentMaterialCodes();
-    const materialCat = currentFirstMaterialCat();
-    const materialColor = rubriekColor(materialCat);
     const start = fieldValue("dateStart");
     const end = fieldValue("dateEnd") || start;
     const address = niceAddressFromForm();
@@ -5753,14 +5753,11 @@ setTimeout(()=>{
       eventEnd = calendarDateOnly(start, 1);
     }
     details = [
-    "Amsterdam Verhuur planner",
     "Opdracht: " + number,
-    "Titel: " + title,
     "Klant: " + customer,
-    "Materialen: " + (materialCodes.join(", ") || "Nog geen materialen"),
-    type === "pickup" ? "Rubriek kleur: licht blauw / TR ophalen" : "Rubriek: " + (materialCat || "onbekend"),
-    type === "pickup" ? "Kleurcode: #60a5fa" : "Kleurcode rubriek: " + materialColor,
-    "Let op: Google Agenda laat kleur niet automatisch zetten via de normale agenda-link. Kies eventueel dezelfde kleur in Google Agenda.",
+    customerPhone ? "Telefoon klant: " + customerPhone : "",
+    locationPhone && locationPhone !== customerPhone ? "Telefoon locatie: " + locationPhone : "",
+    "Materialen: " + (materialCodes.join(", ") || "Geen materialen"),
     "Adres: " + address
     ].filter(Boolean).join("\n");
     const url = "https://calendar.google.com/calendar/render?action=TEMPLATE"
