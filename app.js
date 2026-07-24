@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-2026-07-22-V6';
+window.AMSTERDAM_BUILD_ID = 'AMS-2026-07-24-V8';
 
 (function(){
   function ensureBadge(){
@@ -5764,10 +5764,16 @@ setTimeout(()=>{
     return String(cat || '').toUpperCase() === 'TW' ? '#dc2626' : '#60a5fa';
   }
   function calendarDateOnly(value, addDays){
-    var safe = value || new Date().toISOString().slice(0, 10);
-    var d = new Date(safe + 'T00:00:00');
-    if (addDays) d.setDate(d.getDate() + addDays);
-    return d.toISOString().slice(0,10).replaceAll('-', '');
+    // Datumvelden zijn kalenderdatums, geen tijdstippen. Gebruik UTC-onderdelen
+    // zodat Nederland-zomertijd de datum niet naar de vorige dag verschuift.
+    var safe = String(value || '').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(safe)){
+      var today = new Date();
+      safe = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+    }
+    var parts = safe.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2] + Number(addDays || 0)));
+    return String(d.getUTCFullYear()) + String(d.getUTCMonth()+1).padStart(2,'0') + String(d.getUTCDate()).padStart(2,'0');
   }
   function openCalendarForCurrentOrder(type){
     const number = fieldValue("orderNumber");
@@ -5797,6 +5803,7 @@ setTimeout(()=>{
     details = [
     "Opdracht: " + number,
     "Klant: " + customer,
+    "Transport: " + (fieldValue("orderBrand") || ""),
     customerPhone ? "Telefoon klant: " + customerPhone : "",
     locationPhone && locationPhone !== customerPhone ? "Telefoon locatie: " + locationPhone : "",
     "Materialen: " + (materialCodes.join(", ") || "Geen materialen"),
@@ -7379,7 +7386,7 @@ setTimeout(()=>{
     "Opdracht: " + val("orderNumber") + "\n" +
     "Status: " + val("orderStatus") + "\n" +
     "Titel: " + val("orderTitle") + "\n" +
-    "Biermerk / merk: " + val("orderBrand") + "\n" +
+    "Transport: " + val("orderBrand") + "\n" +
     "Datum: " + start + (end && end !== start ? " tot datum " + end : "") + "\n\n" +
     "Klant:\n" + val("customerName") + "\n" + val("customerStreet") + "\n" + val("customerZip") + " " + val("customerCity") + "\n" + val("customerPhone") + "\n" + val("customerEmail") + "\n\n" +
     "Locatie:\n" + val("locationName") + "\n" + val("locationStreet") + "\n" + val("locationZip") + " " + val("locationCity") + "\nContact: " + val("locationContact") + "\n" + val("locationPhone") + "\n\n" +
@@ -47553,24 +47560,39 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(!response.ok) throw new Error(path+': Firebase HTTP '+response.status);
     return response.json();
   }
-  async function loadOnce(){
-    if(loadedOnce) return;
+  async function loadOnce(force){
+    if(loadedOnce && !force) return;
     loadedOnce=true;
     try{
       var result=await Promise.all([
-        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('materialen_per_rubriek'),getPart('alerts'),getPart('orders/alle')
+        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('materialen_per_rubriek'),getPart('alerts'),getPart('orders/alle'),getPart('syncInfo')
       ]);
       var candidate={
         users:objectValues(result[0]), customers:objectValues(result[1]), locations:objectValues(result[2]),
         materials:mergeMaterials(result[3],result[4]), alerts:objectValues(result[5]), orders:objectValues(result[6])
       };
-      if(!useful(candidate)) return;
-      applyingRemote=true;
       var local=currentState()||{};
+      var remoteInfo=result[7] && typeof result[7]==='object' ? result[7] : {};
+      var pending=readQueue().length;
+      var localStamp=Date.parse(local.__amsUpdatedAt || local.updatedAt || '') || 0;
+      var remoteStamp=Date.parse(remoteInfo.updatedAt || '') || 0;
+
+      // Belangrijk: als deze browser nog niet verzonden wijzigingen heeft, mag
+      // een oudere Firebase-kopie die lokale gegevens nooit overschrijven.
+      if(pending || (localStamp && localStamp > remoteStamp)){
+        console.warn('[Amsterdam sync] lokale wijzigingen zijn nieuwer of wachten nog; Firebase overschrijven overgeslagen.');
+        await sync('lokale-wijzigingen-beschermen');
+        return;
+      }
+      if(!useful(candidate) && !remoteStamp) return;
+      applyingRemote=true;
       var merged=Object.assign({},local);
+      // Ook lege Firebase-lijsten overnemen. Anders komen lokaal gewiste tests
+      // bij een volgende start opnieuw terug.
       ['users','customers','locations','materials','alerts','orders'].forEach(function(k){
-        if(Array.isArray(candidate[k]) && candidate[k].length) merged[k]=candidate[k];
+        if(Array.isArray(candidate[k])) merged[k]=candidate[k];
       });
+      merged.__amsUpdatedAt = remoteInfo.updatedAt || now();
       setCurrentState(merged);
       if(previousSave) previousSave();
       try{ if(typeof ensure==='function') ensure(); }catch(e){}
@@ -47585,6 +47607,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   if(previousSave){
     var amsterdamSave=function(){
+      if(!applyingRemote){
+        var live=currentState();
+        if(live) live.__amsUpdatedAt=now();
+      }
       var result=previousSave.apply(this,arguments);
       if(!applyingRemote) scheduleSync('save');
       return result;
@@ -47594,6 +47620,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   window.AMS_FIREBASE_SYNC_NOW=function(){ return sync('handmatig'); };
   window.AMS_FIREBASE_LOAD_ONCE=loadOnce;
+  window.AMS_FIREBASE_REFRESH=function(){ return loadOnce(true); };
   window.AMS_FIREBASE_RETRY=function(){ return flushQueue(); };
 
   function bindSyncButton(){
@@ -47609,6 +47636,55 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.addEventListener('online',function(){ flushQueue(); });
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ bindSyncButton(); loadOnce(); flushQueue(); },{once:true});
   else { bindSyncButton(); loadOnce(); flushQueue(); }
-  console.info('[Amsterdam sync] V3 actief: materialen uit materials plus materialen_per_rubriek; agenda brengen/ophalen gescheiden.');
+  setInterval(function(){ if(!document.hidden) loadOnce(true); },15000);
+  console.info('[Amsterdam sync] V4 actief: planner en bezorger verversen elke 15 seconden; agenda brengen/ophalen gescheiden.');
 })();
 
+
+
+/* =========================================================
+   AMSTERDAM V8 DEFINITIEVE CORRECTIES
+   - Nieuwe opdracht en na opslaan: alle postcodevelden leeg.
+   - Build blijft een releasecode; scherm toont daarnaast vandaag en echte Firebase-sync.
+   ========================================================= */
+(function AMS_V8_FINAL(){
+  'use strict';
+  if(window.__AMS_V8_FINAL__) return;
+  window.__AMS_V8_FINAL__=true;
+  function E(id){return document.getElementById(id);}
+  function clearPostcodes(){
+    ['customerZip','locationZip'].forEach(function(id){var el=E(id); if(el){el.value=''; el.defaultValue='';}});
+  }
+  try{
+    if(typeof clearOrder==='function' && !clearOrder.__amsV8){
+      var oldClear=clearOrder;
+      var wrapped=function(){var r=oldClear.apply(this,arguments); clearPostcodes(); return r;};
+      wrapped.__amsV8=true; clearOrder=wrapped; window.clearOrder=wrapped;
+    }
+  }catch(e){}
+  try{
+    if(typeof saveCurrentOrder==='function' && !saveCurrentOrder.__amsV8){
+      var oldSaveOrder=saveCurrentOrder;
+      var saveWrapped=function(){var r=oldSaveOrder.apply(this,arguments); setTimeout(clearPostcodes,0); setTimeout(clearPostcodes,250); return r;};
+      saveWrapped.__amsV8=true; saveCurrentOrder=saveWrapped; window.saveCurrentOrder=saveWrapped;
+    }
+  }catch(e){}
+  document.addEventListener('click',function(ev){
+    var b=ev.target&&ev.target.closest&&ev.target.closest('.nav[data-page="newOrder"],#saveOrder');
+    if(b) setTimeout(clearPostcodes,0);
+  },true);
+  function nlDate(iso){
+    var d=iso?new Date(iso):new Date(); if(isNaN(d))d=new Date();
+    return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear()+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  }
+  function updateBadge(){
+    var b=E('amsterdamVersionStatus'); if(!b)return;
+    var st=window.AMS_FIREBASE_STATUS||{};
+    var sync=st.lastUpload||st.lastLoad||'';
+    b.textContent='App actueel: AMS V8 | vandaag '+nlDate().slice(0,10)+(sync?' | Firebase '+nlDate(sync):' | Firebase nog niet bevestigd');
+    b.title='Release '+String(window.AMSTERDAM_BUILD_ID||'AMS V8')+'. De datum van vandaag is geen buildnummer; Firebase-tijd toont de echte communicatie.';
+  }
+  setInterval(updateBadge,1000);
+  document.addEventListener('DOMContentLoaded',function(){setTimeout(function(){clearPostcodes();updateBadge();},300);});
+  console.info('[Amsterdam V8] Transport in agenda, postcode-reset, driver/planner sync en dynamische syncstatus actief.');
+})();
