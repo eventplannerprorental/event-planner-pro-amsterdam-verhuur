@@ -402,6 +402,14 @@ ensure();
     try{renderCats();}catch(e){}
     try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
     try{adminRender();}catch(e){}
+    /* v72-fix: adminRender() hierboven kan, door scope-verschillen, niet
+       altijd de wikkelfunctie raken die de Admin-materiaalweergave
+       ververst - waardoor een net-aangemaakt materiaal wel correct werd
+       opgeslagen (en dus zichtbaar bij Nieuwe opdracht), maar niet
+       meteen in Admin zelf verscheen. Nu wordt dit expliciet, apart,
+       altijd aangeroepen. */
+    try{ if(typeof renderAdminMaterialsStrict==='function') renderAdminMaterialsStrict(); }catch(e){}
+    try{ if(typeof window.renderAdminMaterialsStrict==='function') window.renderAdminMaterialsStrict(); }catch(e){}
   }
   async function saveMaterial(){
     var f=form(); if(!f){toastV39('Vul rubriek en product nr in.');return;}
@@ -10398,6 +10406,7 @@ setTimeout(()=>{
       };
     });
   }
+  window.renderAdminMaterialsStrict = renderAdminMaterialsStrict; // v72-fix: globaal beschikbaar maken zodat andere scopes 'm ook direct kunnen aanroepen
   function patchAdminSearch(){
     var search=$('adminMatSearch');
     if(search && !search.dataset.bnsV127Strict){
@@ -47545,6 +47554,17 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function AMS_SYNC_V2(){
   'use strict';
+  /* v72-fix: DIT HELE SYSTEEM UITGESCHAKELD. Het haalt de volledige
+     opdrachtdata in één keer op uit "orders/alle" en vervangt daarmee
+     compleet de lokale data - inclusief eventuele foto's/media die
+     bezorgers hebben toegevoegd. Dat bleek de kern van het "lokale
+     opslag blijft vol lopen"-probleem: dit systeem omzeilt de
+     bescherming die elders is opgebouwd. Het bewezen-werkende v46/v47-
+     systeem (customers/amsterdam-verhuur/orders) is nu de ENIGE route
+     voor opdrachten-synchronisatie - dezelfde, eenvoudigere aanpak als
+     bij Tapwagen, waar geen vergelijkbaar "haal alles inclusief foto's
+     op"-systeem naast de hoofdroute bestaat. */
+  return;
   if(window.__AMS_SYNC_V2__) return;
   window.__AMS_SYNC_V2__ = true;
 
