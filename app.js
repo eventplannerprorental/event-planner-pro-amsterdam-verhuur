@@ -48028,25 +48028,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }catch(e){}
   }
 
+  /* v75-fix: deze anonieme-login-poging faalde altijd met
+     "auth/api-key-not-valid" (Firebase Authentication/anonieme login
+     staat niet aan voor dit project) en vertraagde daardoor elke
+     sync met een mislukte netwerkaanvraag, plus foutmeldingen in de
+     console. De database accepteert schrijfacties al zonder token
+     (te zien aan alle geslaagde syncs) - dus voortaan direct zonder
+     token, geen zinloze inlogpoging meer. */
   async function getToken(){
-    if(tokenPromise) return tokenPromise;
-    tokenPromise = (async function(){
-      try{
-        appMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-app.js');
-        authMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-auth.js');
-        var existing = appMod.getApps().find(function(a){ return a && a.name === 'epp-v45-hard-sync'; });
-        app = existing || appMod.initializeApp(CONFIG, 'epp-v45-hard-sync');
-        auth = authMod.getAuth(app);
-        if(!auth.currentUser){
-          await authMod.signInAnonymously(auth);
-        }
-        return auth.currentUser ? await auth.currentUser.getIdToken(true) : '';
-      }catch(e){
-        console.warn('[EPP v45] anonieme auth niet beschikbaar, probeer zonder token:', e);
-        return '';
-      }
-    })();
-    return tokenPromise;
+    return '';
   }
 
   async function put(path, data){
