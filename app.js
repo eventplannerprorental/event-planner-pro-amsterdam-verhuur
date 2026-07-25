@@ -331,6 +331,19 @@ ensure();
   window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__=true;
   window.__BNS_V921_FORCE_MATERIALS_VISIBLE__=true;
   window.__AMS_V922_CONFIG_MATERIALS__=true;
+  /* v74-fix: BNS 608 en 609 triggerden elkaar via het event
+     'bns:materials-force-render' in een oneindige lus (elke
+     renderMaterials()-aanroep leidde via 608 -> event -> 609 ->
+     renderMaterials() -> weer 608, enzovoort). Elke ronde schreef de
+     volledige lokale opslag opnieuw weg - dit was de daadwerkelijke
+     oorzaak van de terugkerende "lokale opslag vol"-meldingen. BNS 608
+     haalde bovendien materiaal uit Firestore, een ander, hier verder
+     ongebruikt Firebase-product - losgekoppeld van de echte, leidende
+     Realtime Database die de rest van de app (en v39 hierboven)
+     gebruikt. Beide module schreven zelf al "niets naar Firebase" en
+     raken volgens hun eigen commentaar bezorger/opdrachten niet aan. */
+  window.__BNS608_FIREBASE_MATERIALS_LEADING__=true;
+  window.__BNS609_MATERIAL_CATEGORY_FIX__=true;
 
   var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE='customers/amsterdam-verhuur';
