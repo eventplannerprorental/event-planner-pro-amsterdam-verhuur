@@ -474,6 +474,41 @@ function ensure(){
   if(!state.users.some(function(u){ return String(u && u.pin) === String(window.EPP_USER_PIN || '3330'); })){
     state.users.push({id:'owner-amsterdam', name:'Beheerder', pin:String(window.EPP_USER_PIN || '3330'), role:'Admin', active:true, rights:{admin:true, planning:true, orders:true, materials:true}});
   }
+  bnsV72PreventStorageFull();
+}
+/* =========================================================
+   v72-fix: LOKALE OPSLAG MAG NOOIT MEER VOLLOPEN
+   Nu Firebase leidend is (zie v46/v47 hierboven) hoeft de browser
+   niet meer de VOLLEDIGE, eeuwige geschiedenis lokaal te bewaren -
+   die staat veilig in Firebase. Lokaal blijft alleen recente en
+   nog-actieve data staan; oude, afgeronde opdrachten worden uit de
+   lokale kopie gehaald (niet uit Firebase!). Draait automatisch bij
+   elke ensure()-aanroep, dus zonder dat de gebruiker iets hoeft te
+   doen. Ook wordt de oude, overbodige dubbele opslagsleutel
+   ("eventPlannerState") eenmalig opgeruimd.
+   ========================================================= */
+function bnsV72PreventStorageFull(){
+  try{
+    if(!window.__bnsV72StorageCleanupDone){
+      window.__bnsV72StorageCleanupDone = true;
+      try{ localStorage.removeItem('eventPlannerState'); }catch(e){}
+    }
+    var MAX_AGE_DAYS = 120;
+    var cutoff = Date.now() - MAX_AGE_DAYS*24*60*60*1000;
+    var before = (state.orders || []).length;
+    state.orders = (state.orders || []).filter(function(o){
+      if(!o) return false;
+      var st = String(o.status || '').toLowerCase();
+      var isFinishedType = /uitgevoerd|afgerond|geannuleerd|verwijderd|deleted|klaar/.test(st) || o.deleted === true;
+      if(!isFinishedType) return true; // actieve/lopende opdrachten altijd lokaal bewaren
+      var d = String(o.end || o.start || o.updatedAt || '').slice(0,10);
+      var t = Date.parse(d);
+      if(!t || isNaN(t)) return true; // geen datum? veilig bewaren, niet gokken
+      return t >= cutoff; // recent genoeg? bewaren. ouder? alleen lokaal opruimen, blijft in Firebase.
+    });
+    var removed = before - state.orders.length;
+    if(removed > 0) console.info('[v72] '+removed+' oude, afgeronde opdrachten lokaal opgeruimd (blijven in Firebase staan).');
+  }catch(e){}
 }
 function id(){
   return Math.random().toString(36).slice(2,10)
@@ -35031,7 +35066,10 @@ setTimeout(()=>{
   }
   function saveState(){
     try { if (typeof save === "function") save(); } catch(e) {}
-    try { localStorage.setItem("eventPlannerState", JSON.stringify(S())); } catch(e) {}
+    /* v72-fix: schreef hier ELKE keer ALSNOG de volledige data nogmaals
+       weg onder een tweede, overbodige sleutel ("eventPlannerState") -
+       dat verdubbelde onnodig de opslagbehoefte, bij 68 aanroepen door
+       de hele app heen. save() hierboven doet het echte werk al. */
   }
   function key(cat){
     return String(cat || "EXTRA").trim().toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,8) || "EXTRA";
@@ -48009,10 +48047,24 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       if(!s) return;
       s.orders = Array.isArray(s.orders) ? s.orders : [];
       var byId = new Map(s.orders.map(function(o){ return [orderKey(o), o]; }));
+      var __v72Cutoff = Date.now() - 120*24*60*60*1000;
       remoteList.forEach(function(o){
         var key = orderKey(o);
         if(!key) return;
         var localO = byId.get(key);
+        /* v72-fix: als deze opdracht al lokaal is opgeschoond (oud +
+           afgerond) en niet ALSNOG lokaal bestaat, niet zomaar terughalen -
+           anders blijft de lokale opschoning nooit "plakken" en groeit de
+           opslag toch weer. Blijft gewoon veilig in Firebase staan. */
+        if(!localO){
+          var st = String(o.status||'').toLowerCase();
+          var isFinished = /uitgevoerd|afgerond|geannuleerd|verwijderd|deleted|klaar/.test(st) || o.deleted===true;
+          if(isFinished){
+            var d = String(o.end||o.start||o.updatedAt||'').slice(0,10);
+            var t = Date.parse(d);
+            if(t && !isNaN(t) && t < __v72Cutoff) return;
+          }
+        }
         if(localO && localO.updatedAt && o.updatedAt){
           var localTime = Date.parse(localO.updatedAt) || 0;
           var remoteTime = Date.parse(o.updatedAt) || 0;
@@ -48033,7 +48085,11 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   window.__AMS_V47_LOAD_ORDERS__ = loadOrdersV47;
-  setTimeout(loadOrdersV47, 1800);
+  /* v72-fix: dit startte pas na 1800ms, waardoor de gebruiker eerst een
+     (mogelijk lege/onvolledige) lokale versie zag voordat de correcte,
+     leidende Firebase-data alsnog binnenkwam - dat voelde aan als
+     "opdrachten zijn weg, komen na lang wachten terug". Nu veel sneller. */
+  setTimeout(loadOrdersV47, 150);
   setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
