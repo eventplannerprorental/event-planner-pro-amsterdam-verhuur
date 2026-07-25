@@ -10284,11 +10284,18 @@ setTimeout(()=>{
     if(!box) return;
     var q=(($('adminMatSearch')||{
     }).value||'').trim();
+    /* v72-fix: deze functie toonde voorheen HELEMAAL NIETS totdat je iets
+       intypte in het zoekveld ("Typ bijvoorbeeld TW, TO..."), terwijl
+       Nieuwe opdracht gewoon altijd alle materialen laat zien. Omdat deze
+       functie bij elke Admin-verversing automatisch wint van de andere
+       materiaalweergave, leek Admin daardoor structureel leeg. Nu wordt
+       zonder zoekterm gewoon de volledige lijst getoond; met zoekterm
+       filtert het zoals bedoeld. */
     var materials=(appState().materials||[]).filter(function(m){
-      return strictMaterialFilter(m,q);
+      return !q || strictMaterialFilter(m,q);
     }).slice(0,500);
-    if(!q){
-      box.innerHTML='<small>Typ bijvoorbeeld TW, TO, KW, KA, SL, EXTRA of een materiaalnaam/code.</small>';
+    if(!materials.length){
+      box.innerHTML = q ? '<p>Geen materiaal in deze rubriek gevonden.</p>' : '<small>Nog geen materialen aanwezig.</small>';
       return;
     }
     box.innerHTML=materials.map(function(m){
