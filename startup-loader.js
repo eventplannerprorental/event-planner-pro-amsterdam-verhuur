@@ -36,7 +36,15 @@
   function loadApp(version){
     window.AMSTERDAM_EXPECTED_BUILD_ID=version;
     var s=document.createElement('script');
-    s.src='app.js?v='+encodeURIComponent(version);
+    /* v1-fix: de cache-buster was UITSLUITEND het versienummer uit
+       version.json. Zolang dat niet handmatig werd opgehoogd, was de
+       URL identiek aan de vorige keer, en mocht de browser gewoon de
+       oude, gecachete app.js hergebruiken - ook als de inhoud van
+       app.js wel degelijk was aangepast. Nu wordt er altijd ook een
+       uniek tijdstip meegegeven, zodat app.js hoe dan ook vers wordt
+       opgehaald; version.json blijft alleen nog dienen voor de
+       leesbare versienaam in het label hieronder. */
+    s.src='app.js?v='+encodeURIComponent(version)+'-'+Date.now();
     s.async=false;
     s.onload=function(){
       var loaded=String(window.AMSTERDAM_BUILD_ID||'');
