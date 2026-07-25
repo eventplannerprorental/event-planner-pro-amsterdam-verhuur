@@ -555,7 +555,7 @@ function bnsV72PreventStorageFull(){
     var BIG_ARRAYS = ['media','photos','signatures','driverUploads','handtekeningen','klantmeldingen'];
 
     var before = (state.orders || []).length;
-    state.orders = (state.orders || []).filter(function(o){
+    var filteredOrders = (state.orders || []).filter(function(o){
       if(!o) return false;
       var st = String(o.status || '').toLowerCase();
       var isFinishedType = /uitgevoerd|afgerond|geannuleerd|verwijderd|deleted|klaar/.test(st) || o.deleted === true;
@@ -573,18 +573,27 @@ function bnsV72PreventStorageFull(){
       });
       return true;
     });
-    var removedOrders = before - state.orders.length;
+    /* v72-fix: filter() maakt ALTIJD een nieuwe array aan, ook als er
+       niets is weggehaald. Als state.orders daardoor bij ELKE aanroep
+       een nieuwe referentie kreeg, kon dat elders worden gezien als
+       "er is iets gewijzigd", wat weer een nieuwe opslagpoging kon
+       triggeren - en dat weer deze functie opnieuw liet draaien. Nu
+       wordt de array alleen echt vervangen als er daadwerkelijk iets
+       is verwijderd. */
+    var removedOrders = before - filteredOrders.length;
+    if(removedOrders > 0) state.orders = filteredOrders;
 
     var beforeAlerts = (state.alerts || []).length;
     var alertCutoff = Date.now() - 30*24*60*60*1000;
-    state.alerts = (state.alerts || []).filter(function(a){
+    var filteredAlerts = (state.alerts || []).filter(function(a){
       if(!a) return false;
       var t = Date.parse(String(a.time || a.createdAt || a.date || ''));
       if(t && !isNaN(t) && t < alertCutoff && a.resolved) return false;
       BIG_FIELDS.forEach(function(f){ if(a[f] && String(a[f]).length>200) delete a[f]; });
       return true;
     });
-    var removedAlerts = beforeAlerts - state.alerts.length;
+    var removedAlerts = beforeAlerts - filteredAlerts.length;
+    if(removedAlerts > 0) state.alerts = filteredAlerts;
 
     if(removedOrders > 0 || removedAlerts > 0){
       console.info('[v72] Lokaal opgeruimd: '+removedOrders+' oude opdrachten, '+removedAlerts+' oude meldingen (blijven in Firebase staan).');
