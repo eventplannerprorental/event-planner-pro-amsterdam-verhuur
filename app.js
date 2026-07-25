@@ -409,6 +409,7 @@ ensure();
     payload[BASE+'/materialen_per_rubriek']=materialTree(mats);
     payload[BASE+'/materiaal_sync_info']={laatsteSync:new Date().toISOString(),reden:reason||'wijziging',aantal:mats.length,versie:'v39'};
     await patch('',payload);
+    try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastUpload:new Date().toISOString()}); }catch(e){}
   }
   /* v73-fix: de click-listener die hier stond (op #bns391Save/#bns391Delete)
      ving de klik af VOOR de echte, altijd-al-werkende knoppenlogica
@@ -483,6 +484,19 @@ ensure();
       try{adminRender();}catch(e){}
       try{ if(typeof renderAdminMaterialsStrict==='function') renderAdminMaterialsStrict(); }catch(e){}
       try{ if(typeof window.renderAdminMaterialsStrict==='function') window.renderAdminMaterialsStrict(); }catch(e){}
+      /* v76-fix: de Admin-materiaallijst (BNS_V391_ADMIN_MATERIAL_FULL)
+         onthoudt zelf een "actieve rubriek" die alleen bij opstarten werd
+         bepaald - dus VOOR dit terugladen. Daardoor bleef Admin filteren
+         op een rubriek die niet meer bestond en toonde niets, terwijl de
+         data er wel degelijk was. install() herberekent de rubrieken en
+         rendert de lijst opnieuw. */
+      try{ if(window.BNS_V391_ADMIN_MATERIAL_FULL && typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function') window.BNS_V391_ADMIN_MATERIAL_FULL.install(); }catch(e){}
+      /* v76-fix: het statusveld dat de "Firebase [nog niet] bevestigd"-
+         melding voedt (onderaan het bestand) werd alleen bijgewerkt door
+         het dode AMS_SYNC_V2-systeem (zie v74-fix) - dus die melding kon
+         nooit meer "bevestigd" tonen. Materiaal-terugladen is een succesvolle
+         Firebase-communicatie, dus dat telt hier ook mee. */
+      try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastLoad:new Date().toISOString()}); }catch(e){}
       console.info('[Amsterdam v39] '+remote.length+' materialen teruggeladen uit Firebase (materialen_per_rubriek).');
     }catch(e){
       console.warn('[Amsterdam v39] materiaal laden mislukt, lokaal blijft actief:',e);
@@ -48155,6 +48169,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       version: 'v22'
     });
     status('Firebase: ok', false);
+    try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastUpload:new Date().toISOString()}); }catch(e){}
     return {users:Object.keys(users).length, orders:Object.keys(orders).length};
   }
   window.EPP_FORCE_FIREBASE_SYNC = hardSync;
@@ -48328,6 +48343,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       try{ if(typeof save === 'function') save(); }catch(e){}
       try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
       console.info('[AMS v47] Opdrachten geladen uit Firebase (customers/amsterdam-verhuur/orders):', remoteList.length);
+      try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastLoad:new Date().toISOString()}); }catch(e){}
     }catch(e){
       console.warn('[AMS v47] Laden mislukt, lokaal blijft werken:', e && e.message);
     }
