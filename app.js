@@ -47876,7 +47876,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       copy.extra = copy.extra || copy.bijzonderheden || copy.orderExtra || '';
       copy.bijzonderheden = copy.bijzonderheden || copy.extra || '';
       copy.updatedAt = copy.updatedAt || new Date().toISOString();
-      out[safeKey(copy.id || copy.number)] = copy;
+      /* v72-fix: gebruikte hier het willekeurige, interne ID (bijv.
+         "5dnl0vj2") als sleutel/mapnaam in Firebase - onleesbaar. Nu wordt
+         het herkenbare opdrachtnummer (bijv. "2026-2567") gebruikt, net als
+         bij de materialen al het geval was. Het interne ID blijft gewoon
+         bestaan als veld in de data zelf, alleen niet meer als mapnaam. */
+      out[safeKey(copy.number || copy.id)] = copy;
     });
     return out;
   }
@@ -47918,6 +47923,18 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     captureAdminFormIntoState();
     var users = userMap(s.users || []);
     var orders = orderMap(s.orders || []);
+    /* v72-fix: KRITIEKE BEVEILIGING. Als de lokale opdrachtenlijst leeg of
+       verdacht klein is (bijvoorbeeld vlak na het laden van de pagina, nog
+       vóórdat Firebase-data is teruggehaald), mag dit NOOIT alsnog naar
+       Firebase worden weggeschreven - dat zou alle bestaande opdrachten
+       daar wissen. Alleen schrijven als er echt opdrachten zijn, of als
+       we al eerder succesvol hebben gesynchroniseerd met opdrachten erin. */
+    var orderCount = Object.keys(orders).length;
+    if(orderCount === 0 && !window.__AMS_V72_EVER_SYNCED_WITH_ORDERS__){
+      console.warn('[v72] hardSync overgeslagen: lokale opdrachtenlijst is leeg, wachten tot er echt data is (voorkomt wissen van Firebase).');
+      return;
+    }
+    if(orderCount > 0) window.__AMS_V72_EVER_SYNCED_WITH_ORDERS__ = true;
     await put(BASE + '/users', users);
     await put(BASE + '/orders', orders);
     await patch(BASE + '/syncDebug', {
@@ -48052,7 +48069,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   var DB = 'https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE = 'customers/amsterdam-verhuur';
 
-  function orderKey(o){ return String((o && (o.id || o.number)) || ''); }
+  function orderKey(o){ return String((o && (o.number || o.id)) || ''); } // v72-fix: nummer eerst, consistent met orderMap()
 
   async function get(path){
     var res = await fetch(DB + '/' + path + '.json');
