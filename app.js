@@ -484,13 +484,7 @@ ensure();
       try{adminRender();}catch(e){}
       try{ if(typeof renderAdminMaterialsStrict==='function') renderAdminMaterialsStrict(); }catch(e){}
       try{ if(typeof window.renderAdminMaterialsStrict==='function') window.renderAdminMaterialsStrict(); }catch(e){}
-      /* v76-fix: de Admin-materiaallijst (BNS_V391_ADMIN_MATERIAL_FULL)
-         onthoudt zelf een "actieve rubriek" die alleen bij opstarten werd
-         bepaald - dus VOOR dit terugladen. Daardoor bleef Admin filteren
-         op een rubriek die niet meer bestond en toonde niets, terwijl de
-         data er wel degelijk was. install() herberekent de rubrieken en
-         rendert de lijst opnieuw. */
-      try{ if(window.BNS_V391_ADMIN_MATERIAL_FULL && typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function') window.BNS_V391_ADMIN_MATERIAL_FULL.install(); }catch(e){}
+      refreshAdminMaterialsPanel();
       /* v76-fix: het statusveld dat de "Firebase [nog niet] bevestigd"-
          melding voedt (onderaan het bestand) werd alleen bijgewerkt door
          het dode AMS_SYNC_V2-systeem (zie v74-fix) - dus die melding kon
@@ -502,6 +496,50 @@ ensure();
       console.warn('[Amsterdam v39] materiaal laden mislukt, lokaal blijft actief:',e);
     }
   }
+  /* v77-fix: de Admin-materiaallijst (BNS_V391_ADMIN_MATERIAL_FULL)
+     onthoudt zelf een "actieve rubriek" die alleen bij opstarten werd
+     bepaald. Eén enkele install()-aanroep vlak na het terugladen bleek
+     niet altijd op tijd te zijn (afhankelijk van welke andere, oudere
+     modules op dat moment ook nog bezig waren met dezelfde admin-DOM).
+     Daarom nu, net als andere onderdelen van dit bestand voor precies
+     hetzelfde probleem al deden, een paar keer met tussenpozen
+     herhalen - install()/renderList() zijn veilig om vaker aan te
+     roepen. Ook: opnieuw proberen zodra iemand daadwerkelijk op de
+     Admin-navigatie klikt, zodat het zichzelf herstelt ook als de
+     eerste paar pogingen om wat voor reden dan ook misten. */
+  function refreshAdminMaterialsPanel(){
+    try{ if(window.BNS_V391_ADMIN_MATERIAL_FULL && typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function') window.BNS_V391_ADMIN_MATERIAL_FULL.install(); }catch(e){}
+    try{ if(window.BNS_V387_ADMIN_MATERIAL_LIST_FIX && typeof window.BNS_V387_ADMIN_MATERIAL_LIST_FIX.renderList==='function') window.BNS_V387_ADMIN_MATERIAL_LIST_FIX.renderList(); }catch(e){}
+    try{ forceRenderAdminMaterialsList(); }catch(e){}
+  }
+  /* v78-fix: dit bestand blijkt minstens vijf verschillende, over de
+     jaren opgestapelde Admin-materiaalpanelen te bevatten (bnsV56,
+     bns387, bns391, en meer), die elkaar in de praktijk in de weg
+     zitten - welke er zichtbaar is, hangt af van welke module toevallig
+     als laatste succesvol draait. In plaats van te gokken welke dat nu
+     is, wordt hier RECHTSTREEKS in de daadwerkelijk aanwezige
+     paneel-container geschreven, los van welk van die oude systemen
+     "wint". Simpel, maar onafhankelijk van de rest van de chaos. */
+  function escV39(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function forceRenderAdminMaterialsList(){
+    var box=document.getElementById('bnsV56AdminList')||document.getElementById('adminMatList');
+    if(!box) return;
+    var mats=Array.isArray(state.materials)?state.materials:[];
+    if(!mats.length) return;
+    box.innerHTML=mats.slice(0,250).map(function(m){
+      var c=cat(m.cat||m.rubriek||m.category);
+      return '<div style="display:grid;grid-template-columns:6px 1fr auto;gap:10px;align-items:center;margin:8px 0;padding:9px 10px;background:#fff;border:1px solid #dbe3ef;border-radius:12px">'
+        +'<span style="height:100%;min-height:42px;border-radius:8px;background:#0ea5e9"></span>'
+        +'<div><b>'+escV39(codeOf(m))+'</b> '+escV39(nameOf(m))+'<br><small>'+escV39(descOf(m))+' | rubriek '+escV39(c)+'</small></div>'
+        +'</div>';
+    }).join('');
+  }
+  [400,1200,3000,6000].forEach(function(ms){ setTimeout(refreshAdminMaterialsPanel,ms); });
+  document.addEventListener('click',function(ev){
+    var t=ev.target&&ev.target.closest?ev.target.closest('.nav[data-page="admin"],#adminBtn,.adminTab,[data-admin]'):null;
+    if(t) setTimeout(refreshAdminMaterialsPanel,250);
+  },true);
+  window.AMS_V39_REFRESH_ADMIN_MATERIALS=refreshAdminMaterialsPanel;
   var syncTimerV39=null;
   var previousSaveV39=(typeof save==='function')?save:null;
   var applyingRemoteV39=false;
@@ -511,7 +549,7 @@ ensure();
       if(!applyingRemoteV39){
         clearTimeout(syncTimerV39);
         syncTimerV39=setTimeout(function(){
-          syncAll('lokale-wijziging').catch(function(e){console.warn('[Amsterdam v39] materiaal-sync mislukt, blijft lokaal actief:',e);});
+          syncAll('lokale-wijziging').then(function(){ try{ refreshAdminMaterialsPanel(); }catch(e){} }).catch(function(e){console.warn('[Amsterdam v39] materiaal-sync mislukt, blijft lokaal actief:',e);});
         },700);
       }
       return result;
