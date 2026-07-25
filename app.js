@@ -47780,7 +47780,14 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.addEventListener('online',function(){ flushQueue(); });
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ bindSyncButton(); loadOnce(); flushQueue(); },{once:true});
   else { bindSyncButton(); loadOnce(); flushQueue(); }
-  setInterval(function(){ if(!document.hidden) loadOnce(true); },15000);
+  /* v72-fix: deze herhaling (elke 15 sec, met force=true) triggerde
+     telkens een volledige Firebase-vergelijking over 8 losse paden, en
+     kon daarbij een terugschrijf-actie (sync()) starten die op zijn beurt
+     weer een lokale opslagpoging triggerde - dat verklaarde de
+     herhaaldelijke "lokale opslag vol"-meldingen kort na elkaar. De
+     eenmalige laadactie bij het openen van de pagina (hierboven, regel
+     47781-47782) blijft gewoon actief.
+  setInterval(function(){ if(!document.hidden) loadOnce(true); },15000); */
   console.info('[Amsterdam sync] V4 actief: planner en bezorger verversen elke 15 seconden; agenda brengen/ophalen gescheiden.');
 })();
 
