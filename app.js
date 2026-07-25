@@ -190,6 +190,16 @@ console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opsc
   
   var _orig = localStorage.setItem.bind(localStorage);
   localStorage.setItem = function(key, value){
+    /* v72-fix: PROACTIEF strippen, voor ELKE poging - niet pas als reactie
+       op een mislukte poging. Er bleken 5+ verschillende plekken in de app
+       te zijn die allemaal rechtstreeks naar de hoofdsleutel schrijven,
+       elk met hun eigen "lees-pas dit veld aan-schrijf terug"-patroon,
+       zonder zelf te strippen. In plaats van die allemaal apart te
+       repareren, gebeurt het nu hier centraal, voor elke schrijfpoging
+       naar de hoofdsleutel - dat beschermt automatisch alle plekken. */
+    if(key === 'event-planner-pro-amsterdam-verhuur-v1'){
+      try{ value = stripBase64(value); }catch(e){}
+    }
     try{
       // Probeer direct
       _orig(key, value);
@@ -41858,6 +41868,17 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       try{ s=JSON.parse(localStorage.getItem(KEY)||'{}')||{}; }catch(e){ s={}; }
       s.materials=mats;
       if(A(users).length) s.users=users;
+      /* v72-fix: deze functie schreef de VOLLEDIGE, bestaande data
+         (inclusief opdrachten) ongewijzigd terug bij elke materiaal-sync
+         (3x vlak na elkaar bij het opstarten: direct, na 2s, na 6s). Als
+         die opdrachten nog grote foto's/handtekeningen bevatten, liep de
+         opslag daardoor telkens opnieuw vol, precies bij het laden. Nu
+         wordt hier ook gestript, net als bij de hoofdfunctie. */
+      var BIG=['photo','photoData','signature','signatureData','image','foto','handtekening','imageData'];
+      var BIG_ARR=['media','photos','signatures','driverUploads','handtekeningen','klantmeldingen'];
+      function strip(o){ if(!o||typeof o!=='object')return; BIG.forEach(function(f){ if(o[f]&&String(o[f]).length>200) delete o[f]; }); }
+      (s.orders||[]).forEach(function(o){ strip(o); BIG_ARR.forEach(function(k){ (o[k]||[]).forEach(strip); }); });
+      (s.alerts||[]).forEach(strip);
       localStorage.setItem(KEY,JSON.stringify(s));
     }catch(e){ log('localStorage niet bijgewerkt: '+(e&&e.message||e)); }
   }
