@@ -162,7 +162,7 @@ window.AMSTERDAM_BUILD_ID = 'AMS-2026-07-24-V8';
   if(window.__BNS_STORAGE_PATCHED__) return;
   window.__BNS_STORAGE_PATCHED__ = true;
   
-  var _BIG = ['photoData','photo','image','signatureData','signature','data','customerSignature'];
+  var _BIG = ['photoData','photo','image','signatureData','signature','data','customerSignature','imageData'];
   
   function stripBase64(val){
     // Alleen verwerken als het een JSON string is met state-achtige inhoud
@@ -443,7 +443,7 @@ function load(){
 function save(){
   try{
     // Strip base64 voor localStorage - voorkomt QuotaExceededError
-    var _BIG=['photoData','photo','image','signatureData','signature','data','customerSignature'];
+    var _BIG=['photoData','photo','image','signatureData','signature','data','customerSignature','imageData'];
     function _stripObj(o){ if(!o||typeof o!=='object') return; _BIG.forEach(function(f){ if(o[f]&&String(o[f]).length>200) delete o[f]; }); }
     var _s = JSON.parse(JSON.stringify(state));
     (_s.orders||[]).forEach(function(o){
@@ -515,6 +515,33 @@ function bnsV72PreventStorageFull(){
       window.__bnsV72StorageCleanupDone = true;
       try{ localStorage.removeItem('eventPlannerState'); }catch(e){}
     }
+    /* v72-fix: HARDE ONTDUBBELING, als vangnet. Er bleken meerdere
+       verschillende manieren te bestaan om een opdracht te "sleutelen"
+       (sommige op id, sommige op nummer) - als die door elkaar liepen,
+       kon dezelfde opdracht dubbel in de lijst terechtkomen en bij elke
+       automatische Firebase-ronde (om de 30 sec) verder opstapelen. Dat
+       verklaart een lokale opslag die zich steeds weer volzet. */
+    if(Array.isArray(state.orders) && state.orders.length){
+      var seen = new Map();
+      state.orders.forEach(function(o){
+        if(!o) return;
+        var k = String(o.number || o.id || '');
+        if(!k) return;
+        var existing = seen.get(k);
+        if(!existing){
+          seen.set(k, o);
+        } else {
+          var et = Date.parse(existing.updatedAt||'') || 0;
+          var nt = Date.parse(o.updatedAt||'') || 0;
+          if(nt >= et) seen.set(k, o); // nieuwste versie wint bij een dubbele
+        }
+      });
+      var dedupedCount = state.orders.length - seen.size;
+      if(dedupedCount > 0){
+        state.orders = Array.from(seen.values());
+        console.info('[v72] '+dedupedCount+' dubbele opdracht-items samengevoegd tot 1 (voorkomt onnodige groei van lokale opslag).');
+      }
+    }
     /* v72-fix: strenger gemaakt na terugkerende "lokale opslag vol"-meldingen.
        - Bewaartermijn omlaag: 120 -> 45 dagen voor afgeronde opdrachten.
        - Grote velden (foto's/handtekeningen) worden nu ook proactief
@@ -524,7 +551,7 @@ function bnsV72PreventStorageFull(){
        - Oude systeemmeldingen (>30 dagen) worden ook opgeruimd. */
     var MAX_AGE_DAYS = 45;
     var cutoff = Date.now() - MAX_AGE_DAYS*24*60*60*1000;
-    var BIG_FIELDS = ['photo','photoData','signature','signatureData','image','foto','handtekening'];
+    var BIG_FIELDS = ['photo','photoData','signature','signatureData','image','foto','handtekening','imageData']; // v72-fix: 'imageData' is de daadwerkelijke veldnaam die driver.js gebruikt voor foto's EN handtekeningen - stond hier nog niet in, waardoor ze nooit werden gestript
     var BIG_ARRAYS = ['media','photos','signatures','driverUploads','handtekeningen','klantmeldingen'];
 
     var before = (state.orders || []).length;
@@ -25539,7 +25566,7 @@ setTimeout(()=>{
       // Strip base64 voor localStorage - voorkomt QuotaExceededError
       try{
         var _p=JSON.parse(json);
-        var _BIG=['photoData','photo','image','signatureData','signature','data','customerSignature'];
+        var _BIG=['photoData','photo','image','signatureData','signature','data','customerSignature','imageData'];
         function _strip(o){ if(!o||typeof o!=='object') return; _BIG.forEach(function(f){ if(o[f]&&String(o[f]).length>200) delete o[f]; }); }
         if(Array.isArray(_p.orders)) _p.orders.forEach(function(o){ _strip(o); ['media','photos','signatures','driverUploads'].forEach(function(k){ (o[k]||[]).forEach(_strip); }); });
         if(Array.isArray(_p.alerts)) _p.alerts.forEach(_strip);
