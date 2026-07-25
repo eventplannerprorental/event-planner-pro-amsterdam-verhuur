@@ -515,21 +515,53 @@ function bnsV72PreventStorageFull(){
       window.__bnsV72StorageCleanupDone = true;
       try{ localStorage.removeItem('eventPlannerState'); }catch(e){}
     }
-    var MAX_AGE_DAYS = 120;
+    /* v72-fix: strenger gemaakt na terugkerende "lokale opslag vol"-meldingen.
+       - Bewaartermijn omlaag: 120 -> 45 dagen voor afgeronde opdrachten.
+       - Grote velden (foto's/handtekeningen) worden nu ook proactief
+         verwijderd uit opdrachten die WEL lokaal blijven staan - die data
+         staat toch al veilig in Firebase, lokaal is alleen nodig voor
+         het tonen van de lijst, niet de losse foto's zelf.
+       - Oude systeemmeldingen (>30 dagen) worden ook opgeruimd. */
+    var MAX_AGE_DAYS = 45;
     var cutoff = Date.now() - MAX_AGE_DAYS*24*60*60*1000;
+    var BIG_FIELDS = ['photo','photoData','signature','signatureData','image','foto','handtekening'];
+    var BIG_ARRAYS = ['media','photos','signatures','driverUploads','handtekeningen','klantmeldingen'];
+
     var before = (state.orders || []).length;
     state.orders = (state.orders || []).filter(function(o){
       if(!o) return false;
       var st = String(o.status || '').toLowerCase();
       var isFinishedType = /uitgevoerd|afgerond|geannuleerd|verwijderd|deleted|klaar/.test(st) || o.deleted === true;
-      if(!isFinishedType) return true; // actieve/lopende opdrachten altijd lokaal bewaren
-      var d = String(o.end || o.start || o.updatedAt || '').slice(0,10);
-      var t = Date.parse(d);
-      if(!t || isNaN(t)) return true; // geen datum? veilig bewaren, niet gokken
-      return t >= cutoff; // recent genoeg? bewaren. ouder? alleen lokaal opruimen, blijft in Firebase.
+      if(isFinishedType){
+        var d = String(o.end || o.start || o.updatedAt || '').slice(0,10);
+        var t = Date.parse(d);
+        if(t && !isNaN(t) && t < cutoff) return false; // te oud + afgerond -> lokaal weg, blijft in Firebase
+      }
+      // Voor ALLE bewaarde opdrachten: grote losse velden proactief strippen
+      BIG_FIELDS.forEach(function(f){ if(o[f] && String(o[f]).length > 200) delete o[f]; });
+      BIG_ARRAYS.forEach(function(k){
+        (o[k]||[]).forEach(function(m){
+          if(m && typeof m==='object') BIG_FIELDS.forEach(function(f){ if(m[f] && String(m[f]).length>200) delete m[f]; });
+        });
+      });
+      return true;
     });
-    var removed = before - state.orders.length;
-    if(removed > 0) console.info('[v72] '+removed+' oude, afgeronde opdrachten lokaal opgeruimd (blijven in Firebase staan).');
+    var removedOrders = before - state.orders.length;
+
+    var beforeAlerts = (state.alerts || []).length;
+    var alertCutoff = Date.now() - 30*24*60*60*1000;
+    state.alerts = (state.alerts || []).filter(function(a){
+      if(!a) return false;
+      var t = Date.parse(String(a.time || a.createdAt || a.date || ''));
+      if(t && !isNaN(t) && t < alertCutoff && a.resolved) return false;
+      BIG_FIELDS.forEach(function(f){ if(a[f] && String(a[f]).length>200) delete a[f]; });
+      return true;
+    });
+    var removedAlerts = beforeAlerts - state.alerts.length;
+
+    if(removedOrders > 0 || removedAlerts > 0){
+      console.info('[v72] Lokaal opgeruimd: '+removedOrders+' oude opdrachten, '+removedAlerts+' oude meldingen (blijven in Firebase staan).');
+    }
   }catch(e){}
 }
 function id(){
@@ -48086,7 +48118,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       if(!s) return;
       s.orders = Array.isArray(s.orders) ? s.orders : [];
       var byId = new Map(s.orders.map(function(o){ return [orderKey(o), o]; }));
-      var __v72Cutoff = Date.now() - 120*24*60*60*1000;
+      var __v72Cutoff = Date.now() - 45*24*60*60*1000; // v72-fix: consistent met de strengere lokale opschoning
       remoteList.forEach(function(o){
         var key = orderKey(o);
         if(!key) return;
