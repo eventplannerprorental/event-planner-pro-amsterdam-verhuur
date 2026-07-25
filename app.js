@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-2026-07-24-V22';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-25-R6';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
