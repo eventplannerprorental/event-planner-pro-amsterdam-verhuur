@@ -331,6 +331,19 @@ ensure();
   window.__BNS_V920_MATERIALS_VISIBLE_AND_CLEAN__=true;
   window.__BNS_V921_FORCE_MATERIALS_VISIBLE__=true;
   window.__AMS_V922_CONFIG_MATERIALS__=true;
+  /* v74-fix: BNS 608 en 609 triggerden elkaar via het event
+     'bns:materials-force-render' in een oneindige lus (elke
+     renderMaterials()-aanroep leidde via 608 -> event -> 609 ->
+     renderMaterials() -> weer 608, enzovoort). Elke ronde schreef de
+     volledige lokale opslag opnieuw weg - dit was de daadwerkelijke
+     oorzaak van de terugkerende "lokale opslag vol"-meldingen. BNS 608
+     haalde bovendien materiaal uit Firestore, een ander, hier verder
+     ongebruikt Firebase-product - losgekoppeld van de echte, leidende
+     Realtime Database die de rest van de app (en v39 hierboven)
+     gebruikt. Beide module schreven zelf al "niets naar Firebase" en
+     raken volgens hun eigen commentaar bezorger/opdrachten niet aan. */
+  window.__BNS608_FIREBASE_MATERIALS_LEADING__=true;
+  window.__BNS609_MATERIAL_CATEGORY_FIX__=true;
 
   var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
   var BASE='customers/amsterdam-verhuur';
@@ -396,60 +409,121 @@ ensure();
     payload[BASE+'/materialen_per_rubriek']=materialTree(mats);
     payload[BASE+'/materiaal_sync_info']={laatsteSync:new Date().toISOString(),reden:reason||'wijziging',aantal:mats.length,versie:'v39'};
     await patch('',payload);
+    try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastUpload:new Date().toISOString()}); }catch(e){}
   }
-  function persistAndRender(){
-    save();
-    try{renderCats();}catch(e){}
-    try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
-    try{adminRender();}catch(e){}
-    /* v72-fix: adminRender() hierboven kan, door scope-verschillen, niet
-       altijd de wikkelfunctie raken die de Admin-materiaalweergave
-       ververst - waardoor een net-aangemaakt materiaal wel correct werd
-       opgeslagen (en dus zichtbaar bij Nieuwe opdracht), maar niet
-       meteen in Admin zelf verscheen. Nu wordt dit expliciet, apart,
-       altijd aangeroepen. */
-    try{ if(typeof renderAdminMaterialsStrict==='function') renderAdminMaterialsStrict(); }catch(e){}
-    try{ if(typeof window.renderAdminMaterialsStrict==='function') window.renderAdminMaterialsStrict(); }catch(e){}
+  /* v73-fix: de click-listener die hier stond (op #bns391Save/#bns391Delete)
+     ving de klik af VOOR de echte, altijd-al-werkende knoppenlogica
+     (BNS_V386_MATERIAL_FINAL, verderop in dit bestand) hem kon verwerken,
+     omdat deze module eerder laadt en stopImmediatePropagation() gebruikte.
+     Daardoor voerde bij elke klik STIL de verkeerde functie uit i.p.v. de
+     bedoelde opslaan/verwijderen-code. Die listener is nu weg; de originele
+     knoppen werken weer zoals bedoeld. In plaats daarvan synchroniseert
+     onderstaande wrapper automatisch na ELKE lokale wijziging (opslaan én
+     verwijderen, via welke van de bestaande admin-schermen dan ook), zodat
+     dit niet meer afhankelijk is van welke specifieke functie de klik
+     verwerkt. */
+  function flattenMaterialTree(tree){
+    var rows=[];
+    if(!tree || typeof tree!=='object') return rows;
+    Object.keys(tree).forEach(function(rubriek){
+      var byNaam=tree[rubriek];
+      if(!byNaam || typeof byNaam!=='object') return;
+      Object.keys(byNaam).forEach(function(naam){
+        var byNr=byNaam[naam];
+        if(!byNr || typeof byNr!=='object') return;
+        Object.keys(byNr).forEach(function(nr){
+          var rec=byNr[nr];
+          if(!rec || typeof rec!=='object') return;
+          rows.push({
+            id:rec.id||('mat_'+safeKey(rec.code||rec.productnummer||nr)),
+            cat:rec.rubriek||rubriek, rubriek:rec.rubriek||rubriek, category:rec.rubriek||rubriek,
+            code:rec.code, productNr:rec.productnummer, nr:rec.productnummer, number:rec.productnummer,
+            product:rec.naam, searchName:rec.naam, zoeknaam:rec.naam, type:rec.naam, name:rec.naam,
+            description:rec.omschrijving, beschrijving:rec.omschrijving, desc:rec.omschrijving,
+            price:rec.prijs, status:rec.status||'free',
+            color:rec.kleur, catColor:rec.kleur, rubricColor:rec.kleur,
+            updatedAt:rec.bijgewerkt||new Date(0).toISOString()
+          });
+        });
+      });
+    });
+    return rows;
   }
-  async function saveMaterial(){
-    var f=form(); if(!f){toastV39('Vul rubriek en product nr in.');return;}
-    var existing=(state.materials||[]).find(function(m){return codeOf(m)===f.code;});
-    var created=!existing;
-    var m=existing||{id:'mat_'+Date.now()+'_'+Math.floor(Math.random()*10000)};
-    Object.assign(m,{cat:f.cat,rubriek:f.cat,category:f.cat,code:f.code,productNr:f.nr,nr:f.nr,number:f.nr,
-      product:f.product,searchName:f.product,zoeknaam:f.product,type:f.product,name:f.product,
-      description:f.description,beschrijving:f.description,desc:f.description,price:f.price,status:f.status,
-      color:f.color,catColor:f.color,rubricColor:f.color,updatedAt:new Date().toISOString()});
-    if(created) state.materials.push(m);
-    persistAndRender();
-    await syncAll(created?'materiaal-toegevoegd':'materiaal-gewijzigd');
-    toastV39(created?'Nieuw materiaal opgeslagen':'Materiaal opgeslagen');
+  async function get(path){
+    var res=await fetch(DB+'/'+path+'.json?ts='+Date.now(),{cache:'no-store'});
+    if(!res.ok) return null;
+    return res.json();
   }
-  async function deleteMaterial(){
-    var f=form(); if(!f){toastV39('Kies eerst een materiaal via Wijzig.');return;}
-    var matches=(state.materials||[]).filter(function(m){return codeOf(m)===f.code;});
-    if(!matches.length){toastV39('Materiaal niet gevonden. Kies het opnieuw via Wijzig.');return;}
-    var m=matches[0];
-    if(!confirm('Weet je zeker dat je dit materiaal wilt verwijderen?\n\n'+codeOf(m)+' '+nameOf(m))) return;
-    state.materials=(state.materials||[]).filter(function(x){return codeOf(x)!==f.code;});
-    persistAndRender();
-    var tomb={id:T(m.id),code:codeOf(m),rubriek:cat(m.cat||m.rubriek),naam:nameOf(m),productnummer:nrOf(m),verwijderdOp:new Date().toISOString(),versie:'v39'};
-    await Promise.all([syncAll('materiaal-verwijderd'),put(BASE+'/deletedMaterials/'+safeKey(codeOf(m),'materiaal'),tomb)]);
-    ['bns391Nr','bns391Product','bns391Desc','bns391Price'].forEach(function(id){if(E(id))E(id).value='';});
-    toastV39('Materiaal definitief verwijderd');
+  var loadedOnceV39=false;
+  async function loadMaterialsOnce(){
+    if(loadedOnceV39) return;
+    loadedOnceV39=true;
+    try{
+      var tree=await get(BASE+'/materialen_per_rubriek');
+      var remote=flattenMaterialTree(tree);
+      if(!remote.length) return;
+      var local=Array.isArray(state.materials)?state.materials:[];
+      var byKey={};
+      local.forEach(function(m){ byKey[codeOf(m)||T(m.id)]=m; });
+      remote.forEach(function(r){
+        var key=codeOf(r)||T(r.id);
+        var existing=byKey[key];
+        if(existing){
+          var lt=Date.parse(existing.updatedAt||'')||0;
+          var rt=Date.parse(r.updatedAt||'')||0;
+          if(rt>lt) byKey[key]=Object.assign({},existing,r);
+        }else{
+          byKey[key]=r;
+        }
+      });
+      state.materials=Object.keys(byKey).map(function(k){return byKey[k];});
+      applyingRemoteV39=true;
+      try{ save(); }finally{ applyingRemoteV39=false; }
+      try{renderCats();}catch(e){}
+      try{renderMaterials(currentCat||cat(E('bns391Cat')&&E('bns391Cat').value));}catch(e){}
+      try{adminRender();}catch(e){}
+      try{ if(typeof renderAdminMaterialsStrict==='function') renderAdminMaterialsStrict(); }catch(e){}
+      try{ if(typeof window.renderAdminMaterialsStrict==='function') window.renderAdminMaterialsStrict(); }catch(e){}
+      /* v76-fix: de Admin-materiaallijst (BNS_V391_ADMIN_MATERIAL_FULL)
+         onthoudt zelf een "actieve rubriek" die alleen bij opstarten werd
+         bepaald - dus VOOR dit terugladen. Daardoor bleef Admin filteren
+         op een rubriek die niet meer bestond en toonde niets, terwijl de
+         data er wel degelijk was. install() herberekent de rubrieken en
+         rendert de lijst opnieuw. */
+      try{ if(window.BNS_V391_ADMIN_MATERIAL_FULL && typeof window.BNS_V391_ADMIN_MATERIAL_FULL.install==='function') window.BNS_V391_ADMIN_MATERIAL_FULL.install(); }catch(e){}
+      /* v76-fix: het statusveld dat de "Firebase [nog niet] bevestigd"-
+         melding voedt (onderaan het bestand) werd alleen bijgewerkt door
+         het dode AMS_SYNC_V2-systeem (zie v74-fix) - dus die melding kon
+         nooit meer "bevestigd" tonen. Materiaal-terugladen is een succesvolle
+         Firebase-communicatie, dus dat telt hier ook mee. */
+      try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastLoad:new Date().toISOString()}); }catch(e){}
+      console.info('[Amsterdam v39] '+remote.length+' materialen teruggeladen uit Firebase (materialen_per_rubriek).');
+    }catch(e){
+      console.warn('[Amsterdam v39] materiaal laden mislukt, lokaal blijft actief:',e);
+    }
   }
-  document.addEventListener('click',function(ev){
-    var t=ev.target&&ev.target.closest?ev.target.closest('#bns391Save,#bns391Delete'):null;
-    if(!t) return;
-    ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-    if(busy){toastV39('Even wachten, materiaal wordt verwerkt.');return false;}
-    busy=true;
-    var job=t.id==='bns391Delete'?deleteMaterial():saveMaterial();
-    Promise.resolve(job).catch(function(err){console.error('[Amsterdam v39]',err);toastV39('Firebase melding: '+(err.message||err));}).finally(function(){busy=false;});
-    return false;
-  },true);
+  var syncTimerV39=null;
+  var previousSaveV39=(typeof save==='function')?save:null;
+  var applyingRemoteV39=false;
+  if(previousSaveV39){
+    var wrappedSaveV39=function(){
+      var result=previousSaveV39.apply(this,arguments);
+      if(!applyingRemoteV39){
+        clearTimeout(syncTimerV39);
+        syncTimerV39=setTimeout(function(){
+          syncAll('lokale-wijziging').catch(function(e){console.warn('[Amsterdam v39] materiaal-sync mislukt, blijft lokaal actief:',e);});
+        },700);
+      }
+      return result;
+    };
+    window.save=wrappedSaveV39;
+    try{ save=wrappedSaveV39; }catch(e){}
+  }
   window.AMS_V39_SYNC_MATERIALEN=function(){return syncAll('handmatige-sync');};
-  console.info('[Amsterdam v39] Eén materiaalroute en leesbare Firebase-boom actief.');
+  window.AMS_V39_LOAD_MATERIALEN=loadMaterialsOnce;
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(loadMaterialsOnce,150); },{once:true});
+  else setTimeout(loadMaterialsOnce,150);
+  console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
 /* v72-fix: EENMALIGE OPSCHONING VAN BESTAANDE DATA. De eerdere fixes
@@ -47968,25 +48042,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }catch(e){}
   }
 
+  /* v75-fix: deze anonieme-login-poging faalde altijd met
+     "auth/api-key-not-valid" (Firebase Authentication/anonieme login
+     staat niet aan voor dit project) en vertraagde daardoor elke
+     sync met een mislukte netwerkaanvraag, plus foutmeldingen in de
+     console. De database accepteert schrijfacties al zonder token
+     (te zien aan alle geslaagde syncs) - dus voortaan direct zonder
+     token, geen zinloze inlogpoging meer. */
   async function getToken(){
-    if(tokenPromise) return tokenPromise;
-    tokenPromise = (async function(){
-      try{
-        appMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-app.js');
-        authMod = await import('https://www.gstatic.com/firebasejs/' + FB_VER + '/firebase-auth.js');
-        var existing = appMod.getApps().find(function(a){ return a && a.name === 'epp-v45-hard-sync'; });
-        app = existing || appMod.initializeApp(CONFIG, 'epp-v45-hard-sync');
-        auth = authMod.getAuth(app);
-        if(!auth.currentUser){
-          await authMod.signInAnonymously(auth);
-        }
-        return auth.currentUser ? await auth.currentUser.getIdToken(true) : '';
-      }catch(e){
-        console.warn('[EPP v45] anonieme auth niet beschikbaar, probeer zonder token:', e);
-        return '';
-      }
-    })();
-    return tokenPromise;
+    return '';
   }
 
   async function put(path, data){
@@ -48105,6 +48169,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       version: 'v22'
     });
     status('Firebase: ok', false);
+    try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastUpload:new Date().toISOString()}); }catch(e){}
     return {users:Object.keys(users).length, orders:Object.keys(orders).length};
   }
   window.EPP_FORCE_FIREBASE_SYNC = hardSync;
@@ -48278,6 +48343,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       try{ if(typeof save === 'function') save(); }catch(e){}
       try{ if(typeof renderAll === 'function') renderAll(); }catch(e){}
       console.info('[AMS v47] Opdrachten geladen uit Firebase (customers/amsterdam-verhuur/orders):', remoteList.length);
+      try{ window.AMS_FIREBASE_STATUS=Object.assign({},window.AMS_FIREBASE_STATUS||{},{ok:true,lastLoad:new Date().toISOString()}); }catch(e){}
     }catch(e){
       console.warn('[AMS v47] Laden mislukt, lokaal blijft werken:', e && e.message);
     }
