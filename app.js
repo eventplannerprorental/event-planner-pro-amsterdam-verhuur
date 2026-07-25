@@ -463,6 +463,28 @@ function save(){
     }
   }
 }
+/* v72-fix: gedeelde, veilige "drempel"-hulpfunctie. Er bleken 8 losse
+   systemen te zijn die bij ELKE klik, waar dan ook in de app, hun eigen
+   controlefunctie(s) lieten draaien - dat gaf merkbare vertraging bij
+   elke interactie. Deze helper zorgt dat zo'n functie nog steeds na een
+   klik wordt gecontroleerd, maar nooit vaker dan één keer per seconde -
+   het gedrag blijft hetzelfde, de overbelasting verdwijnt. */
+function bnsV72Throttle(fn, ms){
+  var last = 0, pending = null;
+  return function(){
+    var now = Date.now();
+    if(now - last >= (ms||1000)){
+      last = now;
+      try{ fn(); }catch(e){}
+    } else if(!pending){
+      pending = setTimeout(function(){
+        pending = null;
+        last = Date.now();
+        try{ fn(); }catch(e){}
+      }, (ms||1000) - (now-last));
+    }
+  };
+}
 function ensure(){
   state.users??=[];
   state.orders??=[];
@@ -31682,7 +31704,7 @@ setTimeout(()=>{
   function start(){
     css();
     enhance();
-    document.addEventListener('click', function(){ setTimeout(enhance,80); }, true);
+    document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(enhance,80); }, 1000), true);
     var n=0;
     var timer=setInterval(function(){ enhance(); if(++n>12) clearInterval(timer); }, 500);
   }
@@ -33216,7 +33238,7 @@ setTimeout(()=>{
     cleanupOldRoutenetNewOrder();
   }
 
-  document.addEventListener('click', function(){ setTimeout(function(){ ensureArchiefButton(); cleanupOldRoutenetNewOrder(); }, 80); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(function(){ ensureArchiefButton(); cleanupOldRoutenetNewOrder(); }, 80); }, 1000), true);
   setInterval(function(){ ensureArchiefButton(); cleanupOldRoutenetNewOrder(); }, 1500);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot, 400); setTimeout(boot, 1200); });
   else { setTimeout(boot, 300); setTimeout(boot, 1200); }
@@ -37743,7 +37765,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   } else {
     setTimeout(patchSave, 300);
   }
-  document.addEventListener('click', function(){ setTimeout(patchSave,100); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(patchSave,100); }, 1000), true);
   setInterval(patchSave, 3000);
 
   console.info('[BNS v462] Harde reservering: exact id/code match, validateChosenHard actief.');
@@ -39584,7 +39606,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   patchAccountingOpen();
 
-  document.addEventListener('click', function(){ setTimeout(applyRemovedAccountingKeys,30); setTimeout(fixOpruimenButtons,120); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(applyRemovedAccountingKeys,30); setTimeout(fixOpruimenButtons,120); }, 1000), true);
   setTimeout(function(){ applyRemovedAccountingKeys(); fixOpruimenButtons(); },300);
   setInterval(function(){ applyRemovedAccountingKeys(); fixOpruimenButtons(); },2500);
   console.info('[BNS 526] Admin Opruimen Boekhouding fix actief.');
@@ -40497,7 +40519,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       }
     });
   }
-  document.addEventListener('click', function(){ setTimeout(cleanupDuplicateDocButtons,80); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(cleanupDuplicateDocButtons,80); }, 1000), true);
   setTimeout(cleanupDuplicateDocButtons,300);
   setTimeout(cleanupDuplicateDocButtons,1200);
   setInterval(cleanupDuplicateDocButtons,2500);
@@ -40530,7 +40552,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       }
     });
   }
-  document.addEventListener('click', function(){ setTimeout(cleanDocPanelActions,60); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(cleanDocPanelActions,60); }, 1000), true);
   setTimeout(cleanDocPanelActions,200);
   setTimeout(cleanDocPanelActions,1000);
   setInterval(cleanDocPanelActions,2000);
@@ -41188,7 +41210,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     setTimeout(keepVisible, 1000);
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
-  document.addEventListener('click', function(){ setTimeout(keepVisible, 80); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(keepVisible, 80); }, 1000), true);
   console.info('[BNS v596] actieknoppen Nieuwe opdracht zichtbaar; v595 knoppenbalk niet gebruikt.');
 })();
 
@@ -44706,7 +44728,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function tick(){ addStyle(); ensureBackButton(); }
   tick();
   document.addEventListener('DOMContentLoaded', tick);
-  document.addEventListener('click', function(){ setTimeout(tick,80); }, true);
+  document.addEventListener('click', bnsV72Throttle(function(){ setTimeout(tick,80); }, 1000), true);
   window.addEventListener('resize', tick);
   setInterval(tick, 1500);
   try{console.info('[BNS 724] mobiele planner-rust + opslaan/terug onderaan actief; geen menu/Firebase/materiaal/driver wijzigingen.');}catch(e){}
