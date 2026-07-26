@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R7';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R8';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -38606,7 +38606,15 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       "media","photos","fotos","images","signatures","handtekeningen",
       "customerSignatures","customerMessages","klantmeldingen"
     ].forEach(function(k){
-      if(Array.isArray(o && o[k])) o[k].forEach(function(x){ add(x,k); });
+      var v=o && o[k];
+      /* v84-fix: driver.js schrijft elk media-item apart weg
+         (orders/{sleutel}/media/{id}) - Firebase levert zo'n pad bij het
+         terughalen op als een object per id ({m_123:{...}}), niet als een
+         gewone reeks ([{...}]). Array.isArray gaf dan altijd false, dus
+         media werd hier altijd stilzwijgend overgeslagen, ook toen de
+         data allang correct in Firebase stond. */
+      if(Array.isArray(v)) v.forEach(function(x){ add(x,k); });
+      else if(v && typeof v==='object') Object.keys(v).forEach(function(id){ var x=v[id]; if(x && typeof x==='object'){ if(!x.id) x.id=id; add(x,k); } });
     });
     // customerSignature NIET als aparte kaart - staat al in alerts
     // Meerdere handtekeningen per dag worden elk als aparte alert opgeslagen
@@ -48297,10 +48305,13 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
           var remoteO = remoteOrdersNow[k];
           if(!remoteO) return;
           driverOnlyKeys.forEach(function(fk){
-            if(Array.isArray(remoteO[fk]) && remoteO[fk].length){
+            var remoteVal=remoteO[fk];
+            var remoteArr = Array.isArray(remoteVal) ? remoteVal
+              : (remoteVal && typeof remoteVal==='object' ? Object.keys(remoteVal).map(function(id){ var x=remoteVal[id]; if(x && typeof x==='object' && !x.id) x.id=id; return x; }) : null);
+            if(remoteArr && remoteArr.length){
               var localArr = Array.isArray(orders[k][fk]) ? orders[k][fk] : [];
               var seenIds = {}; localArr.forEach(function(x){ if(x && x.id) seenIds[x.id]=1; });
-              remoteO[fk].forEach(function(x){ if(x && (!x.id || !seenIds[x.id])) localArr.push(x); });
+              remoteArr.forEach(function(x){ if(x && (!x.id || !seenIds[x.id])) localArr.push(x); });
               orders[k][fk] = localArr;
             }
           });
