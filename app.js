@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-25-R6';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R7';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48280,6 +48280,32 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       return;
     }
     if(orderCount > 0) window.__AMS_V72_EVER_SYNCED_WITH_ORDERS__ = true;
+    /* v83-fix: put() overschrijft de HELE orders-boom met alleen wat
+       lokaal bekend is. Als een bezorger net een foto/handtekening had
+       toegevoegd, maar dit scherm had die (nog) niet opgehaald - wat tot
+       30 seconden kan duren - wiste deze schrijfactie, die na bijna elke
+       klik in het kantoor binnen 700ms afgaat, die data alweer voordat
+       iemand hem ooit zag. Nu wordt vlak vóór het schrijven eerst
+       gecheckt wat er al aan bezorgersdata in Firebase staat, en dat
+       blijft behouden. */
+    try{
+      var remoteOrdersNow = await get(BASE + '/orders');
+      if(remoteOrdersNow && typeof remoteOrdersNow === 'object'){
+        var driverOnlyKeys = ['media','photos','fotos','images','signatures','handtekeningen','customerSignatures','customerMessages','klantmeldingen'];
+        Object.keys(orders).forEach(function(k){
+          var remoteO = remoteOrdersNow[k];
+          if(!remoteO) return;
+          driverOnlyKeys.forEach(function(fk){
+            if(Array.isArray(remoteO[fk]) && remoteO[fk].length){
+              var localArr = Array.isArray(orders[k][fk]) ? orders[k][fk] : [];
+              var seenIds = {}; localArr.forEach(function(x){ if(x && x.id) seenIds[x.id]=1; });
+              remoteO[fk].forEach(function(x){ if(x && (!x.id || !seenIds[x.id])) localArr.push(x); });
+              orders[k][fk] = localArr;
+            }
+          });
+        });
+      }
+    }catch(e){ console.warn('[v83] kon bestaande bezorgersdata niet vooraf ophalen, ga door zonder:', e); }
     await put(BASE + '/users', users);
     await put(BASE + '/orders', orders);
     await patch(BASE + '/syncDebug', {
