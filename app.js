@@ -4376,15 +4376,24 @@ setTimeout(()=>{
     } catch(e){
     }
     const s=state();
-    if(s && Array.isArray(s.alerts)){
+    if(s && Array.isArray(s.alerts) && s.alerts.length){
+      /* v79-fix: dit riep saveState() tot nu toe ONVOORWAARDELIJK aan
+         zodra er een alerts-lijst bestond, ook als er niets te
+         wijzigen viel - en dit draait elke 2,5 seconde via de
+         setInterval hieronder. Nu alleen opslaan als er echt iets is
+         aangepast. */
+      let gewijzigd=false;
       s.alerts.forEach(a=>{
         Object.keys(a).forEach(k=>{
-          if(typeof a[k]==='string') a[k]=clean(a[k]);
+          if(typeof a[k]==='string'){
+            const c=clean(a[k]);
+            if(c!==a[k]){ a[k]=c; gewijzigd=true; }
+          }
         });
-        if(!a.title)a.title='Systeemmelding';
-        if(!a.source)a.source='systeem';
+        if(!a.title){a.title='Systeemmelding'; gewijzigd=true;}
+        if(!a.source){a.source='systeem'; gewijzigd=true;}
       });
-      saveState();
+      if(gewijzigd) saveState();
     }
     if(document.body){
       const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
@@ -46953,6 +46962,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   function markDeleted(o){
     if(!o) return o;
+    /* v79-fix: dit stempelde tot nu toe bij ELKE aanroep een nieuw
+       tijdstip in o.updatedAt, ook als de opdracht al precies in de
+       juiste "verwijderd"-staat stond. applyTombstones() (elke 5
+       seconden actief) gebruikte die tijd om te bepalen of er iets
+       gewijzigd was - en zag daardoor altijd een wijziging, voor
+       elke verwijderde opdracht, voor altijd. Nu: niets aanraken,
+       ook de tijd niet, als alles al klopt. */
+    var alreadyCanoniek = o.status==='Verwijderd' && o.folder==='verwijderd' && o.deleted===true && o._deleted===true && !!o.deletedAt;
+    if(alreadyCanoniek) return o;
     var t=now();
     if(!o._oldStatus && L(o.status) !== 'verwijderd') o._oldStatus = o.status || '';
     o.status = 'Verwijderd';
