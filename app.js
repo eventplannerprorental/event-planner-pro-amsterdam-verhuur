@@ -39004,14 +39004,14 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     // Eerst cache (huidige sessie)
     var cached = window.__bnsMediaCache && window.__bnsMediaCache[String(a.id||'')];
     if(cached){
-      return cached.photoData||cached.photo||cached.image||
+      return cached.imageData||cached.photoData||cached.photo||cached.image||
              cached.signatureData||cached.signature||cached.data||
              cached.downloadURL||'';
     }
     // Dan downloadURL (Firebase Storage)
     if(a.downloadURL) return a.downloadURL;
     // Dan base64 in item zelf
-    return a.photoData||a.photo||a.image||a.signatureData||a.signature||a.data||'';
+    return a.imageData||a.photoData||a.photo||a.image||a.signatureData||a.signature||a.data||'';
   }
   function mediaType(a){
     var s=T(a && (a.type || a.kind || a.title || a.category || a.label));
@@ -40909,8 +40909,8 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function mediaSrc(a){
     if(!a) return '';
     var c=window.__bnsMediaCache && window.__bnsMediaCache[String(a.id||'')];
-    if(c) return c.photoData||c.photo||c.image||c.signatureData||c.signature||c.data||c.downloadURL||'';
-    return a.photoData||a.photo||a.image||a.signatureData||a.signature||a.customerSignature||a.data||a.downloadURL||a.imageUrl||a.photoUrl||'';
+    if(c) return c.imageData||c.photoData||c.photo||c.image||c.signatureData||c.signature||c.data||c.downloadURL||'';
+    return a.imageData||a.photoData||a.photo||a.image||a.signatureData||a.signature||a.customerSignature||a.data||a.downloadURL||a.imageUrl||a.photoUrl||'';
   }
   function msg(title, text){
     try{
