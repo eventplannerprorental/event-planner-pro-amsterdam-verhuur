@@ -563,6 +563,51 @@ ensure();
   else setTimeout(loadMaterialsOnce,150);
   console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
+(function AMS_V80_LOAD_ALERTS(){
+  'use strict';
+  if(window.__AMS_V80_LOAD_ALERTS__) return;
+  window.__AMS_V80_LOAD_ALERTS__=true;
+  /* v80-fix: bezorgersmeldingen (schade/storing/vermissing) worden door
+     driver.js keurig weggeschreven naar customers/amsterdam-verhuur/alerts,
+     maar niets in dit bestand haalde die map ooit terug op - state.alerts
+     kwam dus nooit verder dan wat lokaal in deze browser al bestond.
+     De diverse "Systeemmeldingen"-knoppen verderop lezen wel al uit
+     state.alerts en verversen zichzelf al periodiek - dus zodra de data
+     hier binnenkomt, verschijnt hij vanzelf. */
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  async function loadAlerts(){
+    try{
+      var res=await fetch(DB+'/'+BASE+'/alerts.json?ts='+Date.now(),{cache:'no-store'});
+      if(!res.ok) return;
+      var data=await res.json();
+      if(!data || typeof data!=='object') return;
+      var remote=Object.keys(data).map(function(k){ var a=data[k]||{}; a.id=a.id||k; return a; });
+      if(!remote.length) return;
+      var s=(typeof state!=='undefined'&&state)||window.state;
+      if(!s) return;
+      var local=Array.isArray(s.alerts)?s.alerts:[];
+      var byId={};
+      local.forEach(function(a){ if(a&&a.id) byId[a.id]=a; });
+      remote.forEach(function(a){
+        var existing=byId[a.id];
+        if(existing){
+          if(a.resolved) existing.resolved=true;
+        } else {
+          byId[a.id]=a;
+        }
+      });
+      s.alerts=Object.keys(byId).map(function(k){return byId[k];});
+      try{ if(typeof save==='function') save(); }catch(e){}
+      console.info('[Amsterdam v80] '+remote.length+' meldingen teruggeladen uit Firebase (alerts).');
+    }catch(e){
+      console.warn('[Amsterdam v80] meldingen laden mislukt:',e);
+    }
+  }
+  setTimeout(loadAlerts,400);
+  setInterval(loadAlerts,20000);
+  window.AMS_V80_LOAD_ALERTS=loadAlerts;
+})();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
 /* v72-fix: EENMALIGE OPSCHONING VAN BESTAANDE DATA. De eerdere fixes
    voorkomen dat NIEUWE foto's/handtekeningen de opslag vervuilen, maar
