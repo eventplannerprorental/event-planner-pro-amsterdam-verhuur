@@ -48289,7 +48289,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
        gecheckt wat er al aan bezorgersdata in Firebase staat, en dat
        blijft behouden. */
     try{
-      var remoteOrdersNow = await get(BASE + '/orders');
+      var __v83res = await fetch(DB + '/' + BASE + '/orders.json?ts=' + Date.now(), {cache:'no-store'});
+      var remoteOrdersNow = __v83res.ok ? await __v83res.json() : null;
       if(remoteOrdersNow && typeof remoteOrdersNow === 'object'){
         var driverOnlyKeys = ['media','photos','fotos','images','signatures','handtekeningen','customerSignatures','customerMessages','klantmeldingen'];
         Object.keys(orders).forEach(function(k){
