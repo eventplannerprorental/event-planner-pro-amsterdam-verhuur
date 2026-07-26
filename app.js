@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R9';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R10';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -38671,7 +38671,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     try{ if(typeof saveState==="function") saveState(); }catch(e){}
     try{ if(typeof save==="function") save(); }catch(e){}
   }
-  window.BNS_V493_WIS = function(orderId,key){
+  window.BNS_V493_WIS = async function(orderId,key){
     var a=window.BNS_V493_MEDIA[key]; if(!a) return;
     if(!confirm("Deze melding/foto/handtekening wissen?")) return;
     var o=findOrder(orderId);
@@ -38693,28 +38693,33 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }
     var s=stateObj();
     if(Array.isArray(s.alerts)) s.alerts=removeFromArray(s.alerts,a);
-    /* v84-fix: dit vertrouwde tot nu toe volledig op de gewone
-       opslagronde (save -> hardSync) om het item ook uit Firebase te
-       halen. Voor meldingen (alerts) gebeurde dat sowieso nooit -
-       hardSync schrijft alleen users en orders, nooit de losse
-       alerts-map. Voor foto/handtekening in orders.media werd het
-       inmiddels zelfs actief TERUGGEZET door de v83-beveiliging, die
-       een bewust gewist item niet kan onderscheiden van een item dat
-       dit scherm nog niet had opgehaald. Nu wordt hier direct en
-       gericht in Firebase verwijderd, zodat er niets meer is om
-       per ongeluk terug te zetten. */
+    /* v85-fix: v84 vuurde de verwijdering "en passant" af zonder erop te
+       wachten, waardoor de automatische opslag (700ms later) soms al
+       liep vóórdat Firebase het verwijderen had verwerkt - en het item
+       via de v83-beveiliging alsnog terugkwam. Nu wordt hier ECHT op
+       gewacht, en wordt het ID bovendien tijdelijk op een zwarte lijst
+       gezet die de v83-beveiliging respecteert, zodat het sowieso nooit
+       meer terug kan komen, ook niet bij een resterende vertraging. */
     try{
       var wisId=T(a.id);
       if(wisId){
+        window.__BNS_WIS_DELETED_IDS__ = window.__BNS_WIS_DELETED_IDS__ || {};
+        window.__BNS_WIS_DELETED_IDS__[wisId] = Date.now();
+        var delUrl = null;
         if(a.__source==='alerts'){
-          fetch(DB+'/'+BASE+'/alerts/'+encodeURIComponent(wisId)+'.json',{method:'DELETE'}).catch(function(){});
+          delUrl = DB+'/'+BASE+'/alerts/'+encodeURIComponent(wisId)+'.json';
         } else if(o){
           var wisOrderKey=T(o.number||o.id);
           var wisField=a.__source||'media';
-          if(wisOrderKey) fetch(DB+'/'+BASE+'/orders/'+encodeURIComponent(wisOrderKey)+'/'+encodeURIComponent(wisField)+'/'+encodeURIComponent(wisId)+'.json',{method:'DELETE'}).catch(function(){});
+          if(wisOrderKey) delUrl = DB+'/'+BASE+'/orders/'+encodeURIComponent(wisOrderKey)+'/'+encodeURIComponent(wisField)+'/'+encodeURIComponent(wisId)+'.json';
+        }
+        if(delUrl){
+          var delRes = await fetch(delUrl,{method:'DELETE'});
+          if(!delRes.ok) console.error('[v85] verwijderen in Firebase mislukt ('+delRes.status+'):', delUrl);
+          else console.info('[v85] verwijderd uit Firebase:', delUrl);
         }
       }
-    }catch(e){}
+    }catch(e){ console.error('[v85] verwijderen in Firebase gaf een fout:', e); }
     saveLocalNow();
     renderOverview(orderId);
   };
@@ -48354,7 +48359,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
             if(remoteArr && remoteArr.length){
               var localArr = Array.isArray(orders[k][fk]) ? orders[k][fk] : [];
               var seenIds = {}; localArr.forEach(function(x){ if(x && x.id) seenIds[x.id]=1; });
-              remoteArr.forEach(function(x){ if(x && (!x.id || !seenIds[x.id])) localArr.push(x); });
+              var wisBlacklist = window.__BNS_WIS_DELETED_IDS__ || {};
+              remoteArr.forEach(function(x){ if(x && (!x.id || (!seenIds[x.id] && !wisBlacklist[x.id]))) localArr.push(x); });
               orders[k][fk] = localArr;
             }
           });
