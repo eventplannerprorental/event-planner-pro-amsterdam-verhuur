@@ -668,7 +668,7 @@ function save(){
     try{
       // Als nog steeds vol: verwijder backup keys om ruimte te maken
       ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1-date'].forEach(function(k){ try{localStorage.removeItem(k);}catch(_){} });
-      localStorage.setItem(KEY, JSON.stringify({orders:state.orders||[],materials:state.materials||[],users:state.users||[]}));
+      localStorage.setItem(KEY, JSON.stringify({orders:state.orders||[],materials:state.materials||[],users:state.users||[],alerts:state.alerts||[]}));
       console.warn('[Master test] lokale opslag vol, basis opgeslagen');
     } catch(_){
       console.warn('[Master test] lokale opslag vol, Firebase blijft leidend');
@@ -27092,6 +27092,7 @@ setTimeout(()=>{
   }
   function closeAll(){
     var list=openList();
+    var idsToClose=list.map(function(a){ return T(a.id || a.alertId || a.key); }).filter(Boolean);
     alerts().forEach(function(a){
       if(isAllowedOpen(a)){
         a.resolved=true;
@@ -27104,6 +27105,13 @@ setTimeout(()=>{
     } catch(e){
     }
     save();
+    /* v81-fix: dit markeerde meldingen tot nu toe alleen lokaal als
+       afgehandeld - Firebase bleef zeggen dat ze nog open stonden.
+       Zodra de lokale opslag om wat voor reden dan ook opnieuw werd
+       ingelezen (bijvoorbeeld na de "opslag vol"-noodgreep), haalde
+       de terugleesfunctie ze dan weer als open op uit Firebase. Nu
+       wordt elke afgesloten melding ook echt in Firebase bijgewerkt. */
+    idsToClose.forEach(function(id){ try{ v53WriteAlertResolved(id, false); }catch(e){} });
     update();
     openModal();
   }
