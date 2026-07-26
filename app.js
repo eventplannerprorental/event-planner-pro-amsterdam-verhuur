@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R8';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R9';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -38581,7 +38581,14 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     return s || "Melding";
   }
   function mediaText(a){ return T(a && (a.note || a.message || a.text || a.description || a.customerName || a.driverName || "")); }
-  function mediaTime(a){ return T(a && (a.createdAt || a.time || a.date || a.updatedAt || "")); }
+  function mediaTime(a){
+    var raw=T(a && (a.createdAt || a.time || a.date || a.updatedAt || ""));
+    if(!raw) return "";
+    var d=new Date(raw);
+    if(isNaN(d.getTime())) return raw;
+    var pad=function(n){ return n<10?"0"+n:""+n; };
+    return pad(d.getDate())+"-"+pad(d.getMonth()+1)+"-"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  }
   function isMedia(a){
     if(!a) return false;
     if(mediaSrc(a)) return true;
@@ -38686,6 +38693,28 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }
     var s=stateObj();
     if(Array.isArray(s.alerts)) s.alerts=removeFromArray(s.alerts,a);
+    /* v84-fix: dit vertrouwde tot nu toe volledig op de gewone
+       opslagronde (save -> hardSync) om het item ook uit Firebase te
+       halen. Voor meldingen (alerts) gebeurde dat sowieso nooit -
+       hardSync schrijft alleen users en orders, nooit de losse
+       alerts-map. Voor foto/handtekening in orders.media werd het
+       inmiddels zelfs actief TERUGGEZET door de v83-beveiliging, die
+       een bewust gewist item niet kan onderscheiden van een item dat
+       dit scherm nog niet had opgehaald. Nu wordt hier direct en
+       gericht in Firebase verwijderd, zodat er niets meer is om
+       per ongeluk terug te zetten. */
+    try{
+      var wisId=T(a.id);
+      if(wisId){
+        if(a.__source==='alerts'){
+          fetch(DB+'/'+BASE+'/alerts/'+encodeURIComponent(wisId)+'.json',{method:'DELETE'}).catch(function(){});
+        } else if(o){
+          var wisOrderKey=T(o.number||o.id);
+          var wisField=a.__source||'media';
+          if(wisOrderKey) fetch(DB+'/'+BASE+'/orders/'+encodeURIComponent(wisOrderKey)+'/'+encodeURIComponent(wisField)+'/'+encodeURIComponent(wisId)+'.json',{method:'DELETE'}).catch(function(){});
+        }
+      }
+    }catch(e){}
     saveLocalNow();
     renderOverview(orderId);
   };
@@ -39036,7 +39065,14 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     return s || "Melding";
   }
   function mediaText(a){ return T(a && (a.note || a.message || a.text || a.description || a.customerName || a.driverName || a.from || "")); }
-  function mediaTime(a){ return T(a && (a.createdAt || a.time || a.date || a.updatedAt || "")); }
+  function mediaTime(a){
+    var raw=T(a && (a.createdAt || a.time || a.date || a.updatedAt || ""));
+    if(!raw) return "";
+    var d=new Date(raw);
+    if(isNaN(d.getTime())) return raw;
+    var pad=function(n){ return n<10?"0"+n:""+n; };
+    return pad(d.getDate())+"-"+pad(d.getMonth()+1)+"-"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  }
   function isMedia(a){
     if(!a) return false;
     if(mediaSrc(a)) return true;
@@ -40912,7 +40948,14 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }
     return s || 'Melding';
   }
-  function mediaTime(a){ return T(a && (a.createdAt||a.time||a.date||a.updatedAt||'')); }
+  function mediaTime(a){
+    var raw=T(a && (a.createdAt || a.time || a.date || a.updatedAt || ""));
+    if(!raw) return "";
+    var d=new Date(raw);
+    if(isNaN(d.getTime())) return raw;
+    var pad=function(n){ return n<10?"0"+n:""+n; };
+    return pad(d.getDate())+"-"+pad(d.getMonth()+1)+"-"+d.getFullYear()+" "+pad(d.getHours())+":"+pad(d.getMinutes());
+  }
   function mediaText(a){ return T(a && (a.note||a.message||a.text||a.description||'')); }
   function mediaSrc(a){
     if(!a) return '';
