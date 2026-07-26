@@ -21,7 +21,7 @@
   function cust(o){return o.customer||{}}
   function loc(o){return o.location||{}}
   function title(o){return T(o.title||o.name||'Opdracht')}
-  function orderKey(o){return o._key||safeKey(o.id||o.number||title(o))}
+  function orderKey(o){return o._key||safeKey(o.number||o.id||title(o))}
   function address(o){return [loc(o).street,loc(o).zip,loc(o).city].filter(Boolean).join(' ')||'Adres onbekend'}
   function phone(o){return T(cust(o).phone||loc(o).phone||o.customerPhone||o.phone)}
   function driverName(o){return T(o.driverName||o.driver||o.bezorger||o.bezorgerName||(o.driverNames||[]).join(', '))}
