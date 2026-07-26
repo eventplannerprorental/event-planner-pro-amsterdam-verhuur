@@ -18127,6 +18127,18 @@ setTimeout(()=>{
     }
   }
   function deleteAlertRemote(id){
+    /* v82-fix: dit probeerde tot nu toe een melding te verwijderen uit
+       Firestore - een ander, hier verder ongebruikt databaseproduct dat
+       niets met deze melding te maken heeft. De bezorger-app schrijft
+       naar de Realtime Database (customers/amsterdam-verhuur/alerts/{id}),
+       en daar bleef de melding dus gewoon bestaan - waardoor hij een
+       paar tellen later, via de periodieke terugleesfunctie, weer
+       terugkwam. Nu wordt op de juiste plek verwijderd. */
+    try{
+      if(!id) return;
+      fetch('https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app/customers/amsterdam-verhuur/alerts/'+encodeURIComponent(String(id))+'.json',{method:'DELETE'}).catch(function(){});
+    } catch(e){
+    }
     try{
       if(fbReady() && fs().deleteDoc && fs().doc && id){
         fs().deleteDoc(fs().doc(db(), "alerts", String(id))).catch(function(){
@@ -18221,7 +18233,7 @@ setTimeout(()=>{
   }
   function mediaHtml(a){
     var h="";
-    var img = a.photoData || a.photo || a.image || (a.media && a.media.data) || "";
+    var img = a.imageData || a.photoData || a.photo || a.image || (a.media && a.media.data) || "";
     var sig = a.signatureData || a.signature || "";
     if(img) h += '<div class="tw-v141-media"><b>Foto</b><br><img src="'+H(img)+'" alt="Foto melding"></div>';
     if(sig) h += '<div class="tw-v141-media"><b>Handtekening</b><br><img src="'+H(sig)+'" alt="Handtekening"></div>';
@@ -36297,7 +36309,7 @@ setTimeout(()=>{
     if(s){ ev.preventDefault(); ev.stopPropagation(); if(ev.stopImmediatePropagation) ev.stopImmediatePropagation(); openSignFixed(s.getAttribute('data-v95-sign') || s.getAttribute('data-sign')); return false; }
   },true);
 
-  function mediaSrc(a){ return a.photoData || a.photo || a.image || a.signatureData || a.signature || a.data || (a.media && a.media.data) || ''; }
+  function mediaSrc(a){ return a.imageData || a.photoData || a.photo || a.image || a.signatureData || a.signature || a.data || (a.media && a.media.data) || ''; }
   function mediaType(a){ var t=T(a.type||a.title||'Melding'); if(!t && (a.signatureData||a.signature)) t='Handtekening klant'; if(!t && (a.photoData||a.photo||a.image)) t='Foto'; return t || 'Melding'; }
   function mediaHtml(a){ var src=mediaSrc(a); if(!src) return ''; var isSig=/handtekening|signature/i.test(mediaType(a)); return '<div style="margin-top:8px"><b>'+H(isSig?'Handtekening':'Foto')+'</b><br><img src="'+H(src)+'" style="max-width:100%;max-height:260px;border-radius:12px;border:1px solid #dbe3ef;background:#fff"></div>'; }
   function alertMatch(a,o){ return String(a.orderId||a.linkedOrder||'')===String(o.id||'') || String(a.orderNumber||a.linkedOrderNumber||'')===String(o.number||''); }
@@ -38552,7 +38564,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       a.imageUrl || a.imageURL || a.photoUrl || a.photoURL ||
       a.signatureData || a.signature || a.customerSignature ||
       a.base64 || a.thumb || a.thumbnail ||
-      (a.media && (a.media.data || a.media.url || a.media.src || a.media.photoData || a.media.photoUrl)) || "";
+      (a.media && (a.media.imageData || a.media.data || a.media.url || a.media.src || a.media.photoData || a.media.photoUrl)) || "";
   }
   function mediaType(a){
     var s=T(a && (a.type || a.kind || a.title || a.category || a.label));
