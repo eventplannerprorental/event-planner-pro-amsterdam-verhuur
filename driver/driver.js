@@ -1,3 +1,4 @@
+window.AMSTERDAM_DRIVER_BUILD_ID = 'AMS-DRIVER-FIX-2026-07-28-R1';
 /* Event Planner PRO Amsterdam verhuur - driver v51
    Tapwagen-achtige compacte telefoonindeling.
    Alleen Amsterdam RTDB: customers/amsterdam-verhuur.
@@ -23,7 +24,13 @@
   function title(o){return T(o.title||o.name||'Opdracht')}
   function orderKey(o){return o._key||safeKey(o.number||o.id||title(o))}
   function address(o){return [loc(o).street,loc(o).zip,loc(o).city].filter(Boolean).join(' ')||'Adres onbekend'}
-  function phone(o){return T(cust(o).phone||loc(o).phone||o.customerPhone||o.phone)}
+  function phone(o){
+    /* v1-fix: dit gaf voorheen voorrang aan het klanttelefoonnummer,
+       waardoor de bezorger de opdrachtgever belde in plaats van de
+       locatie. Nu krijgt het locatienummer voorrang (zelfde fix als
+       bij Tapwagen vandaag), de knoptekst zelf blijft ongewijzigd. */
+    return T(loc(o).phone||cust(o).phone||o.locationPhone||o.customerPhone||o.phone)
+  }
   function driverName(o){return T(o.driverName||o.driver||o.bezorger||o.bezorgerName||(o.driverNames||[]).join(', '))}
   function isOpen(o){var s=T(o.status).toLowerCase();return !/geannuleerd|uitgevoerd|afgemeld|deleted|verwijderd/.test(s)}
   function assignedTo(o,u){var n=T(u&&u.name).toLowerCase(), id=T(u&&u.id).toLowerCase(), pin=T(u&&u.pin);var arr=[driverName(o),o.driverId,o.bezorgerId,o.userId].concat(o.driverNames||[],o.bezorgerNames||[],o.driverIds||[],o.bezorgerIds||[],o.userIds||[]).map(function(x){return T(x).toLowerCase()});return arr.some(function(x){return x&&(x===n||x===id||x===pin||x.indexOf(n)>=0)})}
