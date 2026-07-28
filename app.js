@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-26-R10';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-28-R2';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -32403,15 +32403,17 @@ setTimeout(()=>{
       '<label>Tekst boven offerte<textarea id="v361_textOffer" style="height:70px" placeholder="Bijv: Geachte klant..."></textarea></label>'+
       '<label>Tekst boven opdrachtbevestiging<textarea id="v361_textConfirm" style="height:70px"></textarea></label>'+
       '<label>Tekst boven factuur<textarea id="v361_textInvoice" style="height:70px"></textarea></label>'+
-      '<label>Voorwaarden / onderaan<textarea id="v361_footer" style="height:70px"></textarea></label>'+
+      '<label>Voorwaarden / onderaan (bij opdrachtbevestiging)<textarea id="v361_footer" style="height:70px"></textarea></label>'+
+      '<label>Tekst onderaan factuur<textarea id="v361_invoiceFooter" style="height:70px" placeholder="Bijv. betaalgegevens"></textarea></label>'+
     '</div>'+
     '<div style="margin-top:18px"><button id="v361_save" type="button" style="background:#16a34a;color:#fff;border:0;border-radius:12px;padding:12px 28px;font-weight:900;font-size:15px;cursor:pointer">💾 Opslaan</button></div>';
   }
 
   function loadFields() {
     var d = inv();
-    var map = {v361_companyName:'companyName',v361_phone:'phone',v361_email:'email',v361_website:'website',v361_address:'address',v361_kvk:'kvk',v361_btw:'btw',v361_iban:'iban',v361_accent:'accent',v361_layout:'layout',v361_textOffer:'textOffer',v361_textConfirm:'textConfirm',v361_textInvoice:'textInvoice',v361_footer:'footer',v361_fontPreset:'fontPreset',v361_fontBody:'fontBody',v361_fontHeading:'fontHeading',v361_fontTable:'fontTable',v361_fontTotal:'fontTotal'};
+    var map = {v361_companyName:'companyName',v361_phone:'phone',v361_email:'email',v361_website:'website',v361_address:'address',v361_kvk:'kvk',v361_btw:'btw',v361_iban:'iban',v361_accent:'accent',v361_layout:'layout',v361_textOffer:'textOffer',v361_textConfirm:'textConfirm',v361_textInvoice:'textInvoice',v361_footer:'footer',v361_invoiceFooter:'invoiceFooter',v361_fontPreset:'fontPreset',v361_fontBody:'fontBody',v361_fontHeading:'fontHeading',v361_fontTable:'fontTable',v361_fontTotal:'fontTotal'};
     Object.keys(map).forEach(function(id){ var el=E(id); if(el && d[map[id]]!=null) el.value=d[map[id]]; });
+    if(E('v361_invoiceFooter') && !E('v361_invoiceFooter').value) E('v361_invoiceFooter').value='Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.';
     if(E('v361_accent')&&!d.accent) E('v361_accent').value='#2563eb';
     if(E('v361_fontPreset')&&!d.fontPreset) E('v361_fontPreset').value='normal';
     var defaults={compact:{body:11,heading:17,table:10,total:12},normal:{body:13,heading:20,table:12,total:14},large:{body:15,heading:23,table:14,total:16},xlarge:{body:17,heading:26,table:16,total:18}};
@@ -32428,7 +32430,7 @@ setTimeout(()=>{
 
   function saveFields() {
     var d = inv();
-    var map = {companyName:'v361_companyName',phone:'v361_phone',email:'v361_email',website:'v361_website',address:'v361_address',kvk:'v361_kvk',btw:'v361_btw',iban:'v361_iban',accent:'v361_accent',layout:'v361_layout',textOffer:'v361_textOffer',textConfirm:'v361_textConfirm',textInvoice:'v361_textInvoice',footer:'v361_footer',fontPreset:'v361_fontPreset',fontBody:'v361_fontBody',fontHeading:'v361_fontHeading',fontTable:'v361_fontTable',fontTotal:'v361_fontTotal'};
+    var map = {companyName:'v361_companyName',phone:'v361_phone',email:'v361_email',website:'v361_website',address:'v361_address',kvk:'v361_kvk',btw:'v361_btw',iban:'v361_iban',accent:'v361_accent',layout:'v361_layout',textOffer:'v361_textOffer',textConfirm:'v361_textConfirm',textInvoice:'v361_textInvoice',footer:'v361_footer',invoiceFooter:'v361_invoiceFooter',fontPreset:'v361_fontPreset',fontBody:'v361_fontBody',fontHeading:'v361_fontHeading',fontTable:'v361_fontTable',fontTotal:'v361_fontTotal'};
     Object.keys(map).forEach(function(key){ var el=E(map[key]); if(el) d[key]=el.value; });
     // Extra keys voor compat
     d.intro=d.textOffer; d.footerText=d.footer; d.companyName=d.companyName||'';
@@ -37092,7 +37094,7 @@ setTimeout(()=>{
     var st=getStyle(), o=currentOrder(), t=totals(o), fact=/factuur/i.test(type), isOffer=String(o.status||'').toLowerCase().indexOf('offerte')>=0;
     var title=fact?'FACTUUR':(isOffer?'Offerte':'Opdracht-Informatie');
     var intro=fact?st.textInvoice:(isOffer?(st.textOffer||st.textConfirm):st.textConfirm);
-    var footer=fact?st.footer:(st.termsText||st.footer);
+    var footer=fact?(st.invoiceFooter||'Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.'):(st.termsText||st.footer);
     var c=o.customer||{}, l=o.location||{};
     var locVisible=o.showLocationOnDocs!==false;
     var locationBlock=locVisible?'<div class="line"></div><div class="loc"><table><tr><td class="label">Lokatie:</td><td>'+H(l.name||'')+'</td></tr><tr><td class="label center">Adres:</td><td>'+H(addr(l.street,l.houseNumber))+'<br>'+H([l.zip,l.city].filter(Boolean).join(' '))+'</td></tr><tr><td class="label">Bijzonderheden:</td><td>'+H(l.notes||l.bijzonderheden||'')+'</td></tr><tr><td class="label center">Contact:</td><td>'+H(l.contact||'')+' '+H(l.phone||'')+'</td></tr></table></div>':'';
@@ -37347,7 +37349,7 @@ setTimeout(()=>{
     var st=getStyle(), o=currentOrder(), tt=totals(o), fact=/factuur/i.test(type), title=fact?'FACTUUR':statusTitle(o.status);
     var c=o.customer||{}, l=o.location||{};
     var intro=fact?st.textInvoice:(title==='OFFERTE'?(st.textOffer||st.textConfirm):st.textConfirm);
-    var footer=fact?st.footer:(st.termsText||st.footer);
+    var footer=fact?(st.invoiceFooter||'Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.'):(st.termsText||st.footer);
     var locVisible=o.showLocationOnDocs!==false;
     var locBlock=locVisible?'<div class="line"></div><div class="loc"><table><tr><td class="label">Lokatie:</td><td>'+H(l.name||'')+'</td></tr><tr><td class="label center">Adres:</td><td>'+H(addr(l.street,l.houseNumber))+'<br>'+H(zipCity(l.zip,l.city))+'</td></tr><tr><td class="label">Bijzonderheden:</td><td>'+H(l.notes||l.bijzonderheden||'')+'</td></tr><tr><td class="label center">Contact:</td><td>'+H(l.contact||'')+' '+H(l.phone||'')+'</td></tr></table></div>':'';
     var doc='<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>'+H((fact?'Factuur':title)+' '+(o.number||''))+'</title><style>'+css()+'</style></head><body>'+
@@ -39547,8 +39549,10 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function openDoc(type){ var w=window.open('','_blank'); if(!w){ alert('Pop-up geblokkeerd. Sta pop-ups toe.'); return false; } w.document.open(); w.document.write(docHtml(type)); w.document.close(); return false; }
   window.BNS_V521_openDocument=openDoc;
-  window.makeInvoice=function(){ return openDoc('Factuur'); };
-  window.makeConfirmation=function(){ return openDoc('Opdrachtbevestiging'); };
+  /* v1-fix: dit overschreef hier tot nu toe window.makeInvoice/makeConfirmation
+     met een kale versie die logo/teksten/voorwaarden uit Admin negeerde.
+     De eerder in het bestand gedefinieerde, wel Admin-bewuste versie
+     blijft nu de daadwerkelijk gebruikte versie (zelfde fix als bij Tapwagen). */
   window.addEventListener('click',function(ev){
     if(window.__BNS_V525_DOCS__) return;
     var b=ev.target && ev.target.closest && ev.target.closest('button,a'); if(!b) return;
@@ -39695,6 +39699,8 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var def={companyName:'',slogan:'',address:'',phone:'',email:'',kvk:'',btw:'',iban:'',accent:'#0ea5e9',logo:'',fontPreset:'normal',fontBody:13,fontHeading:20,fontTable:12,fontTotal:14};
     try{ var s=S()||{}; Object.assign(def,(s.settings&&s.settings.invoice)||{},s.documentStyle||{},parseLS('bns_huisstijl_v361'),parseLS('bns_huisstijl_v408')); }catch(e){}
     if(!def.logo && def.companyLogo) def.logo=def.companyLogo;
+    if(!def.footer && def.footerText) def.footer=def.footerText;
+    if(!def.termsText && def.terms) def.termsText=def.terms;
     return def;
   }
   function companyHtml(st){ var lines=[]; if(st.companyName) lines.push(st.companyName); String(st.address||'').split(/\n+/).forEach(function(x){ if(T(x)) lines.push(T(x)); }); if(st.phone)lines.push('Tel.: '+st.phone); if(st.email)lines.push(st.email); if(st.kvk)lines.push('KVK: '+st.kvk); if(st.btw)lines.push('BTW NR: '+st.btw); if(st.iban)lines.push('Bank: '+st.iban); return lines.map(H).join('<br>'); }
@@ -39713,6 +39719,9 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   function docHtml(o,type){
     o=o||{}; if(!Array.isArray(o.transportLines)) o.transportLines=[];
     var st=styleData(), fact=/factuur/i.test(type), title=docTitle(o,type), tt=totals(o), c=o.customer||{}, l=o.location||{};
+    var isOffer=/offerte/i.test(title);
+    var intro=fact?st.textInvoice:(isOffer?(st.textOffer||st.textConfirm):st.textConfirm);
+    var footer=fact?(st.invoiceFooter||'Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.'):(st.termsText||st.footer||'');
     var presets={compact:{body:11,heading:17,table:10,total:12},normal:{body:13,heading:20,table:12,total:14},large:{body:15,heading:23,table:14,total:16},xlarge:{body:17,heading:26,table:16,total:18}};
     var ps=presets[st.fontPreset]||presets.normal;
     var bodyFs=Math.max(9,Math.min(22,N(st.fontBody)||ps.body));
@@ -39720,7 +39729,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var tableFs=Math.max(9,Math.min(22,N(st.fontTable)||ps.table));
     var totalFs=Math.max(10,Math.min(26,N(st.fontTotal)||ps.total));
     var css='@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:'+bodyFs+'px}.actions{position:fixed;top:8px;left:8px;display:flex;gap:8px;z-index:9}.actions button{border:0;border-radius:8px;background:#2563eb;color:#fff;padding:8px 12px;font-weight:800}.page{width:210mm;min-height:297mm;margin:0 auto;background:white;padding:12mm 14mm}.bns525-logo{text-align:center;margin-bottom:4mm}.bns525-logo img{max-width:96mm;max-height:25mm;object-fit:contain}.brand{font-size:'+(headingFs+14)+'px;font-weight:900;color:'+H(st.accent||'#0ea5e9')+'}.tag{font-weight:800;font-style:italic}.doc-title{text-align:center;font-size:'+headingFs+'px;font-weight:900;margin:2mm 0 5mm}h3{font-size:'+Math.max(12,headingFs-3)+'px}.top{display:grid;grid-template-columns:1fr 60mm;gap:10mm}.card{border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0}.line{border-top:1.5px solid #333;margin:5mm 0}table{width:100%;border-collapse:collapse;font-size:'+tableFs+'px}th{border-bottom:1px solid #333;text-align:left}td,th{padding:1.5mm;vertical-align:top}.amount{text-align:right}.totals{width:82mm;margin-left:auto;margin-top:7mm;border-top:1.5px solid #333;font-size:'+totalFs+'px}.totals td:last-child{text-align:right}.strong td{font-weight:900;border-top:1px solid #333}@media print{body{background:#fff}.actions{display:none}.page{margin:0}}';
-    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(title+' '+(orderNo(o)||''))+'</title><style>'+css+'</style></head><body><div class="actions"><button onclick="print()">Print</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mail</button><button onclick="(function(){var txt=document.body.innerText||&quot;&quot;;function fallback(){try{navigator.clipboard&&navigator.clipboard.writeText(txt)}catch(e){}alert(&quot;Delen lukt niet in deze browser. De tekst is gekopieerd; plak hem eventueel in e-mail of WhatsApp.&quot;)}if(navigator.share){navigator.share({title:document.title,text:txt}).catch(fallback)}else{fallback()}})()">Delen</button><button onclick="window.location.href=&quot;https://wa.me/?text=&quot;+encodeURIComponent(document.body.innerText||&quot;&quot;)">WhatsApp</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){try{if(!window.closed){history.back()}}catch(e){}},120)">Terug</button></div><main class="page">'+logoHtml(st)+'<div class="doc-title">'+H(title)+'</div><div class="top"><div>'+companyHtml(st)+'</div><div><b>'+(fact?'Factuur-nr:':'Opdracht:')+'</b> '+H(fact?invoiceNo(o):orderNo(o))+'<br><b>Datum:</b> '+H(date(new Date().toISOString().slice(0,10)))+(fact?'<br><b>Betaling:</b> '+H(paid(o)?'Betaald':'Openstaand'):'<br><b>Status:</b> '+H(o.status||''))+'</div></div><div class="line"></div><div class="card"><b>Klant</b><br>'+H(c.name||customerName(o))+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Locatie</b><br>'+H(l.name||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Opdracht:</b> '+H(orderNo(o))+'<br><b>Titel:</b> '+H(titleOf(o))+'<br><b>Datum:</b> '+H(date(o.start||''))+(o.end&&o.end!==o.start?' t/m '+H(date(o.end)):'')+'</div><h3>Materialen</h3><table><thead><tr><th>Aantal</th><th>Code</th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsMaterials(o)+'</tbody></table><h3>Extra</h3>'+(o.extra?'<div class="card" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th></th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsTransport(o)+'</tbody></table><table class="totals"><tr><td>Subtotaal materialen</td><td>'+H(euro(tt.mat))+'</td></tr><tr><td>Subtotaal extra</td><td>'+H(euro(tt.trans))+'</td></tr><tr><td>BTW 21%</td><td>'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td>'+H(euro(tt.dep))+'</td></tr><tr class="strong"><td>Eindtotaal</td><td>'+H(euro(tt.pay))+'</td></tr></table></main></body></html>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(title+' '+(orderNo(o)||''))+'</title><style>'+css+'</style></head><body><div class="actions"><button onclick="print()">Print</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mail</button><button onclick="(function(){var txt=document.body.innerText||&quot;&quot;;function fallback(){try{navigator.clipboard&&navigator.clipboard.writeText(txt)}catch(e){}alert(&quot;Delen lukt niet in deze browser. De tekst is gekopieerd; plak hem eventueel in e-mail of WhatsApp.&quot;)}if(navigator.share){navigator.share({title:document.title,text:txt}).catch(fallback)}else{fallback()}})()">Delen</button><button onclick="window.location.href=&quot;https://wa.me/?text=&quot;+encodeURIComponent(document.body.innerText||&quot;&quot;)">WhatsApp</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){try{if(!window.closed){history.back()}}catch(e){}},120)">Terug</button></div><main class="page">'+logoHtml(st)+'<div class="doc-title">'+H(title)+'</div><div class="top"><div>'+companyHtml(st)+'</div><div><b>'+(fact?'Factuur-nr:':'Opdracht:')+'</b> '+H(fact?invoiceNo(o):orderNo(o))+'<br><b>Datum:</b> '+H(date(new Date().toISOString().slice(0,10)))+(fact?'<br><b>Betaling:</b> '+H(paid(o)?'Betaald':'Openstaand'):'<br><b>Status:</b> '+H(o.status||''))+'</div></div>'+(intro?'<div class="card" style="border-left:4px solid #2563eb">'+H(intro)+'</div>':'')+'<div class="line"></div><div class="card"><b>Klant</b><br>'+H(c.name||customerName(o))+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Locatie</b><br>'+H(l.name||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Opdracht:</b> '+H(orderNo(o))+'<br><b>Titel:</b> '+H(titleOf(o))+'<br><b>Datum:</b> '+H(date(o.start||''))+(o.end&&o.end!==o.start?' t/m '+H(date(o.end)):'')+'</div><h3>Materialen</h3><table><thead><tr><th>Aantal</th><th>Code</th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsMaterials(o)+'</tbody></table><h3>Extra</h3>'+(o.extra?'<div class="card" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th></th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsTransport(o)+'</tbody></table><table class="totals"><tr><td>Subtotaal materialen</td><td>'+H(euro(tt.mat))+'</td></tr><tr><td>Subtotaal extra</td><td>'+H(euro(tt.trans))+'</td></tr><tr><td>BTW 21%</td><td>'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td>'+H(euro(tt.dep))+'</td></tr><tr class="strong"><td>Eindtotaal</td><td>'+H(euro(tt.pay))+'</td></tr></table>'+(footer?'<div class="card" style="font-size:11px;color:#475569;margin-top:8mm">'+H(footer)+'</div>':'')+'</main></body></html>';
   }
   function openOrderDoc(o,type){ var w=window.open('','_blank'); if(!w){ alert('Pop-up geblokkeerd. Sta pop-ups toe.'); return false; } try{ w.document.open(); w.document.write(docHtml(o,type)); w.document.close(); }catch(e){ alert('Document kon niet worden geopend: '+e.message); } return false; }
   function dedupeAccountingDocs(){
