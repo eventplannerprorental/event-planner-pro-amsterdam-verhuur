@@ -164,7 +164,7 @@ body.bns-readable-v106 .side, body.bns-readable-v106 .side * { color:#fff !impor
 #newOrder .order-head label:has(#dateEnd) { min-width: 210px !important; }
 #newOrder .order-head label:has(#orderNumber) { min-width: 120px !important; }
 #newOrder .order-head label:has(#orderStatus) { min-width: 140px !important; }
-#newOrder .order-head label:has(#orderBrand) { min-width: 220px !important; }
+#newOrder .order-head label:has(#orderBrand) { min-width: 340px !important; grid-column: span 2 !important; }
 #newOrder .summary { margin-top: 14px !important; }
 
 /* Materiaal en planning status kleuren */
@@ -1076,4 +1076,17 @@ body.bns577-pin-locked #login{
     transition:none !important;
     transform:none !important;
   }
+}
+
+/* v1-fix: het label "Transport wordt uitgevoerd door" (voorheen kort:
+   "Merk") is veel langer dan waar de bestaande, thema-specifieke
+   breedte-regels op zijn ingesteld, waardoor het visueel kon overlappen
+   met het ernaast liggende veld. Deze regel staat helemaal onderaan en
+   wint daardoor van alle eerdere thema-varianten. */
+#newOrder .order-head label:has(#orderBrand){
+  min-width:340px!important;
+  grid-column:span 2!important;
+  white-space:normal!important;
+  overflow:visible!important;
+  z-index:1!important;
 }
