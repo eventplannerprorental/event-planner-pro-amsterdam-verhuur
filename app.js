@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-29-R7';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-29-R9';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -32334,6 +32334,24 @@ setTimeout(()=>{
       // Ook naar state.settings.invoice voor docHtml83
       var s = (typeof state!=='undefined'&&state)?state:null;
       if(s){ s.settings=s.settings||{}; s.settings.invoice=Object.assign(s.settings.invoice||{},d); if(typeof save==='function')save(); }
+      /* v1-fix: dit sloeg de Huisstijl/factuur-instellingen tot nu toe
+         ALLEEN lokaal op (localStorage/state) - nooit naar Firebase zelf.
+         Ze bestonden dus alleen in de browser waarin ze werden ingevuld,
+         en gingen verloren zodra localStorage leegraakte (bijv. na een
+         update, cache-wissing, of op een ander apparaat). Nu wordt ook
+         naar Firestore geschreven - dezelfde database die opdrachten via
+         window.BNS.syncOrder al gebruiken, voor consistentie. */
+      try{
+        if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
+          window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'), d).catch(function(){});
+        } else if(typeof initFirebaseBNS==='function'){
+          initFirebaseBNS().then(function(ok){
+            if(ok && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc){
+              window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'), d).catch(function(){});
+            }
+          }).catch(function(){});
+        }
+      }catch(e){}
     } catch(e){}
   }
 
@@ -32413,6 +32431,29 @@ setTimeout(()=>{
     var d = inv();
     var map = {v361_companyName:'companyName',v361_phone:'phone',v361_email:'email',v361_website:'website',v361_address:'address',v361_kvk:'kvk',v361_btw:'btw',v361_iban:'iban',v361_accent:'accent',v361_layout:'layout',v361_textOffer:'textOffer',v361_textConfirm:'textConfirm',v361_textInvoice:'textInvoice',v361_footer:'footer',v361_invoiceFooter:'invoiceFooter',v361_fontPreset:'fontPreset',v361_fontBody:'fontBody',v361_fontHeading:'fontHeading',v361_fontTable:'fontTable',v361_fontTotal:'fontTotal'};
     Object.keys(map).forEach(function(id){ var el=E(id); if(el && d[map[id]]!=null) el.value=d[map[id]]; });
+    /* v1-fix: dit las tot nu toe alleen uit localStorage. Als dat leeg is
+       (ander apparaat, cache gewist, na een update) leek het alsof de
+       instellingen weg waren, ook al stonden ze soms al wel in Firebase
+       via een eerdere handmatige poging elders. Nu wordt Firebase er ook
+       bij gehaald en, indien aanwezig, gebruikt om het formulier alsnog
+       te vullen en de lokale kopie bij te werken. */
+    try{
+      (async function(){
+        try{
+          if(!(window.BNS && window.BNS.fs && window.BNS.db) && typeof initFirebaseBNS==='function'){
+            await initFirebaseBNS();
+          }
+          if(!(window.BNS && window.BNS.fs && window.BNS.fs.getDoc && window.BNS.fs.doc && window.BNS.db)) return;
+          var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'));
+          var remote = (snap && snap.exists && snap.exists()) ? snap.data() : null;
+          if(!remote || typeof remote!=='object') return;
+          var merged=Object.assign({},remote,inv());
+          try{ localStorage.setItem(INV_KEY, JSON.stringify(merged)); }catch(e){}
+          try{ if(typeof state!=='undefined' && state){ state.settings=state.settings||{}; state.settings.invoice=merged; } }catch(e){}
+          Object.keys(map).forEach(function(id){ var el=E(id); if(el && !el.value && merged[map[id]]!=null) el.value=merged[map[id]]; });
+        }catch(e){}
+      })();
+    }catch(e){}
     if(E('v361_invoiceFooter') && !E('v361_invoiceFooter').value) E('v361_invoiceFooter').value='Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.';
     if(E('v361_accent')&&!d.accent) E('v361_accent').value='#2563eb';
     if(E('v361_fontPreset')&&!d.fontPreset) E('v361_fontPreset').value='normal';
