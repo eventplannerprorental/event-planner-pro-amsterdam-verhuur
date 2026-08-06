@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-29-R9';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R10';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -1248,6 +1248,14 @@ function cancel(oid){
   if(o){
     o.status='Geannuleerd';
     save();
+    /* v1-fix: dit sloeg de annulering tot nu toe alleen lokaal op. Zodra
+       de app op de achtergrond opnieuw met Firebase synchroniseerde, kon
+       de oude, nooit-bijgewerkte status daar gewoon weer terugkomen -
+       en daarmee ook de materiaal-reservering. Nu wordt de wijziging ook
+       echt naar Firebase geschreven. Zelfde fix als bij Tapwagen. */
+    try{
+      if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o);
+    }catch(e){}
     renderOrders()
   }
 }
@@ -1256,6 +1264,7 @@ function restore(oid){
   if(o){
     o.status='Opdracht';
     save();
+    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders()
   }
 }
@@ -1264,6 +1273,7 @@ function markDone(oid){
   if(o){
     o.status='Uitgevoerd';
     save();
+    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders();
     renderDashboard();
   }
@@ -25330,6 +25340,9 @@ setTimeout(()=>{
       if(L(o.status)==='geannuleerd') o.status='Verwijderd';
       normalizeOrder(o, true);
       saveLocal();
+      try{
+        if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o);
+      }catch(e){}
     }
     setTimeout(function(){
       try{
@@ -48630,4 +48643,211 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
+})();
+/* =========================================================
+   BNS 951 - Nette rubriekknoppen + kleuren-zoekbalk (voorzichtige versie)
+   Doel: zelfde als eerdere poging (BNS 950, teruggedraaid), maar nu
+   zonder doorlopende achtergrond-controle (MutationObserver/setInterval).
+   Deze versie haakt EENMALIG in op het bestaande renderMaterials-moment
+   zelf, en doet verder niets ongevraagd op de achtergrond - om elk risico
+   op interferentie met de rubriek-logica uit te sluiten.
+   Raakt niet aan: currentCat, setCat, remember, Firebase.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__BNS951_MATCAT_REDESIGN__) return;
+  window.__BNS951_MATCAT_REDESIGN__ = true;
+
+  function E(id){ return document.getElementById(id); }
+  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function U(v){ return String(v==null?'':v).trim().toUpperCase(); }
+
+  function injectCss(){
+    var s=E('bns951Css');
+    if(!s){
+      s=document.createElement('style');
+      s.id='bns951Css';
+      s.textContent =
+        '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
+          'gap:8px!important;align-items:stretch!important;' +
+          'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
+          'min-height:0!important;overflow:visible!important;}\n' +
+        '#materialCats button{' +
+          'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
+          'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
+          'background:var(--cat-color,#2563eb)!important;color:#fff!important;font-weight:800!important;' +
+          'font-size:13px!important;letter-spacing:.2px!important;box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
+          'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;' +
+          'transform:none!important;animation:none!important;}\n' +
+        '#materialCats button::after{content:none!important;border:none!important;}\n' +
+        '#materialCats button.active{' +
+          'outline:3px solid #0f172a!important;outline-offset:1px!important;filter:brightness(1.1)!important;}\n' +
+        '#bns951ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
+          'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
+          'border-radius:12px!important;}\n' +
+        '#bns951ColorBar .bns951-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
+          'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
+        '#bns951ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
+          'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;background:var(--cat-color,#2563eb)!important;' +
+          'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;' +
+          'transform:none!important;animation:none!important;}\n' +
+        '#bns951ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+    }
+    /* v1-fix: dit plaatste de stijl-tag tot nu toe maar één keer, aan het
+       begin. Andere modules die daarna hun EIGEN stijl-tag toevoegen (met
+       even specifieke !important-regels) kunnen daardoor alsnog winnen,
+       simpelweg omdat ze later in de pagina staan. Door onze eigen tag
+       telkens weer helemaal achteraan te verplaatsen, wint deze altijd. */
+    if(document.head.lastElementChild!==s) document.head.appendChild(s);
+  }
+
+  var lastColorRuleKey='';
+  function ensureCatColorRules(){
+    /* v4-fix (naar het voorbeeld van de oude, stabiele versie): in plaats
+       van de kleur telkens weer op individuele knoppen te zetten (die
+       constant opnieuw gebouwd worden door welk systeem er ook wint, en
+       dus telkens weer hun kleur verliezen), wordt hier één vaste
+       stijlregel PER RUBRIEK gemaakt, gekoppeld aan het rubriek-codewoord
+       zelf via een attribuutselector. Zo'n regel blijft altijd gelden,
+       ongeacht wie de knop bouwt of hoe vaak - er is niets meer dat
+       "opnieuw" kan worden overschreven. */
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats); if(!attr) return;
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length) return;
+    var key=attr+'|'+list.join(',');
+    if(key===lastColorRuleKey) return;
+    lastColorRuleKey=key;
+    var sel=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-cat'];
+    var css=list.map(function(k){
+      var col=catColor(k);
+      var esc=H(k);
+      var selectors=sel.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
+      return selectors+'{background:'+col+'!important;--cat-color:'+col+'!important;}';
+    }).join('\n');
+    var s=E('bns951ColorRules');
+    if(!s){
+      s=document.createElement('style');
+      s.id='bns951ColorRules';
+      document.head.appendChild(s);
+    }
+    if(s.textContent!==css) s.textContent=css;
+    if(document.head.lastElementChild!==s) document.head.appendChild(s);
+  }
+
+
+  function catColor(cat){
+    try{
+      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
+      var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
+      if(map[k]) return map[k];
+    }catch(e){}
+    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316'};
+    return def[U(cat)]||'#2563eb';
+  }
+
+  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-cat'];
+  function findCatAttr(cats){
+    for(var i=0;i<ATTR_CANDIDATES.length;i++){
+      if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
+    }
+    return null;
+  }
+  function buildColorBar(){
+    var cats=E('materialCats');
+    if(!cats) return;
+    /* v1-fix: dit zocht hier alleen naar het data-bns611-cat kenmerk. Er
+       blijkt minstens nog één ander, apart systeem (material-fix.js) te
+       bestaan dat dezelfde knoppen bouwt met data-cat in plaats daarvan.
+       Welk systeem op een gegeven moment wint, wisselt kennelijk - vandaar
+       dat de kleurenbalk soms wel en soms niet verscheen. Nu wordt eerst
+       gekeken welk kenmerk er daadwerkelijk aanwezig is. */
+    var attr=findCatAttr(cats);
+    var bar=E('bns951ColorBar');
+    if(!attr){ if(bar) bar.remove(); return; }
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=U(btn.getAttribute(attr));
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length){ if(bar) bar.remove(); return; }
+    var activeBtn=cats.querySelector('.active');
+    var activeCat=U((activeBtn&&activeBtn.getAttribute(attr))||'');
+    var html='<span class="bns951-label">Zoek op kleur:</span>'+list.map(function(k){
+      var col=catColor(k);
+      return '<button type="button" title="'+H(k)+'" data-bns951-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
+        '" style="--cat-color:'+H(col)+'"></button>';
+    }).join('');
+    if(!bar){
+      bar=document.createElement('div');
+      bar.id='bns951ColorBar';
+      cats.parentNode.insertBefore(bar, cats.nextSibling);
+    }
+    bar.innerHTML=html;
+    bar.__bns951Attr=attr;
+  }
+
+  // Kleurstalen simuleren een klik op de echte, bijbehorende rubriekknop -
+  // geen nieuwe selectie-logica, geen aanraking van currentCat/setCat.
+  // Welk kenmerk (data-bns611-cat of data-cat) de echte knop gebruikt,
+  // wordt gevonden via bar.__bns951Attr, gezet door buildColorBar().
+  document.addEventListener('click', function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    var b=t.closest('#bns951ColorBar [data-bns951-target]');
+    if(!b) return;
+    var bar=E('bns951ColorBar');
+    var attr=(bar&&bar.__bns951Attr)||'data-bns611-cat';
+    var cats=E('materialCats');
+    var twin=cats && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns951-target'))+'"]');
+    if(twin){ twin.click(); scrollToResults(); }
+  }, true);
+
+  // Ook bij een klik op de echte rubriekknop zelf (niet alleen de
+  // kleurstalen) meteen naar de resultaten scrollen.
+  document.addEventListener('click', function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    if(t.closest('#materialCats button')) scrollToResults();
+  }, true);
+
+  function scrollToResults(){
+    setTimeout(function(){
+      var list=E('materialList')||E('materialCats');
+      if(list && list.scrollIntoView){ list.scrollIntoView({behavior:'smooth', block:'start'}); }
+    }, 50);
+  }
+
+  /* v3-fix: dit controleerde tot nu toe periodiek (eerst om de 300ms,
+     later om de 60ms) of er iets veranderd was - met altijd een klein
+     gaatje waarin de "verkeerde" kleur toch nog even zichtbaar kon zijn
+     vóór de volgende controle. Een MutationObserver reageert in plaats
+     daarvan ONMIDDELLIJK op elke wijziging in #materialCats, zonder
+     enige wachttijd - dat sluit het geflikker volledig uit. */
+  var lastCatsHtml='';
+  function tick(){
+    var cats=E('materialCats');
+    if(!cats) return;
+    try{ injectCss(); ensureCatColorRules(); }catch(e){}
+    var html=cats.innerHTML;
+    if(html===lastCatsHtml) return;
+    lastCatsHtml=html;
+    try{ buildColorBar(); }catch(e){}
+  }
+  var matCatsObserver=new MutationObserver(function(){ tick(); });
+  function attachObserver(){
+    var cats=E('materialCats');
+    if(cats && matCatsObserver.__target!==cats){
+      matCatsObserver.disconnect();
+      matCatsObserver.observe(cats,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
+      matCatsObserver.__target=cats;
+    }
+  }
+  setInterval(attachObserver, 250);
+  attachObserver();
+  tick();
+
+  try{ console.info('[BNS 951] Opgeruimde rubriekknoppen + kleuren-zoekbalk actief (v4, directe observatie + scroll).'); }catch(e){}
 })();
