@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R10';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R11';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -35404,6 +35404,7 @@ setTimeout(()=>{
   function boot(){ schedule(window.currentCat||firstCat(),true); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,300);}); else setTimeout(boot,150);
   setInterval(function(){
+    if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return;
     expose();
     window.__bns393MaterialLock = true;
     var box=E('materialList');
@@ -35425,6 +35426,7 @@ setTimeout(()=>{
   var lastExpose = 0;
   function exposeOnce(){
     if(!window.BNS_V392) return;
+    if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return;
     var now = Date.now();
     if(now - lastExpose < 900) return;
     lastExpose = now;
@@ -48750,7 +48752,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return def[U(cat)]||'#2563eb';
   }
 
-  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-cat'];
+  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-bns829-cat','data-cat'];
   function findCatAttr(cats){
     for(var i=0;i<ATTR_CANDIDATES.length;i++){
       if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
