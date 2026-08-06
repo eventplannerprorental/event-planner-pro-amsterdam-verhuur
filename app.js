@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R13';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R15';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48758,22 +48758,34 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     });
     if(!list.length) return;
     var key=attr+'|'+list.join(',');
-    if(key===lastColorRuleKey) return;
-    lastColorRuleKey=key;
-    var sel=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-cat'];
-    var css=list.map(function(k){
-      var col=catColor(k);
-      var esc=H(k);
-      var selectors=sel.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
-      return selectors+'{background:'+col+'!important;--cat-color:'+col+'!important;}';
-    }).join('\n');
     var s=E('bns951ColorRules');
     if(!s){
       s=document.createElement('style');
       s.id='bns951ColorRules';
       document.head.appendChild(s);
     }
-    if(s.textContent!==css) s.textContent=css;
+    if(key!==lastColorRuleKey){
+      lastColorRuleKey=key;
+      /* v1-fix: deze lijst miste de nieuw-ontdekte Amsterdam-varianten
+         (data-v838-cat, data-bns829-cat) - de herkenning was al verbreed,
+         maar de daadwerkelijke kleurregels werden nog steeds alleen voor
+         de oude vier kenmerken opgebouwd, waardoor Amsterdam's eigen
+         knoppen nooit een echte kleurmatch kregen. */
+      var sel=ATTR_CANDIDATES;
+      var css=list.map(function(k){
+        var col=catColor(k);
+        var esc=H(k);
+        var selectors=sel.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
+        return selectors+'{background:'+col+'!important;--cat-color:'+col+'!important;}';
+      }).join('\n');
+      if(s.textContent!==css) s.textContent=css;
+    }
+    /* v2-fix: dit verplaatste de stijl-tag naar het einde alleen wanneer
+       de rubriek-lijst zelf wijzigde. Maar injectCss() verplaatst zijn
+       eigen, generieke blauwe standaardregel bij ELKE tick weer naar het
+       einde - waardoor die de kleurregels hier alsnog kon overstemmen
+       zodra de rubrieken niet meer wijzigden (vrijwel altijd). Nu wordt
+       de positie altijd herbevestigd, ongeacht of de inhoud is gewijzigd. */
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
@@ -48874,7 +48886,19 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     lastCatsHtml=html;
     try{ buildColorBar(); }catch(e){}
   }
-  var matCatsObserver=new MutationObserver(function(){ tick(); });
+  /* v1-fix: dit reageerde eerst op ELKE afzonderlijke wijziging in
+     #materialCats, ogenblikkelijk. In een omgeving met meerdere,
+     onderling vechtende systemen (zoals hier bij Amsterdam, met meer van
+     dat soort systemen dan Tapwagen had) kan dat zelf bijdragen aan het
+     zichtbare geflikker - elke herstelpoging is zelf ook weer een
+     zichtbare wijziging. Nu wordt gewacht op een kort rustig moment
+     (150ms zonder nieuwe wijzigingen) voordat de opmaak wordt hersteld,
+     in plaats van op elke afzonderlijke flikkering te reageren. */
+  var matCatsDebounce=null;
+  var matCatsObserver=new MutationObserver(function(){
+    if(matCatsDebounce) clearTimeout(matCatsDebounce);
+    matCatsDebounce=setTimeout(tick,150);
+  });
   function attachObserver(){
     var cats=E('materialCats');
     if(cats && matCatsObserver.__target!==cats){
