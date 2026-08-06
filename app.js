@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R15';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R16';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48877,14 +48877,38 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      daarvan ONMIDDELLIJK op elke wijziging in #materialCats, zonder
      enige wachttijd - dat sluit het geflikker volledig uit. */
   var lastCatsHtml='';
+  function enforceInlineColors(){
+    /* v1-fix: gebruiker meldde dat specifiek de AANGEKLIKTE (actieve)
+       knop zijn kleur verliest - dat wijst op een concurrerende
+       stijlregel die specifiek voor de "actieve" status een andere
+       achtergrond claimt, mogelijk met net iets hogere prioriteit dan
+       onze vaste stijlregel. Rechtstreeks op het element gezette stijl
+       wint altijd van externe stijlbladen, dus dit is een tweede,
+       sterkere beschermingslaag naast ensureCatColorRules(). */
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats); if(!attr) return;
+    cats.querySelectorAll('button['+attr+']').forEach(function(btn){
+      var k=btn.getAttribute(attr);
+      var col=catColor(k);
+      if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
+      if(btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
+    });
+    var bar=E('bns951ColorBar'); if(!bar) return;
+    bar.querySelectorAll('button[data-bns951-target]').forEach(function(btn){
+      var k=btn.getAttribute('data-bns951-target');
+      var col=catColor(k);
+      if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
+      if(btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
+    });
+  }
   function tick(){
     var cats=E('materialCats');
     if(!cats) return;
-    try{ injectCss(); ensureCatColorRules(); }catch(e){}
+    try{ injectCss(); ensureCatColorRules(); enforceInlineColors(); }catch(e){}
     var html=cats.innerHTML;
     if(html===lastCatsHtml) return;
     lastCatsHtml=html;
-    try{ buildColorBar(); }catch(e){}
+    try{ buildColorBar(); enforceInlineColors(); }catch(e){}
   }
   /* v1-fix: dit reageerde eerst op ELKE afzonderlijke wijziging in
      #materialCats, ogenblikkelijk. In een omgeving met meerdere,
