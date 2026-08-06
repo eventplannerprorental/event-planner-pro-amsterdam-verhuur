@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R11';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R13';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -45348,6 +45348,29 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   /* --- 4. 14-dagen backup --- */
   var DAY_MS = 86400000;
+  var BK_HOUR = 17; // v1-fix: vaste tijd - pas na sluitingstijd back-uppen, niet meteen bij elke pagina-opening (zelfde fix als Tapwagen)
+  function bkSleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+  /* v1-fix: dit systeem controleerde tot nu toe alleen lokaal (per apparaat/
+     browser) of er al een back-up was gedaan vandaag - elk apparaat dat de
+     app opent dacht daardoor apart "ik heb nog niet gebackupt", en voerde
+     onafhankelijk dezelfde zware, complete database-back-up uit, 6 seconden
+     na elke pagina-opening. Dat gaf onnodig veel gelijktijdige schrijfdruk
+     op Firestore, en kan bijdragen aan trage laadtijden. Zelfde fix als
+     eerder bij Tapwagen: eerst een gedeelde vlag in Firebase zelf checken. */
+  async function bkClaimSharedLock(day, t){
+    try{
+      var ref = t.fs.doc(t.db,'backups','_lock');
+      var snap = await t.fs.getDoc(ref);
+      var data = snap.exists() ? snap.data() : {};
+      if(data && data.day === day) return false;
+      await bkSleep(300 + Math.floor(Math.random()*1200));
+      var snap2 = await t.fs.getDoc(ref);
+      var data2 = snap2.exists() ? snap2.data() : {};
+      if(data2 && data2.day === day) return false;
+      await t.fs.setDoc(ref, {day:day, claimedAt:new Date().toISOString()}, {merge:false});
+      return true;
+    }catch(e){ return false; }
+  }
   var CHUNK  = 400000;
   var BK_KEY = 'bns767_backup_day';
   var VER    = 'bns767';
@@ -45399,6 +45422,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var day = new Date().toISOString().slice(0,10);
     if(!force && localStorage.getItem(BK_KEY) === day) return;
     var t = await bkGetFb(); if(!t){ bkLog('Firebase niet beschikbaar'); return; }
+    if(!force){
+      var claimed = await bkClaimSharedLock(day, t);
+      if(!claimed){ localStorage.setItem(BK_KEY, day); return; }
+    }
     try{
       var orders    = await bkReadCol('orders');
       var materials = await bkReadCol('materials');
@@ -45432,8 +45459,17 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.BNS = window.BNS || {};
   window.BNS.runBackup767 = function(){ return runBackup(true); };
 
-  setTimeout(function(){ runBackup(false); }, 6000);
-  setInterval(function(){ runBackup(false); }, 30*60*1000);
+  /* v1-fix: dit draaide tot nu toe 6 seconden na elke pagina-opening, en
+     daarna elke 30 minuten - dus ook midden op de dag, tijdens druk
+     gebruik, wat kan bijdragen aan trage laadtijden vlak na het openen.
+     Nu pas vanaf 17:00 (na sluitingstijd), gecontroleerd via de gedeelde
+     vlag hierboven zodat het maar 1x per dag echt gebeurt. */
+  function bkMaybeRunScheduled(){
+    var now = new Date();
+    if(now.getHours() >= BK_HOUR) runBackup(false);
+  }
+  setTimeout(bkMaybeRunScheduled, 30000);
+  setInterval(bkMaybeRunScheduled, 10*60*1000);
 
   console.info('[BNS 767] Definitieve fix actief: state-sync, nummerbescherming, 14-dagen backup.');
 })();
