@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R33b';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R36';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48735,6 +48735,55 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   'use strict';
   if(window.__BNS953_MATCAT_STYLE__) return;
+  /* v1-fix: kleuren ingesteld via Admin schreven tot nu toe alleen naar
+     localStorage van de eigen browser, nooit naar Firebase - op één of
+     twee apparaten getest kwam dat dus nooit mee. Dit vangt het opslaan
+     van BEIDE bekende kleuren-sleutels centraal af en synchroniseert ze
+     ook naar Firestore, ongeacht welk van de Admin-schermen gebruikt
+     wordt om kleuren in te stellen. */
+  (function(){
+    if(window.__BNS953_COLORS_SYNC_HOOK__) return;
+    window.__BNS953_COLORS_SYNC_HOOK__ = true;
+    var KEYS=['bnsCatColors','bns_rubriek_kleuren_v12_pro'];
+    var origSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(key, value){
+      var r = origSetItem(key, value);
+      if(KEYS.indexOf(key)>=0){
+        try{
+          if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
+            window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors_'+key), {data:value}).catch(function(){});
+          }
+        }catch(e){}
+      }
+      return r;
+    };
+    (async function(){
+      for(var tries=0; tries<10; tries++){
+        if(window.BNS && window.BNS.fs && window.BNS.db) break;
+        await new Promise(function(r){ setTimeout(r,500); });
+      }
+      try{
+        if(!(window.BNS && window.BNS.fs && window.BNS.db)) return;
+        for(var i=0;i<KEYS.length;i++){
+          var key=KEYS[i];
+          try{
+            var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors_'+key));
+            if(snap && snap.exists && snap.exists()){
+              var remote = snap.data();
+              if(remote && remote.data){
+                var local = {};
+                try{ local = JSON.parse(localStorage.getItem(key)||'{}'); }catch(e){}
+                var remoteObj = {};
+                try{ remoteObj = JSON.parse(remote.data||'{}'); }catch(e){}
+                var merged = Object.assign({}, remoteObj, local);
+                origSetItem(key, JSON.stringify(merged));
+              }
+            }
+          }catch(e){}
+        }
+      }catch(e){}
+    })();
+  })();
   window.__BNS953_MATCAT_STYLE__ = true;
 
   function E(id){ return document.getElementById(id); }
@@ -48749,13 +48798,24 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     return null;
   }
   function catColor(cat){
+    var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
+    /* v1-fix: er blijkt een volledig apart, geïsoleerd Admin-kleurenpaneel
+       te bestaan ("BNS V12 PRO") dat uitsluitend naar de sleutel
+       bns_rubriek_kleuren_v12_pro schrijft, nooit naar bnsCatColors. Als
+       dat het scherm is dat gebruikt wordt om kleuren in te stellen, zag
+       deze functie die wijzigingen nooit. Nu worden beide sleutels
+       gecontroleerd, met bnsCatColors als eerste (actief naar Firebase
+       gesynchroniseerd). */
     try{
       var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
-      var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
       if(map[k]) return map[k];
     }catch(e){}
-    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316'};
-    return def[U(cat)]||'#475569';
+    try{
+      var map2=JSON.parse(localStorage.getItem('bns_rubriek_kleuren_v12_pro')||'{}');
+      if(map2[k]) return map2[k];
+    }catch(e){}
+    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316',TW:'#1683d8',TO:'#f97316',KW:'#22c55e',KA:'#a855f7',SL:'#eab308'};
+    return def[k]||'#475569';
   }
 
   function injectLayoutCss(){
