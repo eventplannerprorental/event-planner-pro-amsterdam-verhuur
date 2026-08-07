@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R25-SAFE';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R26-TEST';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -35366,8 +35366,10 @@ setTimeout(()=>{
     document.head.appendChild(css);
   }
   function expose(){
-    /* v2-fix: weer aangezet - uitschakelen bleek geen enkel verschil te
-       maken voor het geflikker, dus dit was niet de oorzaak. */
+    /* v3-fix: opnieuw uitgeschakeld, dit keer zonder enige eigen module
+       erbij - test of alleen V611 (zoals bij Tapwagen) hier wel stabiel
+       is wanneer er niets anders meespeelt, ook niet van mijn kant. */
+    return;
     installCss();
     renderMaterials.__bnsMatDebounced=true; renderMaterials.__bnsV392=true;
     toggleMaterial.__bnsMatDebounced=true; toggleMaterial.__bnsV392=true;
@@ -46031,7 +46033,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v2-fix: weer aangezet - uitschakelen bleek geen verschil te maken. */
+  /* v3-fix: opnieuw uitgeschakeld voor een schone test zonder enige
+     eigen module erbij. */
+  return;
   if(window.__BNS829_RENTAL_CLEAN_CATEGORIES__) return;
   window.__BNS829_RENTAL_CLEAN_CATEGORIES__ = true;
 
@@ -46299,7 +46303,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v2-fix: weer aangezet - uitschakelen bleek geen verschil te maken. */
+  /* v3-fix: opnieuw uitgeschakeld voor een schone test zonder enige
+     eigen module erbij. */
+  return;
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
