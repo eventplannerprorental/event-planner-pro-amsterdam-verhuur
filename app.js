@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R26-TEST';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R27-TEST';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -42253,9 +42253,13 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var cat='';
       try{ cat=window.currentCat || (typeof currentCat!=='undefined'?currentCat:''); }catch(e){}
       cat=cat||'TW';
-      try{ if(typeof renderCats==='function') renderCats(); }catch(e){}
+      /* v1-fix: dit riep hier zowel de lokale als de globale (window.)
+         versie van renderCats/renderMaterials na elkaar aan - als dat
+         niet exact dezelfde functie is (wat door de vele concurrerende
+         varianten in dit bestand goed mogelijk is), gaf dat een dubbele,
+         net-anders-ogende tekening bij elke Firebase-ververs. Nu wordt
+         alleen de daadwerkelijk actieve, globale versie aangeroepen. */
       try{ if(typeof window.renderCats==='function') window.renderCats(); }catch(e){}
-      try{ if(typeof renderMaterials==='function') renderMaterials(cat); }catch(e){}
       try{ if(typeof window.renderMaterials==='function') window.renderMaterials(cat); }catch(e){}
       try{ if(typeof adminRender==='function') adminRender(); }catch(e){}
       try{ if(typeof window.adminRender==='function') window.adminRender(); }catch(e){}
