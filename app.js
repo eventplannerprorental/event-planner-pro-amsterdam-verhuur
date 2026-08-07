@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R35';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R33b';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48722,6 +48722,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 })();
 
 
+
 /* =========================================================
    BNS 953 - Nette rubriekknoppen + kleuren-zoekbalk
    Doel: dezelfde nette indeling en kleurenfunctie als Tapwagen. Bouwt
@@ -48734,53 +48735,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   'use strict';
   if(window.__BNS953_MATCAT_STYLE__) return;
-  /* v1-fix: er blijken minstens acht verschillende, losse plekken te
-     bestaan die rubriek-kleuren opslaan in Admin - GEEN van allemaal
-     schreef naar Firebase, alleen naar localStorage van de eigen
-     browser. Zelfde soort gat als eerder bij de factuur-instellingen.
-     In plaats van acht plekken apart te repareren, wordt hier het
-     opslaan van precies déze ene sleutel (bnsCatColors) centraal
-     onderschept, ongeacht welke van de acht functies 'm daadwerkelijk
-     aanroept - en meteen ook naar Firestore weggeschreven. */
-  (function(){
-    if(window.__BNS953_COLORS_SYNC_HOOK__) return;
-    window.__BNS953_COLORS_SYNC_HOOK__ = true;
-    var origSetItem = localStorage.setItem.bind(localStorage);
-    localStorage.setItem = function(key, value){
-      var r = origSetItem(key, value);
-      if(key==='bnsCatColors'){
-        try{
-          if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
-            window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors'), {data:value}).catch(function(){});
-          }
-        }catch(e){}
-      }
-      return r;
-    };
-    // Bij het laden ook Firestore checken, voor het geval kleuren op een
-    // ander apparaat zijn ingesteld en deze browser ze nog niet kent.
-    (async function(){
-      for(var tries=0; tries<10; tries++){
-        if(window.BNS && window.BNS.fs && window.BNS.db) break;
-        await new Promise(function(r){ setTimeout(r,500); });
-      }
-      try{
-        if(!(window.BNS && window.BNS.fs && window.BNS.db)) return;
-        var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors'));
-        if(snap && snap.exists && snap.exists()){
-          var remote = snap.data();
-          if(remote && remote.data){
-            var local = {};
-            try{ local = JSON.parse(localStorage.getItem('bnsCatColors')||'{}'); }catch(e){}
-            var remoteObj = {};
-            try{ remoteObj = JSON.parse(remote.data||'{}'); }catch(e){}
-            var merged = Object.assign({}, remoteObj, local);
-            origSetItem('bnsCatColors', JSON.stringify(merged));
-          }
-        }
-      }catch(e){}
-    })();
-  })();
   window.__BNS953_MATCAT_STYLE__ = true;
 
   function E(id){ return document.getElementById(id); }
@@ -48831,23 +48785,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
           'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
           'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
-        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n' +
-        /* v1-fix: "Vrij" stond blanco omdat het stabiel-winnende systeem
-           (calmRenderMaterials) een eigen, simpele opmaak gebruikt zonder
-           kleur-CSS. In plaats van te wijzigen wélk systeem wint (dat gaf
-           juist onrust), krijgt dit systeem hier gewoon zijn eigen,
-           kloppende kleuren - net als bij Tapwagen. */
-        '#materialList .material-row{border-radius:14px!important;}\n' +
-        '#materialList .material-row .badge{padding:8px 13px!important;border-radius:999px!important;font-weight:1000!important;white-space:nowrap!important;background:#dff5e8!important;color:#073d22!important;}\n' +
-        '#materialList .material-row .badge.now{background:#dbeafe!important;color:#1e3a8a!important;}\n' +
-        '#materialList .material-row.selected{border-color:#2563eb!important;background:#eff6ff!important;}\n';
+        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
       document.head.appendChild(s);
     }
-    /* v1-fix: dit plaatste de stijl-tag tot nu toe maar één keer, aan het
-       begin. Andere modules die daarna hun EIGEN stijl-tag toevoegen
-       kunnen daardoor alsnog winnen (bijv. voor tekstgrootte), simpelweg
-       omdat ze later in de pagina staan. Nu wordt de positie, net als bij
-       de kleurregels, telkens opnieuw herbevestigd. */
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
@@ -48879,7 +48819,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       if(s.textContent!==css) s.textContent=css;
     }
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
-    if(document.head.lastElementChild!==E('bns953LayoutCss')){} // volgorde-check niet nodig, aparte selectors
   }
 
   function buildColorBar(){
