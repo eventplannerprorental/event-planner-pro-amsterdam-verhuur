@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R29';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R30';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48734,32 +48734,41 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function injectLayoutCss(){
-    if(E('bns953LayoutCss')) return;
-    var s=document.createElement('style');
-    s.id='bns953LayoutCss';
-    s.textContent =
-      '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
-        'gap:8px!important;align-items:stretch!important;' +
-        'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
-        'min-height:0!important;overflow:visible!important;}\n' +
-      '#materialCats button{' +
-        'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
-        'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
-        'color:#fff!important;font-weight:800!important;font-size:13px!important;letter-spacing:.2px!important;' +
-        'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
-        'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
-      '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
-      '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
-      '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
-        'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
-        'border-radius:12px!important;}\n' +
-      '#bns953ColorBar .bns953-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
-        'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
-      '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
-        'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
-        'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
-      '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
-    document.head.appendChild(s);
+    var s=E('bns953LayoutCss');
+    if(!s){
+      s=document.createElement('style');
+      s.id='bns953LayoutCss';
+      s.textContent =
+        '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
+          'gap:8px!important;align-items:stretch!important;' +
+          'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
+          'min-height:0!important;overflow:visible!important;}\n' +
+        '#materialCats button{' +
+          'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
+          'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
+          'background:var(--cat-color,#475569)!important;color:#fff!important;font-weight:800!important;' +
+          'font-size:13px!important;letter-spacing:.2px!important;' +
+          'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
+          'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
+        '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
+        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
+        '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
+          'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
+          'border-radius:12px!important;}\n' +
+        '#bns953ColorBar .bns953-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
+          'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
+        '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
+          'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
+          'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
+        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+      document.head.appendChild(s);
+    }
+    /* v1-fix: dit plaatste de stijl-tag tot nu toe maar één keer, aan het
+       begin. Andere modules die daarna hun EIGEN stijl-tag toevoegen
+       kunnen daardoor alsnog winnen (bijv. voor tekstgrootte), simpelweg
+       omdat ze later in de pagina staan. Nu wordt de positie, net als bij
+       de kleurregels, telkens opnieuw herbevestigd. */
+    if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
   var lastColorRuleKey='';
