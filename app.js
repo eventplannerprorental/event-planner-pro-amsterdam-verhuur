@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R21';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R22';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48701,6 +48701,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.__BNS952_MATCAT_LAYOUT__ = true;
 
   function E(id){ return document.getElementById(id); }
+  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   function injectCss(){
     var s=E('bns952Css');
@@ -48721,11 +48722,56 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
           'transform:none!important;animation:none!important;}\n' +
         '#materialCats button::after{content:none!important;border:none!important;}\n' +
         '#materialCats button.active{' +
-          'background:#1e293b!important;outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
+          'outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
+        '#bns952ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
+          'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
+          'border-radius:12px!important;}\n' +
+        '#bns952ColorBar .bns952-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
+          'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
+        '#bns952ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
+          'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
+          'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;' +
+          'transform:none!important;animation:none!important;}\n' +
+        '#bns952ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
       document.head.appendChild(s);
     }
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
+
+  function buildColorBar(){
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats);
+    var bar=E('bns952ColorBar');
+    if(!attr){ if(bar) bar.remove(); return; }
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length){ if(bar) bar.remove(); return; }
+    var activeBtn=cats.querySelector('.active');
+    var activeCat=(activeBtn&&activeBtn.getAttribute(attr))||'';
+    var html='<span class="bns952-label">Zoek op kleur:</span>'+list.map(function(k){
+      var col=catColor(k);
+      return '<button type="button" title="'+H(k)+'" data-bns952-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
+        '" style="background:'+H(col)+'"></button>';
+    }).join('');
+    if(!bar){
+      bar=document.createElement('div');
+      bar.id='bns952ColorBar';
+      cats.parentNode.insertBefore(bar, cats.nextSibling);
+    }
+    bar.innerHTML=html;
+  }
+  document.addEventListener('click', function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    var b=t.closest('#bns952ColorBar [data-bns952-target]');
+    if(!b) return;
+    var cats=E('materialCats');
+    var attr=cats && findCatAttr(cats);
+    var twin=attr && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns952-target'))+'"]');
+    if(twin) twin.click();
+  }, true);
 
   var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-bns829-cat','data-cat'];
   function findCatAttr(cats){
@@ -48765,7 +48811,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         var k=btn.getAttribute(attr);
         if(k){
           var col=catColor(k);
-          if(btn.style.getPropertyValue('background-color')!==col) btn.style.setProperty('background-color', col, 'important');
+          if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
         }
       }
     });
@@ -48776,6 +48822,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var cats=E('materialCats');
     if(!cats) return;
     try{ injectCss(); enforceFontSize(); }catch(e){}
+    var html=cats.innerHTML;
+    if(html===lastCatsHtml) return;
+    lastCatsHtml=html;
+    try{ buildColorBar(); }catch(e){}
   }
   var matCatsDebounce=null;
   var matCatsObserver=new MutationObserver(function(){
