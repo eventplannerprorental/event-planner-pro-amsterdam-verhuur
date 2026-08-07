@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R17';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R18';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -35366,6 +35366,10 @@ setTimeout(()=>{
     document.head.appendChild(css);
   }
   function expose(){
+    /* v1-fix (op uitdrukkelijk verzoek): V392 volledig uitgeschakeld als
+       concurrerende materiaal-renderer. V611 is de nieuwere, volledige
+       implementatie en wordt nu als enige gebruikt. */
+    return;
     installCss();
     renderMaterials.__bnsMatDebounced=true; renderMaterials.__bnsV392=true;
     toggleMaterial.__bnsMatDebounced=true; toggleMaterial.__bnsV392=true;
@@ -46029,6 +46033,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
+  /* v1-fix (op uitdrukkelijk verzoek): BNS829 volledig uitgeschakeld. */
+  return;
   if(window.__BNS829_RENTAL_CLEAN_CATEGORIES__) return;
   window.__BNS829_RENTAL_CLEAN_CATEGORIES__ = true;
 
@@ -46296,6 +46302,11 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
+  /* v1-fix (op uitdrukkelijk verzoek): BNS838 volledig uitgeschakeld,
+     inclusief de permanente window.renderMaterials-vergrendeling. Let
+     op: dit systeem had ook een aparte afhandeling voor "geen
+     materialen beschikbaar" - controleren of V611 dat ook netjes toont. */
+  return;
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
