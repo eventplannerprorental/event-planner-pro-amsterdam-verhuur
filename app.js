@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R31';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R33';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -604,8 +604,12 @@ ensure();
       console.warn('[Amsterdam v80] meldingen laden mislukt:',e);
     }
   }
+  /* v1-fix: dit haalde meldingen elke 20 seconden opnieuw volledig op,
+     iets wat Tapwagen niet heeft (die laadt maar 1x). Dat gaf een
+     doorlopende, herhalende staat-wijziging (inclusief save()) die
+     zichtbaar geflikker in andere schermen kan hebben bijgedragen.
+     Nu net als Tapwagen: alleen bij het openen. */
   setTimeout(loadAlerts,400);
-  setInterval(loadAlerts,20000);
   window.AMS_V80_LOAD_ALERTS=loadAlerts;
 })();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
@@ -35310,7 +35314,11 @@ setTimeout(()=>{
       box.innerHTML='<p class="bns392-empty">Nog geen materiaal aangemaakt.</p>';
       return;
     }
-    var list=(q ? mats() : mats().filter(function(m){ return catOf(m)===c; })).filter(function(m){ return !q || JSON.stringify(m).toLowerCase().indexOf(q)>=0; });
+    var list=mats().filter(function(m){
+      if(!q) return catOf(m)===c;
+      var t=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
+      return t.indexOf(q)>=0;
+    });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return T(m.id)+':'+codeOf(m)+':'+nameOf(m)+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return codeOf(m)||T(m.id);}).join(',');
     renderCats();
     if(!force && sig===lastSig && box.querySelector('.bns392-row')) return;
@@ -42972,9 +42980,8 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var c=setCat(cat);
     var q=L(E('materialSearch')&&E('materialSearch').value);
     var list=materials().filter(function(m){
-      if(catOf(m)!==c) return false;
-      if(!q) return true;
-      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName].map(T).join(' ').toLowerCase();
+      if(!q) return catOf(m)===c;
+      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
       return txt.indexOf(q)>=0;
     });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return (matId(m)||codeOf(m))+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return matId(m)||codeOf(m);}).join(',');
@@ -48692,7 +48699,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      leidende Firebase-data alsnog binnenkwam - dat voelde aan als
      "opdrachten zijn weg, komen na lang wachten terug". Nu veel sneller. */
   setTimeout(loadOrdersV47, 150);
-  setInterval(loadOrdersV47, 30000);
+  /* v1-fix: de doorlopende herhaling (elke 30 sec) verwijderd - Tapwagen
+     heeft dit niet en laadt opdrachten maar 1x bij het openen. Gaf een
+     onnodige, herhalende volledige-databron-vernieuwing die kan hebben
+     bijgedragen aan zichtbaar geflikker elders op de pagina. */
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
 })();
