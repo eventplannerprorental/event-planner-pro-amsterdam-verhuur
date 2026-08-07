@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R33';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R34';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -34924,7 +34924,16 @@ setTimeout(()=>{
   function getState(){try{ if(typeof state!=='undefined'&&state&&Array.isArray(state.materials)) return state;}catch(e){} try{ if(window.state&&Array.isArray(window.state.materials)) return window.state;}catch(e){} return null;}
   function readJSON(k,def){try{var v=JSON.parse(localStorage.getItem(k)||''); return v&&typeof v==='object'?v:def;}catch(e){return def;}}
   function writeJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-  function colorMap(){var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},b,a);}
+  function colorMap(){
+    /* v1-fix: dit liet de oudere sleutel (COLOR_KEY, bns_rubriek_kleuren_v12_pro)
+       altijd winnen boven de nieuwere, actief-naar-Firebase-gesynchroniseerde
+       sleutel (COLOR_KEY2, bnsCatColors). Zodra COLOR_KEY ooit een kopie
+       kreeg (wat automatisch gebeurt bij elke kleurwijziging hieronder),
+       kon een latere, verse wijziging via bnsCatColors zo weer overschreven
+       worden door de oudere waarde - dat verklaarde waarom bestaande
+       kleuren niet meer te wijzigen leken. Nu wint bnsCatColors. */
+    var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},a,b);
+  }
   function setCatColor(c,col){c=cat(c); col=hex(col)||'#0ea5e9'; var m=colorMap(); m[c]=col; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{window.bnsCatColors=m;}catch(e){} }
   function removeCatColor(c){c=cat(c); var m=colorMap(); delete m[c]; delete m[c.toLowerCase()]; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{if(window.state&&window.state.settings){if(window.state.settings.catColors){delete window.state.settings.catColors[c];delete window.state.settings.catColors[c.toLowerCase()];}if(window.state.settings.categoryColors){delete window.state.settings.categoryColors[c];delete window.state.settings.categoryColors[c.toLowerCase()];}}}catch(e){} try{window.bnsCatColors=m;}catch(e){} }
   function getCatColor(c){c=cat(c); var m=colorMap(); return hex(m[c]||m[c.toLowerCase()]||'#0ea5e9');}
@@ -46409,11 +46418,26 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function lockRenderers(){
     if(locked) return;
     locked=true;
+    /* v1-fix: dit vergrendelde hier altijd naar de EIGEN, simpelere
+       calmRenderCats/calmRenderMaterials - die missen bijvoorbeeld de
+       kleur-badges voor "Vrij" die V611 wel heeft, en dit systeem
+       vergrendelt zich bovendien opnieuw bij vrijwel elke klik in het
+       materiaal-scherm. Nu wijst de vergrendeling naar V611 (de
+       nieuwere, volledige implementatie) zodra die beschikbaar is - de
+       vergrendeling zelf (tegen nog oudere systemen) blijft bestaan. */
+    var effectiveCats = function(){
+      if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return window.BNS_V611.renderCats||calmRenderCats;
+      return calmRenderCats;
+    };
+    var effectiveMaterials = function(cat){
+      if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return window.BNS_V611.renderMaterials(cat);
+      return calmRenderMaterials(cat);
+    };
     try{
-      Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return calmRenderCats; }, set:function(v){ lastExternalRenderCats=v; } });
+      Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return effectiveCats(); }, set:function(v){ lastExternalRenderCats=v; } });
     }catch(e){ window.renderCats=calmRenderCats; }
     try{
-      Object.defineProperty(window,'renderMaterials',{ configurable:true, enumerable:true, get:function(){ return calmRenderMaterials; }, set:function(v){ lastExternalRenderMaterials=v; } });
+      Object.defineProperty(window,'renderMaterials',{ configurable:true, enumerable:true, get:function(){ return effectiveMaterials; }, set:function(v){ lastExternalRenderMaterials=v; } });
     }catch(e){ window.renderMaterials=calmRenderMaterials; }
     try{ renderCats=calmRenderCats; }catch(e){}
     try{ renderMaterials=calmRenderMaterials; }catch(e){}
