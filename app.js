@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R23';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R24';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48773,7 +48773,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(twin) twin.click();
   }, true);
 
-  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-bns829-cat','data-cat'];
+  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
   function findCatAttr(cats){
     for(var i=0;i<ATTR_CANDIDATES.length;i++){
       if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
