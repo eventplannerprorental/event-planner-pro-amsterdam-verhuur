@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R18';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R19';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -35366,10 +35366,8 @@ setTimeout(()=>{
     document.head.appendChild(css);
   }
   function expose(){
-    /* v1-fix (op uitdrukkelijk verzoek): V392 volledig uitgeschakeld als
-       concurrerende materiaal-renderer. V611 is de nieuwere, volledige
-       implementatie en wordt nu als enige gebruikt. */
-    return;
+    /* v2-fix: weer aangezet - uitschakelen bleek geen enkel verschil te
+       maken voor het geflikker, dus dit was niet de oorzaak. */
     installCss();
     renderMaterials.__bnsMatDebounced=true; renderMaterials.__bnsV392=true;
     toggleMaterial.__bnsMatDebounced=true; toggleMaterial.__bnsV392=true;
@@ -46033,8 +46031,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v1-fix (op uitdrukkelijk verzoek): BNS829 volledig uitgeschakeld. */
-  return;
+  /* v2-fix: weer aangezet - uitschakelen bleek geen verschil te maken. */
   if(window.__BNS829_RENTAL_CLEAN_CATEGORIES__) return;
   window.__BNS829_RENTAL_CLEAN_CATEGORIES__ = true;
 
@@ -46302,11 +46299,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v1-fix (op uitdrukkelijk verzoek): BNS838 volledig uitgeschakeld,
-     inclusief de permanente window.renderMaterials-vergrendeling. Let
-     op: dit systeem had ook een aparte afhandeling voor "geen
-     materialen beschikbaar" - controleren of V611 dat ook netjes toont. */
-  return;
+  /* v2-fix: weer aangezet - uitschakelen bleek geen verschil te maken. */
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
@@ -48693,29 +48686,27 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
 })();
+
 /* =========================================================
-   BNS 951 - Nette rubriekknoppen + kleuren-zoekbalk (voorzichtige versie)
-   Doel: zelfde als eerdere poging (BNS 950, teruggedraaid), maar nu
-   zonder doorlopende achtergrond-controle (MutationObserver/setInterval).
-   Deze versie haakt EENMALIG in op het bestaande renderMaterials-moment
-   zelf, en doet verder niets ongevraagd op de achtergrond - om elk risico
-   op interferentie met de rubriek-logica uit te sluiten.
-   Raakt niet aan: currentCat, setCat, remember, Firebase.
+   BNS 952 - Nette rubriekknoppen (zonder kleuren)
+   Doel: alleen de opmaak van de rubriekknoppen netjes en overzichtelijk
+   maken (nette rasterindeling, duidelijke tekst). Geen kleurenlogica -
+   dat bleek bij Amsterdam onmogelijk stabiel te krijgen door de vele
+   concurrerende systemen, ook na ze allemaal uit te schakelen. Puur
+   CSS, raakt geen enkele klik-logica of rubriek-data aan.
    ========================================================= */
 (function(){
   'use strict';
-  if(window.__BNS951_MATCAT_REDESIGN__) return;
-  window.__BNS951_MATCAT_REDESIGN__ = true;
+  if(window.__BNS952_MATCAT_LAYOUT__) return;
+  window.__BNS952_MATCAT_LAYOUT__ = true;
 
   function E(id){ return document.getElementById(id); }
-  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function U(v){ return String(v==null?'':v).trim().toUpperCase(); }
 
   function injectCss(){
-    var s=E('bns951Css');
+    var s=E('bns952Css');
     if(!s){
       s=document.createElement('style');
-      s.id='bns951Css';
+      s.id='bns952Css';
       s.textContent =
         '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
           'gap:8px!important;align-items:stretch!important;' +
@@ -48724,211 +48715,24 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         '#materialCats button{' +
           'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
           'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
-          'background:var(--cat-color,#2563eb)!important;color:#fff!important;font-weight:800!important;' +
+          'background:#475569!important;color:#fff!important;font-weight:800!important;' +
           'font-size:13px!important;letter-spacing:.2px!important;box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
           'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;' +
           'transform:none!important;animation:none!important;}\n' +
         '#materialCats button::after{content:none!important;border:none!important;}\n' +
         '#materialCats button.active{' +
-          'outline:3px solid #0f172a!important;outline-offset:1px!important;filter:brightness(1.1)!important;}\n' +
-        '#bns951ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
-          'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
-          'border-radius:12px!important;}\n' +
-        '#bns951ColorBar .bns951-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
-          'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
-        '#bns951ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
-          'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;background:var(--cat-color,#2563eb)!important;' +
-          'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;' +
-          'transform:none!important;animation:none!important;}\n' +
-        '#bns951ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
-    }
-    /* v1-fix: dit plaatste de stijl-tag tot nu toe maar één keer, aan het
-       begin. Andere modules die daarna hun EIGEN stijl-tag toevoegen (met
-       even specifieke !important-regels) kunnen daardoor alsnog winnen,
-       simpelweg omdat ze later in de pagina staan. Door onze eigen tag
-       telkens weer helemaal achteraan te verplaatsen, wint deze altijd. */
-    if(document.head.lastElementChild!==s) document.head.appendChild(s);
-  }
-
-  var lastColorRuleKey='';
-  function ensureCatColorRules(){
-    /* v4-fix (naar het voorbeeld van de oude, stabiele versie): in plaats
-       van de kleur telkens weer op individuele knoppen te zetten (die
-       constant opnieuw gebouwd worden door welk systeem er ook wint, en
-       dus telkens weer hun kleur verliezen), wordt hier één vaste
-       stijlregel PER RUBRIEK gemaakt, gekoppeld aan het rubriek-codewoord
-       zelf via een attribuutselector. Zo'n regel blijft altijd gelden,
-       ongeacht wie de knop bouwt of hoe vaak - er is niets meer dat
-       "opnieuw" kan worden overschreven. */
-    var cats=E('materialCats'); if(!cats) return;
-    var attr=findCatAttr(cats); if(!attr) return;
-    var list=[];
-    cats.querySelectorAll('['+attr+']').forEach(function(btn){
-      var c=btn.getAttribute(attr);
-      if(c && list.indexOf(c)<0) list.push(c);
-    });
-    if(!list.length) return;
-    var key=attr+'|'+list.join(',');
-    var s=E('bns951ColorRules');
-    if(!s){
-      s=document.createElement('style');
-      s.id='bns951ColorRules';
+          'background:#1e293b!important;outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
       document.head.appendChild(s);
     }
-    if(key!==lastColorRuleKey){
-      lastColorRuleKey=key;
-      /* v1-fix: deze lijst miste de nieuw-ontdekte Amsterdam-varianten
-         (data-v838-cat, data-bns829-cat) - de herkenning was al verbreed,
-         maar de daadwerkelijke kleurregels werden nog steeds alleen voor
-         de oude vier kenmerken opgebouwd, waardoor Amsterdam's eigen
-         knoppen nooit een echte kleurmatch kregen. */
-      var sel=ATTR_CANDIDATES;
-      var css=list.map(function(k){
-        var col=catColor(k);
-        var esc=H(k);
-        var selectors=sel.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
-        return selectors+'{background:'+col+'!important;--cat-color:'+col+'!important;}';
-      }).join('\n');
-      if(s.textContent!==css) s.textContent=css;
-    }
-    /* v2-fix: dit verplaatste de stijl-tag naar het einde alleen wanneer
-       de rubriek-lijst zelf wijzigde. Maar injectCss() verplaatst zijn
-       eigen, generieke blauwe standaardregel bij ELKE tick weer naar het
-       einde - waardoor die de kleurregels hier alsnog kon overstemmen
-       zodra de rubrieken niet meer wijzigden (vrijwel altijd). Nu wordt
-       de positie altijd herbevestigd, ongeacht of de inhoud is gewijzigd. */
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-
-  function catColor(cat){
-    try{
-      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
-      var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
-      if(map[k]) return map[k];
-    }catch(e){}
-    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316'};
-    return def[U(cat)]||'#2563eb';
-  }
-
-  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-bns829-cat','data-cat'];
-  function findCatAttr(cats){
-    for(var i=0;i<ATTR_CANDIDATES.length;i++){
-      if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
-    }
-    return null;
-  }
-  function buildColorBar(){
-    var cats=E('materialCats');
-    if(!cats) return;
-    /* v1-fix: dit zocht hier alleen naar het data-bns611-cat kenmerk. Er
-       blijkt minstens nog één ander, apart systeem (material-fix.js) te
-       bestaan dat dezelfde knoppen bouwt met data-cat in plaats daarvan.
-       Welk systeem op een gegeven moment wint, wisselt kennelijk - vandaar
-       dat de kleurenbalk soms wel en soms niet verscheen. Nu wordt eerst
-       gekeken welk kenmerk er daadwerkelijk aanwezig is. */
-    var attr=findCatAttr(cats);
-    var bar=E('bns951ColorBar');
-    if(!attr){ if(bar) bar.remove(); return; }
-    var list=[];
-    cats.querySelectorAll('['+attr+']').forEach(function(btn){
-      var c=U(btn.getAttribute(attr));
-      if(c && list.indexOf(c)<0) list.push(c);
-    });
-    if(!list.length){ if(bar) bar.remove(); return; }
-    var activeBtn=cats.querySelector('.active');
-    var activeCat=U((activeBtn&&activeBtn.getAttribute(attr))||'');
-    var html='<span class="bns951-label">Zoek op kleur:</span>'+list.map(function(k){
-      var col=catColor(k);
-      return '<button type="button" title="'+H(k)+'" data-bns951-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
-        '" style="--cat-color:'+H(col)+'"></button>';
-    }).join('');
-    if(!bar){
-      bar=document.createElement('div');
-      bar.id='bns951ColorBar';
-      cats.parentNode.insertBefore(bar, cats.nextSibling);
-    }
-    bar.innerHTML=html;
-    bar.__bns951Attr=attr;
-  }
-
-  // Kleurstalen simuleren een klik op de echte, bijbehorende rubriekknop -
-  // geen nieuwe selectie-logica, geen aanraking van currentCat/setCat.
-  // Welk kenmerk (data-bns611-cat of data-cat) de echte knop gebruikt,
-  // wordt gevonden via bar.__bns951Attr, gezet door buildColorBar().
-  document.addEventListener('click', function(ev){
-    var t=ev.target; if(!t||!t.closest) return;
-    var b=t.closest('#bns951ColorBar [data-bns951-target]');
-    if(!b) return;
-    var bar=E('bns951ColorBar');
-    var attr=(bar&&bar.__bns951Attr)||'data-bns611-cat';
-    var cats=E('materialCats');
-    var twin=cats && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns951-target'))+'"]');
-    if(twin){ twin.click(); scrollToResults(); }
-  }, true);
-
-  // Ook bij een klik op de echte rubriekknop zelf (niet alleen de
-  // kleurstalen) meteen naar de resultaten scrollen.
-  document.addEventListener('click', function(ev){
-    var t=ev.target; if(!t||!t.closest) return;
-    if(t.closest('#materialCats button')) scrollToResults();
-  }, true);
-
-  function scrollToResults(){
-    setTimeout(function(){
-      var list=E('materialList')||E('materialCats');
-      if(list && list.scrollIntoView){ list.scrollIntoView({behavior:'smooth', block:'start'}); }
-    }, 50);
-  }
-
-  /* v3-fix: dit controleerde tot nu toe periodiek (eerst om de 300ms,
-     later om de 60ms) of er iets veranderd was - met altijd een klein
-     gaatje waarin de "verkeerde" kleur toch nog even zichtbaar kon zijn
-     vóór de volgende controle. Een MutationObserver reageert in plaats
-     daarvan ONMIDDELLIJK op elke wijziging in #materialCats, zonder
-     enige wachttijd - dat sluit het geflikker volledig uit. */
   var lastCatsHtml='';
-  function enforceInlineColors(){
-    /* v2-fix: naast kleur bleek ook de tekstgrootte te verspringen
-       (groot naar klein) - hetzelfde soort concurrentie, nu op
-       font-size. Alles wat we willen vastzetten, wordt hier in één
-       keer meegenomen. */
-    var cats=E('materialCats'); if(!cats) return;
-    var attr=findCatAttr(cats); if(!attr) return;
-    cats.querySelectorAll('button['+attr+']').forEach(function(btn){
-      var k=btn.getAttribute(attr);
-      var col=catColor(k);
-      if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
-      if(btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
-      if(btn.style.getPropertyValue('font-size')!=='13px') btn.style.setProperty('font-size','13px','important');
-      if(btn.style.getPropertyValue('height')!=='44px') btn.style.setProperty('height','44px','important');
-      if(btn.style.getPropertyValue('color')!=='rgb(255, 255, 255)') btn.style.setProperty('color','#fff','important');
-    });
-    var bar=E('bns951ColorBar'); if(!bar) return;
-    bar.querySelectorAll('button[data-bns951-target]').forEach(function(btn){
-      var k=btn.getAttribute('data-bns951-target');
-      var col=catColor(k);
-      if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
-      if(btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
-    });
-  }
   function tick(){
     var cats=E('materialCats');
     if(!cats) return;
-    try{ injectCss(); ensureCatColorRules(); enforceInlineColors(); }catch(e){}
-    var html=cats.innerHTML;
-    if(html===lastCatsHtml) return;
-    lastCatsHtml=html;
-    try{ buildColorBar(); enforceInlineColors(); }catch(e){}
+    try{ injectCss(); }catch(e){}
   }
-  /* v1-fix: dit reageerde eerst op ELKE afzonderlijke wijziging in
-     #materialCats, ogenblikkelijk. In een omgeving met meerdere,
-     onderling vechtende systemen (zoals hier bij Amsterdam, met meer van
-     dat soort systemen dan Tapwagen had) kan dat zelf bijdragen aan het
-     zichtbare geflikker - elke herstelpoging is zelf ook weer een
-     zichtbare wijziging. Nu wordt gewacht op een kort rustig moment
-     (150ms zonder nieuwe wijzigingen) voordat de opmaak wordt hersteld,
-     in plaats van op elke afzonderlijke flikkering te reageren. */
   var matCatsDebounce=null;
   var matCatsObserver=new MutationObserver(function(){
     if(matCatsDebounce) clearTimeout(matCatsDebounce);
@@ -48938,22 +48742,13 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var cats=E('materialCats');
     if(cats && matCatsObserver.__target!==cats){
       matCatsObserver.disconnect();
-      matCatsObserver.observe(cats,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style']});
+      matCatsObserver.observe(cats,{childList:true,subtree:true});
       matCatsObserver.__target=cats;
     }
   }
   setInterval(attachObserver, 250);
   attachObserver();
   tick();
-  /* v1-fix: naast het reageren op wijzigingen (via de observer) blijkt
-     bij Amsterdam ook een lichte, doorlopende controle nodig - er zijn
-     hier meer en vaker terugkerende concurrerende systemen dan bij
-     Tapwagen (om de 700ms-2000ms), dus alleen reageren op wijzigingen
-     is niet snel genoeg om steeds "het laatste woord" te houden. Dit
-     is een lichte controle (alleen kleur/stijl bijwerken indien nodig,
-     geen zware herberekening), dus geen nieuw geflikker-risico. */
-  setInterval(function(){ try{ enforceInlineColors(); }catch(e){} }, 300);
 
-  try{ console.info('[BNS 951] Opgeruimde rubriekknoppen + kleuren-zoekbalk actief (v5, directe observatie + doorlopende controle).'); }catch(e){}
+  try{ console.info('[BNS 952] Nette rubriekknoppen actief (zonder kleuren).'); }catch(e){}
 })();
-
