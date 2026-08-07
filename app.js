@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R28';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R29';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48748,7 +48748,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         'color:#fff!important;font-weight:800!important;font-size:13px!important;letter-spacing:.2px!important;' +
         'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
         'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
-      '#materialCats button::after{content:none!important;border:none!important;}\n' +
+      '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
       '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
       '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
         'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
