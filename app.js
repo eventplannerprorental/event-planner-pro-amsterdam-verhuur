@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R30';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R31';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48710,6 +48710,53 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   'use strict';
   if(window.__BNS953_MATCAT_STYLE__) return;
+  /* v1-fix: er blijken minstens acht verschillende, losse plekken te
+     bestaan die rubriek-kleuren opslaan in Admin - GEEN van allemaal
+     schreef naar Firebase, alleen naar localStorage van de eigen
+     browser. Zelfde soort gat als eerder bij de factuur-instellingen.
+     In plaats van acht plekken apart te repareren, wordt hier het
+     opslaan van precies déze ene sleutel (bnsCatColors) centraal
+     onderschept, ongeacht welke van de acht functies 'm daadwerkelijk
+     aanroept - en meteen ook naar Firestore weggeschreven. */
+  (function(){
+    if(window.__BNS953_COLORS_SYNC_HOOK__) return;
+    window.__BNS953_COLORS_SYNC_HOOK__ = true;
+    var origSetItem = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function(key, value){
+      var r = origSetItem(key, value);
+      if(key==='bnsCatColors'){
+        try{
+          if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
+            window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors'), {data:value}).catch(function(){});
+          }
+        }catch(e){}
+      }
+      return r;
+    };
+    // Bij het laden ook Firestore checken, voor het geval kleuren op een
+    // ander apparaat zijn ingesteld en deze browser ze nog niet kent.
+    (async function(){
+      for(var tries=0; tries<10; tries++){
+        if(window.BNS && window.BNS.fs && window.BNS.db) break;
+        await new Promise(function(r){ setTimeout(r,500); });
+      }
+      try{
+        if(!(window.BNS && window.BNS.fs && window.BNS.db)) return;
+        var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors'));
+        if(snap && snap.exists && snap.exists()){
+          var remote = snap.data();
+          if(remote && remote.data){
+            var local = {};
+            try{ local = JSON.parse(localStorage.getItem('bnsCatColors')||'{}'); }catch(e){}
+            var remoteObj = {};
+            try{ remoteObj = JSON.parse(remote.data||'{}'); }catch(e){}
+            var merged = Object.assign({}, remoteObj, local);
+            origSetItem('bnsCatColors', JSON.stringify(merged));
+          }
+        }
+      }catch(e){}
+    })();
+  })();
   window.__BNS953_MATCAT_STYLE__ = true;
 
   function E(id){ return document.getElementById(id); }
