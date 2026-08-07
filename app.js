@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R34';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R35';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -46418,26 +46418,16 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function lockRenderers(){
     if(locked) return;
     locked=true;
-    /* v1-fix: dit vergrendelde hier altijd naar de EIGEN, simpelere
-       calmRenderCats/calmRenderMaterials - die missen bijvoorbeeld de
-       kleur-badges voor "Vrij" die V611 wel heeft, en dit systeem
-       vergrendelt zich bovendien opnieuw bij vrijwel elke klik in het
-       materiaal-scherm. Nu wijst de vergrendeling naar V611 (de
-       nieuwere, volledige implementatie) zodra die beschikbaar is - de
-       vergrendeling zelf (tegen nog oudere systemen) blijft bestaan. */
-    var effectiveCats = function(){
-      if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return window.BNS_V611.renderCats||calmRenderCats;
-      return calmRenderCats;
-    };
-    var effectiveMaterials = function(cat){
-      if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return window.BNS_V611.renderMaterials(cat);
-      return calmRenderMaterials(cat);
-    };
+    /* v2-fix: de v1-fix hierboven (omleiden naar V611) gaf juist meer
+       onrust - wisselde zichtbaar heen en weer tussen twee verschillende
+       weergaven, terwijl de oorspronkelijke, simpele versie tenminste
+       stabiel was (ook al miste die de kleur-badges). Teruggedraaid naar
+       het origineel; rust weegt zwaarder dan gedeeltelijk correct. */
     try{
-      Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return effectiveCats(); }, set:function(v){ lastExternalRenderCats=v; } });
+      Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return calmRenderCats; }, set:function(v){ lastExternalRenderCats=v; } });
     }catch(e){ window.renderCats=calmRenderCats; }
     try{
-      Object.defineProperty(window,'renderMaterials',{ configurable:true, enumerable:true, get:function(){ return effectiveMaterials; }, set:function(v){ lastExternalRenderMaterials=v; } });
+      Object.defineProperty(window,'renderMaterials',{ configurable:true, enumerable:true, get:function(){ return calmRenderMaterials; }, set:function(v){ lastExternalRenderMaterials=v; } });
     }catch(e){ window.renderMaterials=calmRenderMaterials; }
     try{ renderCats=calmRenderCats; }catch(e){}
     try{ renderMaterials=calmRenderMaterials; }catch(e){}
@@ -48841,7 +48831,16 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
         '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
           'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
           'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
-        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n' +
+        /* v1-fix: "Vrij" stond blanco omdat het stabiel-winnende systeem
+           (calmRenderMaterials) een eigen, simpele opmaak gebruikt zonder
+           kleur-CSS. In plaats van te wijzigen wélk systeem wint (dat gaf
+           juist onrust), krijgt dit systeem hier gewoon zijn eigen,
+           kloppende kleuren - net als bij Tapwagen. */
+        '#materialList .material-row{border-radius:14px!important;}\n' +
+        '#materialList .material-row .badge{padding:8px 13px!important;border-radius:999px!important;font-weight:1000!important;white-space:nowrap!important;background:#dff5e8!important;color:#073d22!important;}\n' +
+        '#materialList .material-row .badge.now{background:#dbeafe!important;color:#1e3a8a!important;}\n' +
+        '#materialList .material-row.selected{border-color:#2563eb!important;background:#eff6ff!important;}\n';
       document.head.appendChild(s);
     }
     /* v1-fix: dit plaatste de stijl-tag tot nu toe maar één keer, aan het
