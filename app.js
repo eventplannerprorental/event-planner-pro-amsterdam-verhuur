@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R16';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-06-R17';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48878,13 +48878,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      enige wachttijd - dat sluit het geflikker volledig uit. */
   var lastCatsHtml='';
   function enforceInlineColors(){
-    /* v1-fix: gebruiker meldde dat specifiek de AANGEKLIKTE (actieve)
-       knop zijn kleur verliest - dat wijst op een concurrerende
-       stijlregel die specifiek voor de "actieve" status een andere
-       achtergrond claimt, mogelijk met net iets hogere prioriteit dan
-       onze vaste stijlregel. Rechtstreeks op het element gezette stijl
-       wint altijd van externe stijlbladen, dus dit is een tweede,
-       sterkere beschermingslaag naast ensureCatColorRules(). */
+    /* v2-fix: naast kleur bleek ook de tekstgrootte te verspringen
+       (groot naar klein) - hetzelfde soort concurrentie, nu op
+       font-size. Alles wat we willen vastzetten, wordt hier in één
+       keer meegenomen. */
     var cats=E('materialCats'); if(!cats) return;
     var attr=findCatAttr(cats); if(!attr) return;
     cats.querySelectorAll('button['+attr+']').forEach(function(btn){
@@ -48892,6 +48889,9 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       var col=catColor(k);
       if(btn.style.getPropertyValue('background')!==col) btn.style.setProperty('background', col, 'important');
       if(btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
+      if(btn.style.getPropertyValue('font-size')!=='13px') btn.style.setProperty('font-size','13px','important');
+      if(btn.style.getPropertyValue('height')!=='44px') btn.style.setProperty('height','44px','important');
+      if(btn.style.getPropertyValue('color')!=='rgb(255, 255, 255)') btn.style.setProperty('color','#fff','important');
     });
     var bar=E('bns951ColorBar'); if(!bar) return;
     bar.querySelectorAll('button[data-bns951-target]').forEach(function(btn){
@@ -48934,7 +48934,15 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(attachObserver, 250);
   attachObserver();
   tick();
+  /* v1-fix: naast het reageren op wijzigingen (via de observer) blijkt
+     bij Amsterdam ook een lichte, doorlopende controle nodig - er zijn
+     hier meer en vaker terugkerende concurrerende systemen dan bij
+     Tapwagen (om de 700ms-2000ms), dus alleen reageren op wijzigingen
+     is niet snel genoeg om steeds "het laatste woord" te houden. Dit
+     is een lichte controle (alleen kleur/stijl bijwerken indien nodig,
+     geen zware herberekening), dus geen nieuw geflikker-risico. */
+  setInterval(function(){ try{ enforceInlineColors(); }catch(e){} }, 300);
 
-  try{ console.info('[BNS 951] Opgeruimde rubriekknoppen + kleuren-zoekbalk actief (v4, directe observatie + scroll).'); }catch(e){}
+  try{ console.info('[BNS 951] Opgeruimde rubriekknoppen + kleuren-zoekbalk actief (v5, directe observatie + doorlopende controle).'); }catch(e){}
 })();
 
