@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R27-TEST';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R28';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48697,3 +48697,163 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
 })();
 
+
+/* =========================================================
+   BNS 953 - Nette rubriekknoppen + kleuren-zoekbalk
+   Doel: dezelfde nette indeling en kleurenfunctie als Tapwagen. Bouwt
+   voort op bns-stabilizer.js (nu ook geladen in Amsterdam), die het
+   echte flikker-probleem oplost via animation:none/transition:none op
+   #materialList - dus deze module hoeft niet langer agressief te
+   concurreren met andere systemen, alleen nette, statische CSS toe te
+   voegen. Puur opmaak, raakt geen klik-logica of rubriek-data aan.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__BNS953_MATCAT_STYLE__) return;
+  window.__BNS953_MATCAT_STYLE__ = true;
+
+  function E(id){ return document.getElementById(id); }
+  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function U(v){ return String(v==null?'':v).trim().toUpperCase(); }
+
+  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
+  function findCatAttr(cats){
+    for(var i=0;i<ATTR_CANDIDATES.length;i++){
+      if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
+    }
+    return null;
+  }
+  function catColor(cat){
+    try{
+      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
+      var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
+      if(map[k]) return map[k];
+    }catch(e){}
+    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316'};
+    return def[U(cat)]||'#475569';
+  }
+
+  function injectLayoutCss(){
+    if(E('bns953LayoutCss')) return;
+    var s=document.createElement('style');
+    s.id='bns953LayoutCss';
+    s.textContent =
+      '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
+        'gap:8px!important;align-items:stretch!important;' +
+        'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
+        'min-height:0!important;overflow:visible!important;}\n' +
+      '#materialCats button{' +
+        'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
+        'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
+        'color:#fff!important;font-weight:800!important;font-size:13px!important;letter-spacing:.2px!important;' +
+        'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
+        'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
+      '#materialCats button::after{content:none!important;border:none!important;}\n' +
+      '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
+      '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
+        'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
+        'border-radius:12px!important;}\n' +
+      '#bns953ColorBar .bns953-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
+        'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
+      '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
+        'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
+        'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
+      '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+    document.head.appendChild(s);
+  }
+
+  var lastColorRuleKey='';
+  function ensureCatColorRules(){
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats); if(!attr) return;
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length) return;
+    var key=attr+'|'+list.join(',');
+    var s=E('bns953ColorRules');
+    if(!s){
+      s=document.createElement('style');
+      s.id='bns953ColorRules';
+      document.head.appendChild(s);
+    }
+    if(key!==lastColorRuleKey){
+      lastColorRuleKey=key;
+      var css=list.map(function(k){
+        var col=catColor(k);
+        var esc=H(k);
+        var selectors=ATTR_CANDIDATES.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
+        return selectors+'{background:'+col+'!important;}';
+      }).join('\n');
+      if(s.textContent!==css) s.textContent=css;
+    }
+    if(document.head.lastElementChild!==s) document.head.appendChild(s);
+    if(document.head.lastElementChild!==E('bns953LayoutCss')){} // volgorde-check niet nodig, aparte selectors
+  }
+
+  function buildColorBar(){
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats);
+    var bar=E('bns953ColorBar');
+    if(!attr){ if(bar) bar.remove(); return; }
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length){ if(bar) bar.remove(); return; }
+    var activeBtn=cats.querySelector('.active');
+    var activeCat=(activeBtn&&activeBtn.getAttribute(attr))||'';
+    var html='<span class="bns953-label">Zoek op kleur:</span>'+list.map(function(k){
+      var col=catColor(k);
+      return '<button type="button" title="'+H(k)+'" data-bns953-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
+        '" style="background:'+H(col)+'"></button>';
+    }).join('');
+    if(!bar){
+      bar=document.createElement('div');
+      bar.id='bns953ColorBar';
+      cats.parentNode.insertBefore(bar, cats.nextSibling);
+    }
+    bar.innerHTML=html;
+  }
+  document.addEventListener('click', function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    var b=t.closest('#bns953ColorBar [data-bns953-target]');
+    if(!b) return;
+    var cats=E('materialCats');
+    var attr=cats && findCatAttr(cats);
+    var twin=attr && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns953-target'))+'"]');
+    if(twin) twin.click();
+  }, true);
+
+  var lastCatsHtml='';
+  function tick(){
+    var cats=E('materialCats');
+    if(!cats) return;
+    try{ injectLayoutCss(); ensureCatColorRules(); }catch(e){}
+    var html=cats.innerHTML;
+    if(html===lastCatsHtml) return;
+    lastCatsHtml=html;
+    try{ buildColorBar(); }catch(e){}
+  }
+  var matCatsDebounce=null;
+  var matCatsObserver=new MutationObserver(function(){
+    if(matCatsDebounce) clearTimeout(matCatsDebounce);
+    matCatsDebounce=setTimeout(tick,150);
+  });
+  function attachObserver(){
+    var cats=E('materialCats');
+    if(cats && matCatsObserver.__target!==cats){
+      matCatsObserver.disconnect();
+      matCatsObserver.observe(cats,{childList:true,subtree:true});
+      matCatsObserver.__target=cats;
+    }
+  }
+  setInterval(attachObserver, 250);
+  attachObserver();
+  tick();
+
+  try{ console.info('[BNS 953] Nette rubriekknoppen + kleuren-zoekbalk actief (bouwt voort op bns-stabilizer.js).'); }catch(e){}
+})();
