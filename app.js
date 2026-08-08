@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R40';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R41';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -41378,7 +41378,16 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function looksLikeGoodFirebaseMaterials(list){
     var mats = cleanMaterials(list);
-    if(mats.length < 20) return false;
+    if(!mats.length) return false;
+    /* v1-fix: dit gooide voorheen de HELE lijst weg zodra er minder dan
+       20 materialen binnenkwamen - ook als dat gewoon een tijdelijk
+       onvolledige Firebase-uitlezing was (bijv. door de al langer
+       bekende verbindingsdruk), niet per se de oude testset. Het
+       gevolg was dat materiaal soms volledig leeg leek, terwijl er
+       gewoon een kleinere, maar wel geldige lijst binnenkwam. Nu wordt
+       alleen nog specifiek gekeken naar duidelijke tekenen van de oude,
+       verouderde testset (art_-ID's of "oude prijs"), ongeacht de
+       lengte van de lijst. */
     var old = 0, newish = 0, oldPrice = 0;
     mats.forEach(function(m){
       var id = matId(m);
