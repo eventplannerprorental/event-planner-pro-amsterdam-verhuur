@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R2';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R1b';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48644,29 +48644,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-  var ATTRS=['data-v838-cat','data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
-  function findAttr(box){
-    for(var i=0;i<ATTRS.length;i++){ if(box.querySelector('['+ATTRS[i]+']')) return ATTRS[i]; }
-    return null;
-  }
-  function catColorFromStorage(cat){
-    try{
-      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
-      var k=String(cat||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
-      if(map[k]) return map[k];
-    }catch(e){}
-    return null;
-  }
-  function applyColors(){
-    var box=E('materialCats'); if(!box) return;
-    var attr=findAttr(box); if(!attr) return;
-    box.querySelectorAll('['+attr+']').forEach(function(btn){
-      var cat=btn.getAttribute(attr);
-      var col=catColorFromStorage(cat);
-      if(col && btn.style.getPropertyValue('--cat-color')!==col) btn.style.setProperty('--cat-color', col);
-    });
-  }
-  function tick(){ try{ injectCss(); applyColors(); }catch(e){} }
+  function tick(){ try{ injectCss(); }catch(e){} }
   var debounce=null;
   var observer=new MutationObserver(function(){
     if(debounce) clearTimeout(debounce);
