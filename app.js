@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R3';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R4-TEST';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -46218,6 +46218,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
+  /* v1-fix (test op verzoek): BNS838 bestaat niet bij Tapwagen - daar
+     wint de volledige V611-renderer vanzelf, die zelf al ingebouwde
+     kleurondersteuning heeft. BNS838 forceert bij Amsterdam telkens
+     zijn eigen, kale versie zonder kleur-infrastructuur. Test: wat
+     gebeurt er als dit systeem hier ook niet meer ingrijpt. */
+  return;
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
@@ -48644,52 +48650,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-  var ATTRS=['data-v838-cat','data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
-  function findAttr(box){
-    for(var i=0;i<ATTRS.length;i++){ if(box.querySelector('['+ATTRS[i]+']')) return ATTRS[i]; }
-    return null;
-  }
-  function catColorFromStorage(cat){
-    try{
-      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
-      var k=String(cat||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
-      if(map[k]) return map[k];
-    }catch(e){}
-    return null;
-  }
-  var lastColorRuleKey='';
-  function ensureCatColorRules(){
-    /* Zelfde, bewezen aanpak als Tapwagen: vaste stijlregels per rubriek,
-       gekoppeld via een attribuutselector - raakt de knoppen zelf nooit
-       rechtstreeks aan (geen .style.setProperty op elementen), dus kan
-       niet botsen met wat Admin's eigen code apart met diezelfde
-       knoppen doet. Puur CSS, geen DOM-mutatie. */
-    var box=E('materialCats'); if(!box) return;
-    var attr=findAttr(box); if(!attr) return;
-    var list=[];
-    box.querySelectorAll('['+attr+']').forEach(function(btn){
-      var c=btn.getAttribute(attr);
-      if(c && list.indexOf(c)<0) list.push(c);
-    });
-    if(!list.length) return;
-    var key=attr+'|'+list.join(',');
-    var s=E('bns954ColorRules');
-    if(!s){
-      s=document.createElement('style');
-      s.id='bns954ColorRules';
-      document.head.appendChild(s);
-    }
-    if(key!==lastColorRuleKey){
-      var css=list.map(function(k){
-        var col=catColorFromStorage(k);
-        if(!col) return '';
-        return '#materialCats button['+attr+'="'+k+'"]{background:'+col+'!important;}';
-      }).filter(Boolean).join('\n');
-      if(css && s.textContent!==css){ s.textContent=css; lastColorRuleKey=key; }
-    }
-    if(document.head.lastElementChild!==s) document.head.appendChild(s);
-  }
-  function tick(){ try{ injectCss(); ensureCatColorRules(); }catch(e){} }
+  function tick(){ try{ injectCss(); }catch(e){} }
   var debounce=null;
   var observer=new MutationObserver(function(){
     if(debounce) clearTimeout(debounce);
