@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R39';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R40';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -561,6 +561,25 @@ ensure();
   window.AMS_V39_LOAD_MATERIALEN=loadMaterialsOnce;
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(loadMaterialsOnce,150); },{once:true});
   else setTimeout(loadMaterialsOnce,150);
+  /* v1-fix (op verzoek): als het materiaal na de eerste poging alsnog
+     leeg blijkt (bijv. door een slecht getimede Firebase-aanvraag
+     tijdens de bekende verbindingsdruk), gaf de "eenmalige" opzet
+     hiervoor geen tweede kans meer - de gebruiker moest zelf verversen.
+     Deze controle probeert het, alleen als het écht nog leeg is, een
+     paar keer opnieuw in de eerste minuut. */
+  var materialsRetryCount=0;
+  var materialsRetryTimer=setInterval(function(){
+    materialsRetryCount++;
+    if(materialsRetryCount>6){ clearInterval(materialsRetryTimer); return; }
+    try{
+      if(!Array.isArray(state.materials) || state.materials.length===0){
+        loadedOnceV39=false;
+        loadMaterialsOnce();
+      }else{
+        clearInterval(materialsRetryTimer);
+      }
+    }catch(e){}
+  }, 10000);
   console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
 (function AMS_V80_LOAD_ALERTS(){
@@ -604,12 +623,13 @@ ensure();
       console.warn('[Amsterdam v80] meldingen laden mislukt:',e);
     }
   }
-  /* v1-fix: dit haalde meldingen elke 20 seconden opnieuw volledig op,
-     iets wat Tapwagen niet heeft (die laadt maar 1x). Dat gaf een
-     doorlopende, herhalende staat-wijziging (inclusief save()) die
-     zichtbaar geflikker in andere schermen kan hebben bijgedragen.
-     Nu net als Tapwagen: alleen bij het openen. */
+  /* v2-fix: op verzoek teruggezet - het verwijderen hiervan kan een
+     onbedoeld "blijf het proberen"-vangnet hebben weggehaald. Als de
+     ene, eenmalige laadpoging net op een slecht moment valt (bijv.
+     tijdens de bekende Firebase-verbindingsdruk), bleef er zonder
+     herhaling niets meer over om dat op te vangen. */
   setTimeout(loadAlerts,400);
+  setInterval(loadAlerts,20000);
   window.AMS_V80_LOAD_ALERTS=loadAlerts;
 })();
 let pin='', user=null, chosen=[], editing=null, currentCat='', mode='active';
@@ -48719,10 +48739,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      leidende Firebase-data alsnog binnenkwam - dat voelde aan als
      "opdrachten zijn weg, komen na lang wachten terug". Nu veel sneller. */
   setTimeout(loadOrdersV47, 150);
-  /* v1-fix: de doorlopende herhaling (elke 30 sec) verwijderd - Tapwagen
-     heeft dit niet en laadt opdrachten maar 1x bij het openen. Gaf een
-     onnodige, herhalende volledige-databron-vernieuwing die kan hebben
-     bijgedragen aan zichtbaar geflikker elders op de pagina. */
+  /* v2-fix: op verzoek teruggezet - zelfde reden als bij meldingen: een
+     eenmalige poging die op een slecht moment valt, kreeg zonder
+     herhaling geen tweede kans meer om zich te herstellen. */
+  setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
 })();
