@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R5';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R6';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48632,12 +48632,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
           'min-height:0!important;overflow:visible!important;}\n' +
         '#materialCats button{' +
           'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
-          'margin:0!important;padding:0 12px!important;border-top:0!important;border-left:0!important;border-right:0!important;border-bottom-width:6px!important;border-bottom-style:solid!important;border-radius:10px!important;' +
-          'background:#475569!important;color:#fff!important;font-weight:800!important;' +
-          'font-size:13px!important;letter-spacing:.2px!important;' +
+          'margin:0!important;padding:0 12px!important;border-radius:10px!important;' +
+          'font-weight:800!important;font-size:13px!important;letter-spacing:.2px!important;' +
           'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
           'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
-        '#materialCats button::after{content:none!important;background:none!important;}\n' +
         '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
       document.head.appendChild(s);
     }
