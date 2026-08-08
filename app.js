@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R43';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R44';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -570,7 +570,7 @@ ensure();
   var materialsRetryCount=0;
   var materialsRetryTimer=setInterval(function(){
     materialsRetryCount++;
-    if(materialsRetryCount>6){ clearInterval(materialsRetryTimer); return; }
+    if(materialsRetryCount>20){ clearInterval(materialsRetryTimer); return; }
     try{
       if(!Array.isArray(state.materials) || state.materials.length===0){
         loadedOnceV39=false;
@@ -579,7 +579,7 @@ ensure();
         clearInterval(materialsRetryTimer);
       }
     }catch(e){}
-  }, 10000);
+  }, 3000);
   console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
 (function AMS_V80_LOAD_ALERTS(){
@@ -41471,6 +41471,21 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var t = ev.target;
       if(t && t.closest && t.closest('#adminBtn,.adminTab,[data-admin],#adminMaterials,#adminUsers')) setTimeout(function(){ pull('admin klik', false); }, 250);
     }, true);
+    /* v1-fix (op verzoek): als deze drie eerste pogingen alsnog leeg
+       teruggeven (bijv. door de bekende Firebase-verbindingsdruk), bleef
+       er verder niets meer over om dat op te vangen. Blijft daarom nog
+       een tijdje op de achtergrond doorproberen, alleen als het
+       materiaal er écht nog niet is. */
+    var retryCount=0;
+    var retryTimer=setInterval(function(){
+      retryCount++;
+      if(retryCount>12){ clearInterval(retryTimer); return; }
+      try{
+        var s=stateObj();
+        if(!s || !Array.isArray(s.materials) || s.materials.length===0) pull('achtergrond-herstel', true);
+        else clearInterval(retryTimer);
+      }catch(e){}
+    }, 5000);
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(start, 1000); });
   else setTimeout(start, 1000);
