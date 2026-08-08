@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R44';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R28';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -561,25 +561,6 @@ ensure();
   window.AMS_V39_LOAD_MATERIALEN=loadMaterialsOnce;
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(loadMaterialsOnce,150); },{once:true});
   else setTimeout(loadMaterialsOnce,150);
-  /* v1-fix (op verzoek): als het materiaal na de eerste poging alsnog
-     leeg blijkt (bijv. door een slecht getimede Firebase-aanvraag
-     tijdens de bekende verbindingsdruk), gaf de "eenmalige" opzet
-     hiervoor geen tweede kans meer - de gebruiker moest zelf verversen.
-     Deze controle probeert het, alleen als het écht nog leeg is, een
-     paar keer opnieuw in de eerste minuut. */
-  var materialsRetryCount=0;
-  var materialsRetryTimer=setInterval(function(){
-    materialsRetryCount++;
-    if(materialsRetryCount>20){ clearInterval(materialsRetryTimer); return; }
-    try{
-      if(!Array.isArray(state.materials) || state.materials.length===0){
-        loadedOnceV39=false;
-        loadMaterialsOnce();
-      }else{
-        clearInterval(materialsRetryTimer);
-      }
-    }catch(e){}
-  }, 3000);
   console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
 (function AMS_V80_LOAD_ALERTS(){
@@ -623,11 +604,6 @@ ensure();
       console.warn('[Amsterdam v80] meldingen laden mislukt:',e);
     }
   }
-  /* v2-fix: op verzoek teruggezet - het verwijderen hiervan kan een
-     onbedoeld "blijf het proberen"-vangnet hebben weggehaald. Als de
-     ene, eenmalige laadpoging net op een slecht moment valt (bijv.
-     tijdens de bekende Firebase-verbindingsdruk), bleef er zonder
-     herhaling niets meer over om dat op te vangen. */
   setTimeout(loadAlerts,400);
   setInterval(loadAlerts,20000);
   window.AMS_V80_LOAD_ALERTS=loadAlerts;
@@ -34182,16 +34158,7 @@ setTimeout(()=>{
     var c=txt(cat||window.currentCat||'TW').toUpperCase();
     var all=Array.from(new Set(materials().map(function(m){return txt(m.cat||'EXTRA').toUpperCase();}).filter(Boolean))).sort();
     if(all.indexOf(c)<0) c=all[0]||'TW';
-    /* v1-fix: dit overschreef hier de functie currentCat zelf met de
-       tekst-waarde c - de EERSTE aanroep werkte dan nog (hij was op dat
-       moment nog een functie), maar elke VOLGENDE aanroep crashte met
-       "currentCat is not a function", omdat currentCat inmiddels een
-       gewone tekst-waarde was geworden in plaats van een functie. Dat
-       liet het tekenen halverwege stoppen - vermoedelijk de daadwerkelijke
-       oorzaak van het herhaaldelijk leeg lijkende materiaal-scherm.
-       window.currentCat (een aparte eigenschap) volstaat om de gekozen
-       rubriek te onthouden, zonder de functie zelf te vernietigen. */
-    window.currentCat=c; return c;
+    try{ currentCat=c; }catch(e){} window.currentCat=c; return c;
   }
   function editingId(){ try{ if(editing) return txt(editing); }catch(e){} return txt(window.editing||''); }
   function editingNr(){ var n=E('orderNumber'); return txt(n&&n.value); }
@@ -34953,16 +34920,7 @@ setTimeout(()=>{
   function getState(){try{ if(typeof state!=='undefined'&&state&&Array.isArray(state.materials)) return state;}catch(e){} try{ if(window.state&&Array.isArray(window.state.materials)) return window.state;}catch(e){} return null;}
   function readJSON(k,def){try{var v=JSON.parse(localStorage.getItem(k)||''); return v&&typeof v==='object'?v:def;}catch(e){return def;}}
   function writeJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-  function colorMap(){
-    /* v1-fix: dit liet de oudere sleutel (COLOR_KEY, bns_rubriek_kleuren_v12_pro)
-       altijd winnen boven de nieuwere, actief-naar-Firebase-gesynchroniseerde
-       sleutel (COLOR_KEY2, bnsCatColors). Zodra COLOR_KEY ooit een kopie
-       kreeg (wat automatisch gebeurt bij elke kleurwijziging hieronder),
-       kon een latere, verse wijziging via bnsCatColors zo weer overschreven
-       worden door de oudere waarde - dat verklaarde waarom bestaande
-       kleuren niet meer te wijzigen leken. Nu wint bnsCatColors. */
-    var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},a,b);
-  }
+  function colorMap(){var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},b,a);}
   function setCatColor(c,col){c=cat(c); col=hex(col)||'#0ea5e9'; var m=colorMap(); m[c]=col; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{window.bnsCatColors=m;}catch(e){} }
   function removeCatColor(c){c=cat(c); var m=colorMap(); delete m[c]; delete m[c.toLowerCase()]; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{if(window.state&&window.state.settings){if(window.state.settings.catColors){delete window.state.settings.catColors[c];delete window.state.settings.catColors[c.toLowerCase()];}if(window.state.settings.categoryColors){delete window.state.settings.categoryColors[c];delete window.state.settings.categoryColors[c.toLowerCase()];}}}catch(e){} try{window.bnsCatColors=m;}catch(e){} }
   function getCatColor(c){c=cat(c); var m=colorMap(); return hex(m[c]||m[c.toLowerCase()]||'#0ea5e9');}
@@ -35352,11 +35310,7 @@ setTimeout(()=>{
       box.innerHTML='<p class="bns392-empty">Nog geen materiaal aangemaakt.</p>';
       return;
     }
-    var list=mats().filter(function(m){
-      if(!q) return catOf(m)===c;
-      var t=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
-      return t.indexOf(q)>=0;
-    });
+    var list=(q ? mats() : mats().filter(function(m){ return catOf(m)===c; })).filter(function(m){ return !q || JSON.stringify(m).toLowerCase().indexOf(q)>=0; });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return T(m.id)+':'+codeOf(m)+':'+nameOf(m)+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return codeOf(m)||T(m.id);}).join(',');
     renderCats();
     if(!force && sig===lastSig && box.querySelector('.bns392-row')) return;
@@ -35617,14 +35571,8 @@ setTimeout(()=>{
     });
   }
   function redraw(){
-    /* v1-fix: dit riep hier de GLOBALE materiaal/rubriek-tekenfunctie aan
-       met de rubriek die Admin op dat moment aan het bewerken was - niet
-       de rubriek van een eventuele, apart openstaande "Nieuwe opdracht".
-       Dat kon het materiaal-scherm daar leegtrekken of naar de verkeerde
-       rubriek laten springen, telkens wanneer in Admin een kleur werd
-       gewijzigd. adminRender() en refreshUI() (hieronder) werken al
-       veilig, rechtstreeks op Admin's eigen elementen, zonder de globale
-       materiaal-weergave aan te raken - dat volstaat. */
+    try { if (typeof window.renderCats === "function") window.renderCats(); } catch(e) {}
+    try { if (typeof window.renderMaterials === "function") window.renderMaterials(window.currentCat || currentCat()); } catch(e) {}
     try { if (typeof window.adminRender === "function") window.adminRender(); } catch(e) {}
     setTimeout(refreshUI, 60);
   }
@@ -41387,16 +41335,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function looksLikeGoodFirebaseMaterials(list){
     var mats = cleanMaterials(list);
-    if(!mats.length) return false;
-    /* v1-fix: dit gooide voorheen de HELE lijst weg zodra er minder dan
-       20 materialen binnenkwamen - ook als dat gewoon een tijdelijk
-       onvolledige Firebase-uitlezing was (bijv. door de al langer
-       bekende verbindingsdruk), niet per se de oude testset. Het
-       gevolg was dat materiaal soms volledig leeg leek, terwijl er
-       gewoon een kleinere, maar wel geldige lijst binnenkwam. Nu wordt
-       alleen nog specifiek gekeken naar duidelijke tekenen van de oude,
-       verouderde testset (art_-ID's of "oude prijs"), ongeacht de
-       lengte van de lijst. */
+    if(mats.length < 20) return false;
     var old = 0, newish = 0, oldPrice = 0;
     mats.forEach(function(m){
       var id = matId(m);
@@ -41471,21 +41410,6 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var t = ev.target;
       if(t && t.closest && t.closest('#adminBtn,.adminTab,[data-admin],#adminMaterials,#adminUsers')) setTimeout(function(){ pull('admin klik', false); }, 250);
     }, true);
-    /* v1-fix (op verzoek): als deze drie eerste pogingen alsnog leeg
-       teruggeven (bijv. door de bekende Firebase-verbindingsdruk), bleef
-       er verder niets meer over om dat op te vangen. Blijft daarom nog
-       een tijdje op de achtergrond doorproberen, alleen als het
-       materiaal er écht nog niet is. */
-    var retryCount=0;
-    var retryTimer=setInterval(function(){
-      retryCount++;
-      if(retryCount>12){ clearInterval(retryTimer); return; }
-      try{
-        var s=stateObj();
-        if(!s || !Array.isArray(s.materials) || s.materials.length===0) pull('achtergrond-herstel', true);
-        else clearInterval(retryTimer);
-      }catch(e){}
-    }, 5000);
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(start, 1000); });
   else setTimeout(start, 1000);
@@ -43048,8 +42972,9 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var c=setCat(cat);
     var q=L(E('materialSearch')&&E('materialSearch').value);
     var list=materials().filter(function(m){
-      if(!q) return catOf(m)===c;
-      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
+      if(catOf(m)!==c) return false;
+      if(!q) return true;
+      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName].map(T).join(' ').toLowerCase();
       return txt.indexOf(q)>=0;
     });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return (matId(m)||codeOf(m))+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return matId(m)||codeOf(m);}).join(',');
@@ -46477,11 +46402,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function lockRenderers(){
     if(locked) return;
     locked=true;
-    /* v2-fix: de v1-fix hierboven (omleiden naar V611) gaf juist meer
-       onrust - wisselde zichtbaar heen en weer tussen twee verschillende
-       weergaven, terwijl de oorspronkelijke, simpele versie tenminste
-       stabiel was (ook al miste die de kleur-badges). Teruggedraaid naar
-       het origineel; rust weegt zwaarder dan gedeeltelijk correct. */
     try{
       Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return calmRenderCats; }, set:function(v){ lastExternalRenderCats=v; } });
     }catch(e){ window.renderCats=calmRenderCats; }
@@ -48772,97 +48692,168 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      leidende Firebase-data alsnog binnenkwam - dat voelde aan als
      "opdrachten zijn weg, komen na lang wachten terug". Nu veel sneller. */
   setTimeout(loadOrdersV47, 150);
-  /* v2-fix: op verzoek teruggezet - zelfde reden als bij meldingen: een
-     eenmalige poging die op een slecht moment valt, kreeg zonder
-     herhaling geen tweede kans meer om zich te herstellen. */
   setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
 })();
 
 
-
-
 /* =========================================================
-   BNS 954 - Nette rubriekknoppen, zonder kleuren-logica
-   Doel: alleen de opmaak (nette rasterindeling, stabiele tekstgrootte)
-   behouden - dat werkte al rustig. Alle kleuren-opzoeklogica van
-   eerdere pogingen (BNS951/952/953) is hier bewust weggelaten, omdat
-   die herhaaldelijk samenviel met materiaal dat leeg leek te worden.
-   Puur CSS, raakt geen klik-logica, rubriek-data of kleuren aan.
+   BNS 953 - Nette rubriekknoppen + kleuren-zoekbalk
+   Doel: dezelfde nette indeling en kleurenfunctie als Tapwagen. Bouwt
+   voort op bns-stabilizer.js (nu ook geladen in Amsterdam), die het
+   echte flikker-probleem oplost via animation:none/transition:none op
+   #materialList - dus deze module hoeft niet langer agressief te
+   concurreren met andere systemen, alleen nette, statische CSS toe te
+   voegen. Puur opmaak, raakt geen klik-logica of rubriek-data aan.
    ========================================================= */
 (function(){
   'use strict';
-  if(window.__BNS954_MATCAT_LAYOUT__) return;
-  window.__BNS954_MATCAT_LAYOUT__ = true;
+  if(window.__BNS953_MATCAT_STYLE__) return;
+  window.__BNS953_MATCAT_STYLE__ = true;
 
   function E(id){ return document.getElementById(id); }
+  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function U(v){ return String(v==null?'':v).trim().toUpperCase(); }
 
-  function injectCss(){
-    var s=E('bns954Css');
+  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
+  function findCatAttr(cats){
+    for(var i=0;i<ATTR_CANDIDATES.length;i++){
+      if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
+    }
+    return null;
+  }
+  function catColor(cat){
+    try{
+      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
+      var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
+      if(map[k]) return map[k];
+    }catch(e){}
+    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316'};
+    return def[U(cat)]||'#475569';
+  }
+
+  function injectLayoutCss(){
+    if(E('bns953LayoutCss')) return;
+    var s=document.createElement('style');
+    s.id='bns953LayoutCss';
+    s.textContent =
+      '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
+        'gap:8px!important;align-items:stretch!important;' +
+        'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
+        'min-height:0!important;overflow:visible!important;}\n' +
+      '#materialCats button{' +
+        'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
+        'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
+        'color:#fff!important;font-weight:800!important;font-size:13px!important;letter-spacing:.2px!important;' +
+        'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
+        'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
+      '#materialCats button::after{content:none!important;border:none!important;}\n' +
+      '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
+      '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
+        'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
+        'border-radius:12px!important;}\n' +
+      '#bns953ColorBar .bns953-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
+        'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
+      '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
+        'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
+        'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
+      '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+    document.head.appendChild(s);
+  }
+
+  var lastColorRuleKey='';
+  function ensureCatColorRules(){
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats); if(!attr) return;
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length) return;
+    var key=attr+'|'+list.join(',');
+    var s=E('bns953ColorRules');
     if(!s){
       s=document.createElement('style');
-      s.id='bns954Css';
-      s.textContent =
-        '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
-          'gap:8px!important;align-items:stretch!important;' +
-          'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
-          'min-height:0!important;overflow:visible!important;}\n' +
-        '#materialCats button{' +
-          'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
-          'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
-          'background:var(--cat-color,#475569)!important;color:#fff!important;font-weight:800!important;' +
-          'font-size:13px!important;letter-spacing:.2px!important;' +
-          'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
-          'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
-        '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
-        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
+      s.id='bns953ColorRules';
       document.head.appendChild(s);
     }
+    if(key!==lastColorRuleKey){
+      lastColorRuleKey=key;
+      var css=list.map(function(k){
+        var col=catColor(k);
+        var esc=H(k);
+        var selectors=ATTR_CANDIDATES.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
+        return selectors+'{background:'+col+'!important;}';
+      }).join('\n');
+      if(s.textContent!==css) s.textContent=css;
+    }
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
+    if(document.head.lastElementChild!==E('bns953LayoutCss')){} // volgorde-check niet nodig, aparte selectors
   }
 
-  function tick(){ try{ injectCss(); }catch(e){} }
-
-  /* v1-fix (op verzoek): materiaal bleek soms leeg te tonen op het
-     "Nieuwe opdracht"-scherm, terwijl state.materials wel degelijk
-     gewoon gevuld was (bevestigd: 56 materialen aanwezig) - dus geen
-     dataverlies, maar een weergave die het niet toont. Vaak samenvallend
-     met het instellen van een kleur in Admin, via één van de vele,
-     verspreide admin-kleurenfuncties. In plaats van elk van die vele
-     plekken apart te moeten vinden, controleert dit periodiek: staat
-     het materiaal-vak zichtbaar leeg terwijl er wél materiaal bekend is?
-     Dan wordt gewoon opnieuw getekend met de juiste rubriek. */
-  function recoverIfEmpty(){
-    try{
-      var list=E('materialList');
-      var mats=(window.state && Array.isArray(window.state.materials)) ? window.state.materials : [];
-      if(!list || !mats.length) return;
-      var looksEmpty = list.children.length===0 || (list.textContent||'').trim().length===0;
-      if(!looksEmpty) return;
-      var cat = window.currentCat || (mats[0] && (mats[0].cat||mats[0].rubriek||mats[0].category)) || '';
-      if(typeof window.renderCats==='function') window.renderCats();
-      if(typeof window.renderMaterials==='function') window.renderMaterials(cat);
-      try{ console.info('[BNS 954] Materiaal-scherm leek leeg terwijl er data was - opnieuw getekend.'); }catch(e){}
-    }catch(e){}
+  function buildColorBar(){
+    var cats=E('materialCats'); if(!cats) return;
+    var attr=findCatAttr(cats);
+    var bar=E('bns953ColorBar');
+    if(!attr){ if(bar) bar.remove(); return; }
+    var list=[];
+    cats.querySelectorAll('['+attr+']').forEach(function(btn){
+      var c=btn.getAttribute(attr);
+      if(c && list.indexOf(c)<0) list.push(c);
+    });
+    if(!list.length){ if(bar) bar.remove(); return; }
+    var activeBtn=cats.querySelector('.active');
+    var activeCat=(activeBtn&&activeBtn.getAttribute(attr))||'';
+    var html='<span class="bns953-label">Zoek op kleur:</span>'+list.map(function(k){
+      var col=catColor(k);
+      return '<button type="button" title="'+H(k)+'" data-bns953-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
+        '" style="background:'+H(col)+'"></button>';
+    }).join('');
+    if(!bar){
+      bar=document.createElement('div');
+      bar.id='bns953ColorBar';
+      cats.parentNode.insertBefore(bar, cats.nextSibling);
+    }
+    bar.innerHTML=html;
   }
-  setInterval(recoverIfEmpty, 2000);
-  var debounce=null;
-  var observer=new MutationObserver(function(){
-    if(debounce) clearTimeout(debounce);
-    debounce=setTimeout(tick,150);
+  document.addEventListener('click', function(ev){
+    var t=ev.target; if(!t||!t.closest) return;
+    var b=t.closest('#bns953ColorBar [data-bns953-target]');
+    if(!b) return;
+    var cats=E('materialCats');
+    var attr=cats && findCatAttr(cats);
+    var twin=attr && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns953-target'))+'"]');
+    if(twin) twin.click();
+  }, true);
+
+  var lastCatsHtml='';
+  function tick(){
+    var cats=E('materialCats');
+    if(!cats) return;
+    try{ injectLayoutCss(); ensureCatColorRules(); }catch(e){}
+    var html=cats.innerHTML;
+    if(html===lastCatsHtml) return;
+    lastCatsHtml=html;
+    try{ buildColorBar(); }catch(e){}
+  }
+  var matCatsDebounce=null;
+  var matCatsObserver=new MutationObserver(function(){
+    if(matCatsDebounce) clearTimeout(matCatsDebounce);
+    matCatsDebounce=setTimeout(tick,150);
   });
   function attachObserver(){
     var cats=E('materialCats');
-    if(cats && observer.__target!==cats){
-      observer.disconnect();
-      observer.observe(cats,{childList:true,subtree:true});
-      observer.__target=cats;
+    if(cats && matCatsObserver.__target!==cats){
+      matCatsObserver.disconnect();
+      matCatsObserver.observe(cats,{childList:true,subtree:true});
+      matCatsObserver.__target=cats;
     }
   }
   setInterval(attachObserver, 250);
   attachObserver();
   tick();
 
-  try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica).'); }catch(e){}
+  try{ console.info('[BNS 953] Nette rubriekknoppen + kleuren-zoekbalk actief (bouwt voort op bns-stabilizer.js).'); }catch(e){}
 })();
