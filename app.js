@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R41';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R43';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -34182,7 +34182,16 @@ setTimeout(()=>{
     var c=txt(cat||window.currentCat||'TW').toUpperCase();
     var all=Array.from(new Set(materials().map(function(m){return txt(m.cat||'EXTRA').toUpperCase();}).filter(Boolean))).sort();
     if(all.indexOf(c)<0) c=all[0]||'TW';
-    try{ currentCat=c; }catch(e){} window.currentCat=c; return c;
+    /* v1-fix: dit overschreef hier de functie currentCat zelf met de
+       tekst-waarde c - de EERSTE aanroep werkte dan nog (hij was op dat
+       moment nog een functie), maar elke VOLGENDE aanroep crashte met
+       "currentCat is not a function", omdat currentCat inmiddels een
+       gewone tekst-waarde was geworden in plaats van een functie. Dat
+       liet het tekenen halverwege stoppen - vermoedelijk de daadwerkelijke
+       oorzaak van het herhaaldelijk leeg lijkende materiaal-scherm.
+       window.currentCat (een aparte eigenschap) volstaat om de gekozen
+       rubriek te onthouden, zonder de functie zelf te vernietigen. */
+    window.currentCat=c; return c;
   }
   function editingId(){ try{ if(editing) return txt(editing); }catch(e){} return txt(window.editing||''); }
   function editingNr(){ var n=E('orderNumber'); return txt(n&&n.value); }
@@ -48799,6 +48808,30 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
 
   function tick(){ try{ injectCss(); }catch(e){} }
+
+  /* v1-fix (op verzoek): materiaal bleek soms leeg te tonen op het
+     "Nieuwe opdracht"-scherm, terwijl state.materials wel degelijk
+     gewoon gevuld was (bevestigd: 56 materialen aanwezig) - dus geen
+     dataverlies, maar een weergave die het niet toont. Vaak samenvallend
+     met het instellen van een kleur in Admin, via één van de vele,
+     verspreide admin-kleurenfuncties. In plaats van elk van die vele
+     plekken apart te moeten vinden, controleert dit periodiek: staat
+     het materiaal-vak zichtbaar leeg terwijl er wél materiaal bekend is?
+     Dan wordt gewoon opnieuw getekend met de juiste rubriek. */
+  function recoverIfEmpty(){
+    try{
+      var list=E('materialList');
+      var mats=(window.state && Array.isArray(window.state.materials)) ? window.state.materials : [];
+      if(!list || !mats.length) return;
+      var looksEmpty = list.children.length===0 || (list.textContent||'').trim().length===0;
+      if(!looksEmpty) return;
+      var cat = window.currentCat || (mats[0] && (mats[0].cat||mats[0].rubriek||mats[0].category)) || '';
+      if(typeof window.renderCats==='function') window.renderCats();
+      if(typeof window.renderMaterials==='function') window.renderMaterials(cat);
+      try{ console.info('[BNS 954] Materiaal-scherm leek leeg terwijl er data was - opnieuw getekend.'); }catch(e){}
+    }catch(e){}
+  }
+  setInterval(recoverIfEmpty, 2000);
   var debounce=null;
   var observer=new MutationObserver(function(){
     if(debounce) clearTimeout(debounce);
