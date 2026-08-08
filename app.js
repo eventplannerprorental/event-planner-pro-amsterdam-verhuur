@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R36';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R38';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -35588,8 +35588,14 @@ setTimeout(()=>{
     });
   }
   function redraw(){
-    try { if (typeof window.renderCats === "function") window.renderCats(); } catch(e) {}
-    try { if (typeof window.renderMaterials === "function") window.renderMaterials(window.currentCat || currentCat()); } catch(e) {}
+    /* v1-fix: dit riep hier de GLOBALE materiaal/rubriek-tekenfunctie aan
+       met de rubriek die Admin op dat moment aan het bewerken was - niet
+       de rubriek van een eventuele, apart openstaande "Nieuwe opdracht".
+       Dat kon het materiaal-scherm daar leegtrekken of naar de verkeerde
+       rubriek laten springen, telkens wanneer in Admin een kleur werd
+       gewijzigd. adminRender() en refreshUI() (hieronder) werken al
+       veilig, rechtstreeks op Admin's eigen elementen, zonder de globale
+       materiaal-weergave aan te raken - dat volstaat. */
     try { if (typeof window.adminRender === "function") window.adminRender(); } catch(e) {}
     setTimeout(refreshUI, 60);
   }
@@ -48735,55 +48741,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 (function(){
   'use strict';
   if(window.__BNS953_MATCAT_STYLE__) return;
-  /* v1-fix: kleuren ingesteld via Admin schreven tot nu toe alleen naar
-     localStorage van de eigen browser, nooit naar Firebase - op één of
-     twee apparaten getest kwam dat dus nooit mee. Dit vangt het opslaan
-     van BEIDE bekende kleuren-sleutels centraal af en synchroniseert ze
-     ook naar Firestore, ongeacht welk van de Admin-schermen gebruikt
-     wordt om kleuren in te stellen. */
-  (function(){
-    if(window.__BNS953_COLORS_SYNC_HOOK__) return;
-    window.__BNS953_COLORS_SYNC_HOOK__ = true;
-    var KEYS=['bnsCatColors','bns_rubriek_kleuren_v12_pro'];
-    var origSetItem = localStorage.setItem.bind(localStorage);
-    localStorage.setItem = function(key, value){
-      var r = origSetItem(key, value);
-      if(KEYS.indexOf(key)>=0){
-        try{
-          if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
-            window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors_'+key), {data:value}).catch(function(){});
-          }
-        }catch(e){}
-      }
-      return r;
-    };
-    (async function(){
-      for(var tries=0; tries<10; tries++){
-        if(window.BNS && window.BNS.fs && window.BNS.db) break;
-        await new Promise(function(r){ setTimeout(r,500); });
-      }
-      try{
-        if(!(window.BNS && window.BNS.fs && window.BNS.db)) return;
-        for(var i=0;i<KEYS.length;i++){
-          var key=KEYS[i];
-          try{
-            var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','catColors_'+key));
-            if(snap && snap.exists && snap.exists()){
-              var remote = snap.data();
-              if(remote && remote.data){
-                var local = {};
-                try{ local = JSON.parse(localStorage.getItem(key)||'{}'); }catch(e){}
-                var remoteObj = {};
-                try{ remoteObj = JSON.parse(remote.data||'{}'); }catch(e){}
-                var merged = Object.assign({}, remoteObj, local);
-                origSetItem(key, JSON.stringify(merged));
-              }
-            }
-          }catch(e){}
-        }
-      }catch(e){}
-    })();
-  })();
   window.__BNS953_MATCAT_STYLE__ = true;
 
   function E(id){ return document.getElementById(id); }
@@ -48851,51 +48808,29 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-  var lastColorRuleKey='';
-  function ensureCatColorRules(){
-    var cats=E('materialCats'); if(!cats) return;
-    var attr=findCatAttr(cats); if(!attr) return;
-    var list=[];
-    cats.querySelectorAll('['+attr+']').forEach(function(btn){
-      var c=btn.getAttribute(attr);
-      if(c && list.indexOf(c)<0) list.push(c);
-    });
-    if(!list.length) return;
-    var key=attr+'|'+list.join(',');
-    var s=E('bns953ColorRules');
-    if(!s){
-      s=document.createElement('style');
-      s.id='bns953ColorRules';
-      document.head.appendChild(s);
-    }
-    if(key!==lastColorRuleKey){
-      lastColorRuleKey=key;
-      var css=list.map(function(k){
-        var col=catColor(k);
-        var esc=H(k);
-        var selectors=ATTR_CANDIDATES.map(function(a){ return '#materialCats button['+a+'="'+esc+'"]'; }).join(',');
-        return selectors+'{background:'+col+'!important;}';
-      }).join('\n');
-      if(s.textContent!==css) s.textContent=css;
-    }
-    if(document.head.lastElementChild!==s) document.head.appendChild(s);
-  }
-
   function buildColorBar(){
     var cats=E('materialCats'); if(!cats) return;
     var attr=findCatAttr(cats);
     var bar=E('bns953ColorBar');
     if(!attr){ if(bar) bar.remove(); return; }
     var list=[];
+    var colorFor={};
     cats.querySelectorAll('['+attr+']').forEach(function(btn){
       var c=btn.getAttribute(attr);
-      if(c && list.indexOf(c)<0) list.push(c);
+      if(c && list.indexOf(c)<0){
+        list.push(c);
+        /* v1-fix: hier ook de al-werkende, bestaande kleur van de knop
+           zelf overnemen (net als de knoppen-opmaak), in plaats van
+           zelf opnieuw te proberen op te zoeken welke kleur erbij hoort. */
+        var cs=getComputedStyle(btn);
+        colorFor[c]=cs.backgroundColor||cs.borderBottomColor||'#475569';
+      }
     });
     if(!list.length){ if(bar) bar.remove(); return; }
     var activeBtn=cats.querySelector('.active');
     var activeCat=(activeBtn&&activeBtn.getAttribute(attr))||'';
     var html='<span class="bns953-label">Zoek op kleur:</span>'+list.map(function(k){
-      var col=catColor(k);
+      var col=colorFor[k]||'#475569';
       return '<button type="button" title="'+H(k)+'" data-bns953-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
         '" style="background:'+H(col)+'"></button>';
     }).join('');
@@ -48920,7 +48855,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function tick(){
     var cats=E('materialCats');
     if(!cats) return;
-    try{ injectLayoutCss(); ensureCatColorRules(); }catch(e){}
+    try{ injectLayoutCss(); }catch(e){}
     var html=cats.innerHTML;
     if(html===lastCatsHtml) return;
     lastCatsHtml=html;
