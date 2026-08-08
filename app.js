@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-28-R2';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R1';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -1248,6 +1248,7 @@ function cancel(oid){
   if(o){
     o.status='Geannuleerd';
     save();
+    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders()
   }
 }
@@ -1256,6 +1257,7 @@ function restore(oid){
   if(o){
     o.status='Opdracht';
     save();
+    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders()
   }
 }
@@ -1264,6 +1266,7 @@ function markDone(oid){
   if(o){
     o.status='Uitgevoerd';
     save();
+    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders();
     renderDashboard();
   }
@@ -34104,7 +34107,7 @@ setTimeout(()=>{
     var c=txt(cat||window.currentCat||'TW').toUpperCase();
     var all=Array.from(new Set(materials().map(function(m){return txt(m.cat||'EXTRA').toUpperCase();}).filter(Boolean))).sort();
     if(all.indexOf(c)<0) c=all[0]||'TW';
-    try{ currentCat=c; }catch(e){} window.currentCat=c; return c;
+    window.currentCat=c; return c;
   }
   function editingId(){ try{ if(editing) return txt(editing); }catch(e){} return txt(window.editing||''); }
   function editingNr(){ var n=E('orderNumber'); return txt(n&&n.value); }
@@ -35256,7 +35259,11 @@ setTimeout(()=>{
       box.innerHTML='<p class="bns392-empty">Nog geen materiaal aangemaakt.</p>';
       return;
     }
-    var list=(q ? mats() : mats().filter(function(m){ return catOf(m)===c; })).filter(function(m){ return !q || JSON.stringify(m).toLowerCase().indexOf(q)>=0; });
+    var list=mats().filter(function(m){
+      if(!q) return catOf(m)===c;
+      var t=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
+      return t.indexOf(q)>=0;
+    });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return T(m.id)+':'+codeOf(m)+':'+nameOf(m)+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return codeOf(m)||T(m.id);}).join(',');
     renderCats();
     if(!force && sig===lastSig && box.querySelector('.bns392-row')) return;
@@ -35511,8 +35518,6 @@ setTimeout(()=>{
     });
   }
   function redraw(){
-    try { if (typeof window.renderCats === "function") window.renderCats(); } catch(e) {}
-    try { if (typeof window.renderMaterials === "function") window.renderMaterials(window.currentCat || currentCat()); } catch(e) {}
     try { if (typeof window.adminRender === "function") window.adminRender(); } catch(e) {}
     setTimeout(refreshUI, 60);
   }
@@ -41267,7 +41272,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function looksLikeGoodFirebaseMaterials(list){
     var mats = cleanMaterials(list);
-    if(mats.length < 20) return false;
+    if(!mats.length) return false;
     var old = 0, newish = 0, oldPrice = 0;
     mats.forEach(function(m){
       var id = matId(m);
@@ -41742,7 +41747,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function isSafeList(mats){
     mats = A(mats).filter(isRealMat);
-    if(mats.length < 20) return false;
+    if(!mats.length) return false;
     var art = 0, newish = 0, oldPrice = 0;
     mats.forEach(function(m){
       var id = matId(m);
@@ -42900,9 +42905,8 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var c=setCat(cat);
     var q=L(E('materialSearch')&&E('materialSearch').value);
     var list=materials().filter(function(m){
-      if(catOf(m)!==c) return false;
-      if(!q) return true;
-      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName].map(T).join(' ').toLowerCase();
+      if(!q) return catOf(m)===c;
+      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
       return txt.indexOf(q)>=0;
     });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return (matId(m)||codeOf(m))+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return matId(m)||codeOf(m);}).join(',');
@@ -45278,6 +45282,22 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   /* --- 4. 14-dagen backup --- */
   var DAY_MS = 86400000;
+  var BK_HOUR = 17; // vaste tijd - pas na sluitingstijd back-uppen, niet meteen bij elke pagina-opening
+  function bkSleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
+  async function bkClaimSharedLock(day, t){
+    try{
+      var ref = t.fs.doc(t.db,'backups','_lock');
+      var snap = await t.fs.getDoc(ref);
+      var data = snap.exists() ? snap.data() : {};
+      if(data && data.day === day) return false;
+      await bkSleep(300 + Math.floor(Math.random()*1200));
+      var snap2 = await t.fs.getDoc(ref);
+      var data2 = snap2.exists() ? snap2.data() : {};
+      if(data2 && data2.day === day) return false;
+      await t.fs.setDoc(ref, {day:day, claimedAt:new Date().toISOString()}, {merge:false});
+      return true;
+    }catch(e){ return false; }
+  }
   var CHUNK  = 400000;
   var BK_KEY = 'bns767_backup_day';
   var VER    = 'bns767';
@@ -45329,6 +45349,10 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var day = new Date().toISOString().slice(0,10);
     if(!force && localStorage.getItem(BK_KEY) === day) return;
     var t = await bkGetFb(); if(!t){ bkLog('Firebase niet beschikbaar'); return; }
+    if(!force){
+      var claimed = await bkClaimSharedLock(day, t);
+      if(!claimed){ localStorage.setItem(BK_KEY, day); return; }
+    }
     try{
       var orders    = await bkReadCol('orders');
       var materials = await bkReadCol('materials');
@@ -45362,8 +45386,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.BNS = window.BNS || {};
   window.BNS.runBackup767 = function(){ return runBackup(true); };
 
-  setTimeout(function(){ runBackup(false); }, 6000);
-  setInterval(function(){ runBackup(false); }, 30*60*1000);
+  function bkMaybeRunScheduled(){
+    var now = new Date();
+    if(now.getHours() >= BK_HOUR) runBackup(false);
+  }
+  setTimeout(bkMaybeRunScheduled, 30000);
+  setInterval(bkMaybeRunScheduled, 10*60*1000);
 
   console.info('[BNS 767] Definitieve fix actief: state-sync, nummerbescherming, 14-dagen backup.');
 })();
@@ -48575,4 +48603,64 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
+})();
+
+/* =========================================================
+   BNS 954 - Nette rubriekknoppen, zonder kleuren-logica
+   Doel: alleen de opmaak (nette rasterindeling, stabiele tekstgrootte)
+   toevoegen. Puur CSS, raakt geen klik-logica, rubriek-data, kleuren
+   of Firebase aan. Toont wel de kleur als het bestaande systeem die
+   zelf al correct instelt (via --cat-color), zonder dat zelf op te
+   zoeken of te overschrijven.
+   ========================================================= */
+(function(){
+  'use strict';
+  if(window.__BNS954_MATCAT_LAYOUT__) return;
+  window.__BNS954_MATCAT_LAYOUT__ = true;
+
+  function E(id){ return document.getElementById(id); }
+
+  function injectCss(){
+    var s=E('bns954Css');
+    if(!s){
+      s=document.createElement('style');
+      s.id='bns954Css';
+      s.textContent =
+        '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
+          'gap:8px!important;align-items:stretch!important;' +
+          'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
+          'min-height:0!important;overflow:visible!important;}\n' +
+        '#materialCats button{' +
+          'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
+          'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
+          'background:var(--cat-color,#475569)!important;color:#fff!important;font-weight:800!important;' +
+          'font-size:13px!important;letter-spacing:.2px!important;' +
+          'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
+          'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
+        '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
+        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
+      document.head.appendChild(s);
+    }
+    if(document.head.lastElementChild!==s) document.head.appendChild(s);
+  }
+
+  function tick(){ try{ injectCss(); }catch(e){} }
+  var debounce=null;
+  var observer=new MutationObserver(function(){
+    if(debounce) clearTimeout(debounce);
+    debounce=setTimeout(tick,150);
+  });
+  function attachObserver(){
+    var cats=E('materialCats');
+    if(cats && observer.__target!==cats){
+      observer.disconnect();
+      observer.observe(cats,{childList:true,subtree:true});
+      observer.__target=cats;
+    }
+  }
+  setInterval(attachObserver, 250);
+  attachObserver();
+  tick();
+
+  try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica, geen extra Firebase-aanroepen).'); }catch(e){}
 })();
