@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R7';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R8';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48644,7 +48644,19 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-  function tick(){ try{ injectCss(); }catch(e){} }
+  function spreadBorderColorToBackground(){
+    var box=E('materialCats'); if(!box) return;
+    var btns=box.querySelectorAll('button');
+    for(var i=0;i<btns.length;i++){
+      var btn=btns[i];
+      var cs=getComputedStyle(btn);
+      var col=cs.borderBottomColor||cs.borderTopColor||cs.borderLeftColor||cs.borderRightColor;
+      if(col && col!=='rgba(0, 0, 0, 0)' && col!=='transparent'){
+        if(btn.style.getPropertyValue('background-color')!==col) btn.style.setProperty('background-color', col, 'important');
+      }
+    }
+  }
+  function tick(){ try{ injectCss(); spreadBorderColorToBackground(); }catch(e){} }
   var debounce=null;
   var observer=new MutationObserver(function(){
     if(debounce) clearTimeout(debounce);
@@ -48661,6 +48673,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(attachObserver, 250);
   attachObserver();
   tick();
+  setInterval(tick, 1000);
 
   try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica, geen extra Firebase-aanroepen).'); }catch(e){}
 })();
