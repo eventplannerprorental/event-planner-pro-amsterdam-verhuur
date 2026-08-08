@@ -132,7 +132,7 @@
        </div>
       </label>
       <label>Titel<input id="orderTitle"/></label>
-      <label>Transport wordt uitgevoerd door<input id="orderBrand"/></label>
+      <label>Uitstraling / merk<input id="orderBrand"/></label>
      </div>
      <div class="tabs">
       <button class="worktab active" data-tab="customerPanel">Klant</button>
@@ -396,9 +396,6 @@
   <!-- v840: firebase-sync.js blijft UIT om oude Firestore-sync niet te starten. -->
   <!-- v43: licentiecontrole toegevoegd. Laadt NA app.js, verandert de bestaande scriptvolgorde niet. -->
   <script src="license-overlay.js"></script>
-  <!-- v1-fix: bns-stabilizer.js toegevoegd - dit bestand bestond al in Tapwagen en lost daar precies het
-       materiaal-flikker-probleem op ("34 versies van renderMaterials"), maar werd hier nooit geladen. -->
-  <script>document.write('<script src="bns-stabilizer.js?v=' + Date.now() + '"><\/script>');</script>
 
  </body>
 </html>

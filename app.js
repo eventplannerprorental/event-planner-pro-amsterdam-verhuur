@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R45';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-07-28-R2';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -561,25 +561,6 @@ ensure();
   window.AMS_V39_LOAD_MATERIALEN=loadMaterialsOnce;
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ setTimeout(loadMaterialsOnce,150); },{once:true});
   else setTimeout(loadMaterialsOnce,150);
-  /* v1-fix (op verzoek): als het materiaal na de eerste poging alsnog
-     leeg blijkt (bijv. door een slecht getimede Firebase-aanvraag
-     tijdens de bekende verbindingsdruk), gaf de "eenmalige" opzet
-     hiervoor geen tweede kans meer - de gebruiker moest zelf verversen.
-     Deze controle probeert het, alleen als het écht nog leeg is, een
-     paar keer opnieuw in de eerste minuut. */
-  var materialsRetryCount=0;
-  var materialsRetryTimer=setInterval(function(){
-    materialsRetryCount++;
-    if(materialsRetryCount>20){ clearInterval(materialsRetryTimer); return; }
-    try{
-      if(!Array.isArray(state.materials) || state.materials.length===0){
-        loadedOnceV39=false;
-        loadMaterialsOnce();
-      }else{
-        clearInterval(materialsRetryTimer);
-      }
-    }catch(e){}
-  }, 3000);
   console.info('[Amsterdam v39] Eén materiaalroute, leesbare Firebase-boom en terugleesfunctie actief.');
 })();
 (function AMS_V80_LOAD_ALERTS(){
@@ -623,11 +604,6 @@ ensure();
       console.warn('[Amsterdam v80] meldingen laden mislukt:',e);
     }
   }
-  /* v2-fix: op verzoek teruggezet - het verwijderen hiervan kan een
-     onbedoeld "blijf het proberen"-vangnet hebben weggehaald. Als de
-     ene, eenmalige laadpoging net op een slecht moment valt (bijv.
-     tijdens de bekende Firebase-verbindingsdruk), bleef er zonder
-     herhaling niets meer over om dat op te vangen. */
   setTimeout(loadAlerts,400);
   setInterval(loadAlerts,20000);
   window.AMS_V80_LOAD_ALERTS=loadAlerts;
@@ -1272,14 +1248,6 @@ function cancel(oid){
   if(o){
     o.status='Geannuleerd';
     save();
-    /* v1-fix: dit sloeg de annulering tot nu toe alleen lokaal op. Zodra
-       de app op de achtergrond opnieuw met Firebase synchroniseerde, kon
-       de oude, nooit-bijgewerkte status daar gewoon weer terugkomen -
-       en daarmee ook de materiaal-reservering. Nu wordt de wijziging ook
-       echt naar Firebase geschreven. Zelfde fix als bij Tapwagen. */
-    try{
-      if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o);
-    }catch(e){}
     renderOrders()
   }
 }
@@ -1288,7 +1256,6 @@ function restore(oid){
   if(o){
     o.status='Opdracht';
     save();
-    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders()
   }
 }
@@ -1297,7 +1264,6 @@ function markDone(oid){
   if(o){
     o.status='Uitgevoerd';
     save();
-    try{ if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o); }catch(e){}
     renderOrders();
     renderDashboard();
   }
@@ -1728,7 +1694,7 @@ OPDRACHTBEVESTIGING
 Opdracht nr: ${orderNumber.value}
 Status: ${orderStatus.value}
 Titel: ${orderTitle.value || ''}
-Transport wordt uitgevoerd door: ${orderBrand.value || ''}
+Merk/biermerk: ${orderBrand.value || ''}
 
 KLANT
 -----
@@ -25364,9 +25330,6 @@ setTimeout(()=>{
       if(L(o.status)==='geannuleerd') o.status='Verwijderd';
       normalizeOrder(o, true);
       saveLocal();
-      try{
-        if(window.BNS && typeof window.BNS.syncOrder==='function') window.BNS.syncOrder(o);
-      }catch(e){}
     }
     setTimeout(function(){
       try{
@@ -32371,24 +32334,6 @@ setTimeout(()=>{
       // Ook naar state.settings.invoice voor docHtml83
       var s = (typeof state!=='undefined'&&state)?state:null;
       if(s){ s.settings=s.settings||{}; s.settings.invoice=Object.assign(s.settings.invoice||{},d); if(typeof save==='function')save(); }
-      /* v1-fix: dit sloeg de Huisstijl/factuur-instellingen tot nu toe
-         ALLEEN lokaal op (localStorage/state) - nooit naar Firebase zelf.
-         Ze bestonden dus alleen in de browser waarin ze werden ingevuld,
-         en gingen verloren zodra localStorage leegraakte (bijv. na een
-         update, cache-wissing, of op een ander apparaat). Nu wordt ook
-         naar Firestore geschreven - dezelfde database die opdrachten via
-         window.BNS.syncOrder al gebruiken, voor consistentie. */
-      try{
-        if(window.BNS && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc && window.BNS.db){
-          window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'), d).catch(function(){});
-        } else if(typeof initFirebaseBNS==='function'){
-          initFirebaseBNS().then(function(ok){
-            if(ok && window.BNS.fs && window.BNS.fs.setDoc && window.BNS.fs.doc){
-              window.BNS.fs.setDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'), d).catch(function(){});
-            }
-          }).catch(function(){});
-        }
-      }catch(e){}
     } catch(e){}
   }
 
@@ -32468,29 +32413,6 @@ setTimeout(()=>{
     var d = inv();
     var map = {v361_companyName:'companyName',v361_phone:'phone',v361_email:'email',v361_website:'website',v361_address:'address',v361_kvk:'kvk',v361_btw:'btw',v361_iban:'iban',v361_accent:'accent',v361_layout:'layout',v361_textOffer:'textOffer',v361_textConfirm:'textConfirm',v361_textInvoice:'textInvoice',v361_footer:'footer',v361_invoiceFooter:'invoiceFooter',v361_fontPreset:'fontPreset',v361_fontBody:'fontBody',v361_fontHeading:'fontHeading',v361_fontTable:'fontTable',v361_fontTotal:'fontTotal'};
     Object.keys(map).forEach(function(id){ var el=E(id); if(el && d[map[id]]!=null) el.value=d[map[id]]; });
-    /* v1-fix: dit las tot nu toe alleen uit localStorage. Als dat leeg is
-       (ander apparaat, cache gewist, na een update) leek het alsof de
-       instellingen weg waren, ook al stonden ze soms al wel in Firebase
-       via een eerdere handmatige poging elders. Nu wordt Firebase er ook
-       bij gehaald en, indien aanwezig, gebruikt om het formulier alsnog
-       te vullen en de lokale kopie bij te werken. */
-    try{
-      (async function(){
-        try{
-          if(!(window.BNS && window.BNS.fs && window.BNS.db) && typeof initFirebaseBNS==='function'){
-            await initFirebaseBNS();
-          }
-          if(!(window.BNS && window.BNS.fs && window.BNS.fs.getDoc && window.BNS.fs.doc && window.BNS.db)) return;
-          var snap = await window.BNS.fs.getDoc(window.BNS.fs.doc(window.BNS.db,'settings','invoice'));
-          var remote = (snap && snap.exists && snap.exists()) ? snap.data() : null;
-          if(!remote || typeof remote!=='object') return;
-          var merged=Object.assign({},remote,inv());
-          try{ localStorage.setItem(INV_KEY, JSON.stringify(merged)); }catch(e){}
-          try{ if(typeof state!=='undefined' && state){ state.settings=state.settings||{}; state.settings.invoice=merged; } }catch(e){}
-          Object.keys(map).forEach(function(id){ var el=E(id); if(el && !el.value && merged[map[id]]!=null) el.value=merged[map[id]]; });
-        }catch(e){}
-      })();
-    }catch(e){}
     if(E('v361_invoiceFooter') && !E('v361_invoiceFooter').value) E('v361_invoiceFooter').value='Wij ontvangen uw betaling graag uiterlijk 8 dagen vóór aanvang van uw evenement op rekeningnummer NL97 ABNA 0409 1266 75.';
     if(E('v361_accent')&&!d.accent) E('v361_accent').value='#2563eb';
     if(E('v361_fontPreset')&&!d.fontPreset) E('v361_fontPreset').value='normal';
@@ -34182,16 +34104,7 @@ setTimeout(()=>{
     var c=txt(cat||window.currentCat||'TW').toUpperCase();
     var all=Array.from(new Set(materials().map(function(m){return txt(m.cat||'EXTRA').toUpperCase();}).filter(Boolean))).sort();
     if(all.indexOf(c)<0) c=all[0]||'TW';
-    /* v1-fix: dit overschreef hier de functie currentCat zelf met de
-       tekst-waarde c - de EERSTE aanroep werkte dan nog (hij was op dat
-       moment nog een functie), maar elke VOLGENDE aanroep crashte met
-       "currentCat is not a function", omdat currentCat inmiddels een
-       gewone tekst-waarde was geworden in plaats van een functie. Dat
-       liet het tekenen halverwege stoppen - vermoedelijk de daadwerkelijke
-       oorzaak van het herhaaldelijk leeg lijkende materiaal-scherm.
-       window.currentCat (een aparte eigenschap) volstaat om de gekozen
-       rubriek te onthouden, zonder de functie zelf te vernietigen. */
-    window.currentCat=c; return c;
+    try{ currentCat=c; }catch(e){} window.currentCat=c; return c;
   }
   function editingId(){ try{ if(editing) return txt(editing); }catch(e){} return txt(window.editing||''); }
   function editingNr(){ var n=E('orderNumber'); return txt(n&&n.value); }
@@ -34953,16 +34866,7 @@ setTimeout(()=>{
   function getState(){try{ if(typeof state!=='undefined'&&state&&Array.isArray(state.materials)) return state;}catch(e){} try{ if(window.state&&Array.isArray(window.state.materials)) return window.state;}catch(e){} return null;}
   function readJSON(k,def){try{var v=JSON.parse(localStorage.getItem(k)||''); return v&&typeof v==='object'?v:def;}catch(e){return def;}}
   function writeJSON(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
-  function colorMap(){
-    /* v1-fix: dit liet de oudere sleutel (COLOR_KEY, bns_rubriek_kleuren_v12_pro)
-       altijd winnen boven de nieuwere, actief-naar-Firebase-gesynchroniseerde
-       sleutel (COLOR_KEY2, bnsCatColors). Zodra COLOR_KEY ooit een kopie
-       kreeg (wat automatisch gebeurt bij elke kleurwijziging hieronder),
-       kon een latere, verse wijziging via bnsCatColors zo weer overschreven
-       worden door de oudere waarde - dat verklaarde waarom bestaande
-       kleuren niet meer te wijzigen leken. Nu wint bnsCatColors. */
-    var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},a,b);
-  }
+  function colorMap(){var a=readJSON(COLOR_KEY,{}), b=readJSON(COLOR_KEY2,{}); return Object.assign({},b,a);}
   function setCatColor(c,col){c=cat(c); col=hex(col)||'#0ea5e9'; var m=colorMap(); m[c]=col; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{window.bnsCatColors=m;}catch(e){} }
   function removeCatColor(c){c=cat(c); var m=colorMap(); delete m[c]; delete m[c.toLowerCase()]; writeJSON(COLOR_KEY,m); writeJSON(COLOR_KEY2,m); try{if(window.state&&window.state.settings){if(window.state.settings.catColors){delete window.state.settings.catColors[c];delete window.state.settings.catColors[c.toLowerCase()];}if(window.state.settings.categoryColors){delete window.state.settings.categoryColors[c];delete window.state.settings.categoryColors[c.toLowerCase()];}}}catch(e){} try{window.bnsCatColors=m;}catch(e){} }
   function getCatColor(c){c=cat(c); var m=colorMap(); return hex(m[c]||m[c.toLowerCase()]||'#0ea5e9');}
@@ -35352,11 +35256,7 @@ setTimeout(()=>{
       box.innerHTML='<p class="bns392-empty">Nog geen materiaal aangemaakt.</p>';
       return;
     }
-    var list=mats().filter(function(m){
-      if(!q) return catOf(m)===c;
-      var t=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
-      return t.indexOf(q)>=0;
-    });
+    var list=(q ? mats() : mats().filter(function(m){ return catOf(m)===c; })).filter(function(m){ return !q || JSON.stringify(m).toLowerCase().indexOf(q)>=0; });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return T(m.id)+':'+codeOf(m)+':'+nameOf(m)+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return codeOf(m)||T(m.id);}).join(',');
     renderCats();
     if(!force && sig===lastSig && box.querySelector('.bns392-row')) return;
@@ -35412,10 +35312,6 @@ setTimeout(()=>{
     document.head.appendChild(css);
   }
   function expose(){
-    /* v3-fix: opnieuw uitgeschakeld, dit keer zonder enige eigen module
-       erbij - test of alleen V611 (zoals bij Tapwagen) hier wel stabiel
-       is wanneer er niets anders meespeelt, ook niet van mijn kant. */
-    return;
     installCss();
     renderMaterials.__bnsMatDebounced=true; renderMaterials.__bnsV392=true;
     toggleMaterial.__bnsMatDebounced=true; toggleMaterial.__bnsV392=true;
@@ -35454,7 +35350,6 @@ setTimeout(()=>{
   function boot(){ schedule(window.currentCat||firstCat(),true); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){setTimeout(boot,300);}); else setTimeout(boot,150);
   setInterval(function(){
-    if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return;
     expose();
     window.__bns393MaterialLock = true;
     var box=E('materialList');
@@ -35476,7 +35371,6 @@ setTimeout(()=>{
   var lastExpose = 0;
   function exposeOnce(){
     if(!window.BNS_V392) return;
-    if(window.BNS_V611 && typeof window.BNS_V611.renderMaterials==='function') return;
     var now = Date.now();
     if(now - lastExpose < 900) return;
     lastExpose = now;
@@ -35617,14 +35511,8 @@ setTimeout(()=>{
     });
   }
   function redraw(){
-    /* v1-fix: dit riep hier de GLOBALE materiaal/rubriek-tekenfunctie aan
-       met de rubriek die Admin op dat moment aan het bewerken was - niet
-       de rubriek van een eventuele, apart openstaande "Nieuwe opdracht".
-       Dat kon het materiaal-scherm daar leegtrekken of naar de verkeerde
-       rubriek laten springen, telkens wanneer in Admin een kleur werd
-       gewijzigd. adminRender() en refreshUI() (hieronder) werken al
-       veilig, rechtstreeks op Admin's eigen elementen, zonder de globale
-       materiaal-weergave aan te raken - dat volstaat. */
+    try { if (typeof window.renderCats === "function") window.renderCats(); } catch(e) {}
+    try { if (typeof window.renderMaterials === "function") window.renderMaterials(window.currentCat || currentCat()); } catch(e) {}
     try { if (typeof window.adminRender === "function") window.adminRender(); } catch(e) {}
     setTimeout(refreshUI, 60);
   }
@@ -36429,7 +36317,7 @@ setTimeout(()=>{
   function alertMatch(a,o){ return String(a.orderId||a.linkedOrder||'')===String(o.id||'') || String(a.orderNumber||a.linkedOrderNumber||'')===String(o.number||''); }
   function mediaRowsForOrder(o){
     var rows=[], seen={};
-    function add(x){ if(!x) return; var id=String(x.id || x.createdAt || mediaSrc(x) || Math.random()); if(seen[id]) return; if(!mediaSrc(x)) return; seen[id]=1; rows.push(x); }
+    function add(x){ if(!x) return; var id=String(x.id || x.createdAt || mediaSrc(x) || Math.random()); if(seen[id]) return; if(!mediaSrc(x) && !/foto|photo|handtekening|signature/i.test([x.type,x.title].join(' '))) return; seen[id]=1; rows.push(x); }
     ['media','driverUploads','photos','signatures','handtekeningen'].forEach(function(k){ (Array.isArray(o&&o[k])?o[k]:[]).forEach(add); });
     var s=S(); (s&&Array.isArray(s.alerts)?s.alerts:[]).forEach(function(a){ if(alertMatch(a,o)) add(a); });
     rows.sort(function(a,b){ return String(b.createdAt||'').localeCompare(String(a.createdAt||'')); });
@@ -38734,16 +38622,8 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
          gewone reeks ([{...}]). Array.isArray gaf dan altijd false, dus
          media werd hier altijd stilzwijgend overgeslagen, ook toen de
          data allang correct in Firebase stond. */
-      // v1-fix: lichte verwijzingen zonder echte data (hasMedia:true,
-      // geen data-veld) niet als eigen, lege melding meetellen - de
-      // echte inhoud komt al via de alerts-collectie hieronder.
-      /* v1-fix, verbreed: de eerdere versie keek alleen naar het
-         hasMedia-vlaggetje, maar oudere verwijzingen van vóór dat
-         vlaggetje bestond, hebben het soms niet gezet en glipten er
-         alsnog doorheen. Nu geldt gewoon: zonder echte data geen los
-         kaartje, ongeacht vlaggetjes. */
-      if(Array.isArray(v)) v.forEach(function(x){ if(x && !mediaSrc(x)) return; add(x,k); });
-      else if(v && typeof v==='object') Object.keys(v).forEach(function(id){ var x=v[id]; if(x && typeof x==='object'){ if(!x.id) x.id=id; if(!mediaSrc(x)) return; add(x,k); } });
+      if(Array.isArray(v)) v.forEach(function(x){ add(x,k); });
+      else if(v && typeof v==='object') Object.keys(v).forEach(function(id){ var x=v[id]; if(x && typeof x==='object'){ if(!x.id) x.id=id; add(x,k); } });
     });
     // customerSignature NIET als aparte kaart - staat al in alerts
     // Meerdere handtekeningen per dag worden elk als aparte alert opgeslagen
@@ -39232,21 +39112,21 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     }
 
     // Canonieke dossierbronnen. Bewust GEEN driverUploads/bezorgerMeldingen/driverMessages/driverAlerts.
-    // v1-fix: order.media/photos/signatures bevatten bewust lichte
-    // verwijzingen zonder de echte foto/handtekening-data (hasMedia:true,
-    // maar geen data-veld) - de bezorger-app slaat de echte inhoud apart
-    // op in de 'alerts'-collectie. Deze verwijzingen werden hier voorheen
-    // ZELF als eigen, lege melding meegeteld naast de echte, wat de
-    // "handtekening/foto zonder handtekening/foto"-dubbeling gaf.
     ["media","photos","fotos","images","signatures","handtekeningen","customerMessages","klantmeldingen","customerSignatures","meldingen","attachments","defects","storingen"].forEach(function(k){
-      if(Array.isArray(o && o[k])) o[k].forEach(function(x){ if(x && !mediaSrc(x)) return; add(x,k); });
+      if(Array.isArray(o && o[k])) o[k].forEach(function(x){ add(x,k); });
     });
 
-    // v1-fix: dit voegde hier een eigen kaartje toe puur op basis van
-    // order.customerSignature, dat bij het opslaan alleen de tekst
-    // "signed" bevat - geen echte handtekening-afbeelding. Dit gaf een
-    // lege "Handtekening klant"-melding naast de echte (die via de
-    // alerts-collectie hieronder al correct binnenkomt). Verwijderd.
+    // customerSignature alleen als dezelfde data nog niet bestaat.
+    if(o && o.customerSignature){
+      add({
+        id:"custsig_"+T(o.id),
+        type:"Handtekening klant",
+        data:o.customerSignature,
+        signatureData:o.customerSignature,
+        createdAt:o.customerSignedAt||"",
+        note:"Handtekening toegevoegd"
+      },"order.customerSignature");
+    }
 
     // Alerts alleen als ze niet al als order.media/signature/foto bestaan.
     alerts().forEach(function(a){
@@ -39849,7 +39729,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var tableFs=Math.max(9,Math.min(22,N(st.fontTable)||ps.table));
     var totalFs=Math.max(10,Math.min(26,N(st.fontTotal)||ps.total));
     var css='@page{size:A4;margin:14mm}*{box-sizing:border-box}body{margin:0;background:#e5e7eb;font-family:Arial,Helvetica,sans-serif;color:#111;font-size:'+bodyFs+'px}.actions{position:fixed;top:8px;left:8px;display:flex;gap:8px;z-index:9}.actions button{border:0;border-radius:8px;background:#2563eb;color:#fff;padding:8px 12px;font-weight:800}.page{width:210mm;min-height:297mm;margin:0 auto;background:white;padding:12mm 14mm}.bns525-logo{text-align:center;margin-bottom:4mm}.bns525-logo img{max-width:96mm;max-height:25mm;object-fit:contain}.brand{font-size:'+(headingFs+14)+'px;font-weight:900;color:'+H(st.accent||'#0ea5e9')+'}.tag{font-weight:800;font-style:italic}.doc-title{text-align:center;font-size:'+headingFs+'px;font-weight:900;margin:2mm 0 5mm}h3{font-size:'+Math.max(12,headingFs-3)+'px}.top{display:grid;grid-template-columns:1fr 60mm;gap:10mm}.card{border:1px solid #dbe3ef;border-radius:10px;padding:9px;margin:8px 0}.line{border-top:1.5px solid #333;margin:5mm 0}table{width:100%;border-collapse:collapse;font-size:'+tableFs+'px}th{border-bottom:1px solid #333;text-align:left}td,th{padding:1.5mm;vertical-align:top}.amount{text-align:right}.totals{width:82mm;margin-left:auto;margin-top:7mm;border-top:1.5px solid #333;font-size:'+totalFs+'px}.totals td:last-child{text-align:right}.strong td{font-weight:900;border-top:1px solid #333}@media print{body{background:#fff}.actions{display:none}.page{margin:0}}';
-    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(title+' '+(orderNo(o)||''))+'</title><style>'+css+'</style></head><body><div class="actions"><button onclick="print()">Print</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mail</button><button onclick="(function(){var txt=document.body.innerText||&quot;&quot;;function fallback(){try{navigator.clipboard&&navigator.clipboard.writeText(txt)}catch(e){}alert(&quot;Delen lukt niet in deze browser. De tekst is gekopieerd; plak hem eventueel in e-mail of WhatsApp.&quot;)}if(navigator.share){navigator.share({title:document.title,text:txt}).catch(fallback)}else{fallback()}})()">Delen</button><button onclick="window.location.href=&quot;https://wa.me/?text=&quot;+encodeURIComponent(document.body.innerText||&quot;&quot;)">WhatsApp</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){try{if(!window.closed){history.back()}}catch(e){}},120)">Terug</button></div><main class="page">'+logoHtml(st)+'<div class="doc-title">'+H(title)+'</div><div class="top"><div>'+companyHtml(st)+'</div><div><b>'+(fact?'Factuur-nr:':'Opdracht:')+'</b> '+H(fact?invoiceNo(o):orderNo(o))+'<br><b>Datum:</b> '+H(date(new Date().toISOString().slice(0,10)))+(fact?'<br><b>Betaling:</b> '+H(paid(o)?'Betaald':'Openstaand'):'<br><b>Status:</b> '+H(o.status||''))+'</div></div>'+(intro?'<div class="card" style="border-left:4px solid #2563eb">'+H(intro)+'</div>':'')+'<div class="line"></div><div class="card"><b>Klant</b><br>'+H(c.name||customerName(o))+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Locatie</b><br>'+H(l.name||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Opdracht:</b> '+H(orderNo(o))+'<br><b>Titel:</b> '+H(titleOf(o))+'<br><b>Datum:</b> '+H(date(o.start||''))+(o.end&&o.end!==o.start?' t/m '+H(date(o.end)):'')+(o.brand?'<br><b>Transport wordt uitgevoerd door:</b> '+H(o.brand):'')+'</div><h3>Materialen</h3><table><thead><tr><th>Aantal</th><th>Code</th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsMaterials(o)+'</tbody></table><h3>Extra</h3>'+(o.extra?'<div class="card" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th></th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsTransport(o)+'</tbody></table><table class="totals"><tr><td>Subtotaal materialen</td><td>'+H(euro(tt.mat))+'</td></tr><tr><td>Subtotaal extra</td><td>'+H(euro(tt.trans))+'</td></tr><tr><td>BTW 21%</td><td>'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td>'+H(euro(tt.dep))+'</td></tr><tr class="strong"><td>Eindtotaal</td><td>'+H(euro(tt.pay))+'</td></tr></table>'+(footer?'<div class="card" style="font-size:11px;color:#475569;margin-top:8mm">'+H(footer)+'</div>':'')+'</main></body></html>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(title+' '+(orderNo(o)||''))+'</title><style>'+css+'</style></head><body><div class="actions"><button onclick="print()">Print</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mail</button><button onclick="(function(){var txt=document.body.innerText||&quot;&quot;;function fallback(){try{navigator.clipboard&&navigator.clipboard.writeText(txt)}catch(e){}alert(&quot;Delen lukt niet in deze browser. De tekst is gekopieerd; plak hem eventueel in e-mail of WhatsApp.&quot;)}if(navigator.share){navigator.share({title:document.title,text:txt}).catch(fallback)}else{fallback()}})()">Delen</button><button onclick="window.location.href=&quot;https://wa.me/?text=&quot;+encodeURIComponent(document.body.innerText||&quot;&quot;)">WhatsApp</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){try{if(!window.closed){history.back()}}catch(e){}},120)">Terug</button></div><main class="page">'+logoHtml(st)+'<div class="doc-title">'+H(title)+'</div><div class="top"><div>'+companyHtml(st)+'</div><div><b>'+(fact?'Factuur-nr:':'Opdracht:')+'</b> '+H(fact?invoiceNo(o):orderNo(o))+'<br><b>Datum:</b> '+H(date(new Date().toISOString().slice(0,10)))+(fact?'<br><b>Betaling:</b> '+H(paid(o)?'Betaald':'Openstaand'):'<br><b>Status:</b> '+H(o.status||''))+'</div></div>'+(intro?'<div class="card" style="border-left:4px solid #2563eb">'+H(intro)+'</div>':'')+'<div class="line"></div><div class="card"><b>Klant</b><br>'+H(c.name||customerName(o))+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Locatie</b><br>'+H(l.name||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'</div><div class="card"><b>Opdracht:</b> '+H(orderNo(o))+'<br><b>Titel:</b> '+H(titleOf(o))+'<br><b>Datum:</b> '+H(date(o.start||''))+(o.end&&o.end!==o.start?' t/m '+H(date(o.end)):'')+'</div><h3>Materialen</h3><table><thead><tr><th>Aantal</th><th>Code</th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsMaterials(o)+'</tbody></table><h3>Extra</h3>'+(o.extra?'<div class="card" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th></th><th>Omschrijving</th><th class="amount">Bedrag</th></tr></thead><tbody>'+rowsTransport(o)+'</tbody></table><table class="totals"><tr><td>Subtotaal materialen</td><td>'+H(euro(tt.mat))+'</td></tr><tr><td>Subtotaal extra</td><td>'+H(euro(tt.trans))+'</td></tr><tr><td>BTW 21%</td><td>'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td>'+H(euro(tt.dep))+'</td></tr><tr class="strong"><td>Eindtotaal</td><td>'+H(euro(tt.pay))+'</td></tr></table>'+(footer?'<div class="card" style="font-size:11px;color:#475569;margin-top:8mm">'+H(footer)+'</div>':'')+'</main></body></html>';
   }
   function openOrderDoc(o,type){ var w=window.open('','_blank'); if(!w){ alert('Pop-up geblokkeerd. Sta pop-ups toe.'); return false; } try{ w.document.open(); w.document.write(docHtml(o,type)); w.document.close(); }catch(e){ alert('Document kon niet worden geopend: '+e.message); } return false; }
   function dedupeAccountingDocs(){
@@ -41387,16 +41267,7 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
   }
   function looksLikeGoodFirebaseMaterials(list){
     var mats = cleanMaterials(list);
-    if(!mats.length) return false;
-    /* v1-fix: dit gooide voorheen de HELE lijst weg zodra er minder dan
-       20 materialen binnenkwamen - ook als dat gewoon een tijdelijk
-       onvolledige Firebase-uitlezing was (bijv. door de al langer
-       bekende verbindingsdruk), niet per se de oude testset. Het
-       gevolg was dat materiaal soms volledig leeg leek, terwijl er
-       gewoon een kleinere, maar wel geldige lijst binnenkwam. Nu wordt
-       alleen nog specifiek gekeken naar duidelijke tekenen van de oude,
-       verouderde testset (art_-ID's of "oude prijs"), ongeacht de
-       lengte van de lijst. */
+    if(mats.length < 20) return false;
     var old = 0, newish = 0, oldPrice = 0;
     mats.forEach(function(m){
       var id = matId(m);
@@ -41471,21 +41342,6 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var t = ev.target;
       if(t && t.closest && t.closest('#adminBtn,.adminTab,[data-admin],#adminMaterials,#adminUsers')) setTimeout(function(){ pull('admin klik', false); }, 250);
     }, true);
-    /* v1-fix (op verzoek): als deze drie eerste pogingen alsnog leeg
-       teruggeven (bijv. door de bekende Firebase-verbindingsdruk), bleef
-       er verder niets meer over om dat op te vangen. Blijft daarom nog
-       een tijdje op de achtergrond doorproberen, alleen als het
-       materiaal er écht nog niet is. */
-    var retryCount=0;
-    var retryTimer=setInterval(function(){
-      retryCount++;
-      if(retryCount>12){ clearInterval(retryTimer); return; }
-      try{
-        var s=stateObj();
-        if(!s || !Array.isArray(s.materials) || s.materials.length===0) pull('achtergrond-herstel', true);
-        else clearInterval(retryTimer);
-      }catch(e){}
-    }, 5000);
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(start, 1000); });
   else setTimeout(start, 1000);
@@ -42329,13 +42185,9 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var cat='';
       try{ cat=window.currentCat || (typeof currentCat!=='undefined'?currentCat:''); }catch(e){}
       cat=cat||'TW';
-      /* v1-fix: dit riep hier zowel de lokale als de globale (window.)
-         versie van renderCats/renderMaterials na elkaar aan - als dat
-         niet exact dezelfde functie is (wat door de vele concurrerende
-         varianten in dit bestand goed mogelijk is), gaf dat een dubbele,
-         net-anders-ogende tekening bij elke Firebase-ververs. Nu wordt
-         alleen de daadwerkelijk actieve, globale versie aangeroepen. */
+      try{ if(typeof renderCats==='function') renderCats(); }catch(e){}
       try{ if(typeof window.renderCats==='function') window.renderCats(); }catch(e){}
+      try{ if(typeof renderMaterials==='function') renderMaterials(cat); }catch(e){}
       try{ if(typeof window.renderMaterials==='function') window.renderMaterials(cat); }catch(e){}
       try{ if(typeof adminRender==='function') adminRender(); }catch(e){}
       try{ if(typeof window.adminRender==='function') window.adminRender(); }catch(e){}
@@ -43048,8 +42900,9 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
     var c=setCat(cat);
     var q=L(E('materialSearch')&&E('materialSearch').value);
     var list=materials().filter(function(m){
-      if(!q) return catOf(m)===c;
-      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName,nameOf(m)].map(T).join(' ').toLowerCase();
+      if(catOf(m)!==c) return false;
+      if(!q) return true;
+      var txt=[catOf(m),codeOf(m),m&&m.productNr,m&&m.nr,m&&m.number,m&&m.product,m&&m.searchName,m&&m.zoeknaam,m&&m.type,m&&m.productName].map(T).join(' ').toLowerCase();
       return txt.indexOf(q)>=0;
     });
     var sig=c+'|'+q+'|'+list.map(function(m){ var st=statusFor(m); return (matId(m)||codeOf(m))+':'+st.key; }).join(',')+'|chosen:'+chosenList().map(function(m){return matId(m)||codeOf(m);}).join(',');
@@ -44421,7 +44274,7 @@ try{ console.info('[BNS 615] 611 rubriekbehoud bij gereserveerd klik actief'); }
     var mats=(Array.isArray(o.materials)?o.materials:[]).map(function(m,i){ var q=matQty(m); return '<tr><td>'+H(i+1)+'</td><td>'+H(q)+'</td><td><b>'+H(m.code||m.productNr||'')+'</b></td><td>'+H(m.name||m.product||m.description||'')+'</td><td>'+H(m.cat||m.rubriek||'')+'</td><td>'+H(m.price||m.linePrice||'')+'</td></tr>'; }).join('') || '<tr><td colspan="6">Geen materialen gekoppeld.</td></tr>';
     var trans=transportLines(o).map(function(x){return '<tr><td>'+H((N(x.qty)||1)+(x.unit?' '+x.unit:'x'))+'</td><td>'+H(x.name||'')+'</td><td>'+H(x.note||'')+'</td><td style="text-align:right;font-weight:900">'+H(euro(lineTotal(x)))+'</td></tr>';}).join('') || '<tr><td colspan="4">Geen extra.</td></tr>';
     var invoiceMeta=confirm?'':'<br><b>Factuur nr:</b> '+H(invoiceNo(o)||orderNo(o))+'<br><b>Status:</b> '+H(paid(o)?'Betaald':'Openstaand');
-    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(type)+' '+H(orderNo(o))+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#172033;background:#f1f5f9;margin:0;padding:22px}.bns653-doc{max-width:980px;margin:0 auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.12)}h1{margin:0 0 8px}.top{display:flex;justify-content:space-between;border-bottom:4px solid #0f172a;padding-bottom:14px;margin-bottom:18px}.muted{color:#64748b}.box{border:1px solid #dbe3ef;border-radius:14px;padding:12px;margin:12px 0;background:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}table{width:100%;border-collapse:collapse}th{background:#0f172a;color:#fff}td,th{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}.total{font-size:20px;font-weight:1000;color:#065f46}.actions{position:sticky;top:0;background:#fff;padding:10px 0;display:flex;gap:8px;flex-wrap:wrap}.actions button{border:0;border-radius:10px;padding:9px 13px;background:#2563eb;color:#fff;font-weight:900}@media print{body{background:white;padding:0}.actions{display:none}.bns653-doc{box-shadow:none;border-radius:0}}@media(max-width:700px){.grid{grid-template-columns:1fr}}</style></head><body><main class="bns653-doc"><div class="actions"><button onclick="window.print()">Afdrukken</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mailen</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){history.back()},100)">Terug</button></div><section class="top"><div><h1>'+H(type)+'</h1><div class="muted">Powered by Tapwagen.nl</div></div><div><b>Opdracht '+H(orderNo(o))+'</b>'+invoiceMeta+'<br>'+H(new Date().toLocaleDateString())+'</div></section><div class="grid"><div class="box"><b>Klant</b><br>'+H(c.name||o.customerName||'')+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'<br>'+H(c.phone||'')+'<br>'+H(c.email||'')+'</div><div class="box"><b>Locatie</b><br>'+H(l.name||o.locationName||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'<br>'+H(l.phone||'')+'</div></div><div class="box"><b>'+H(titleOf(o))+'</b><br>Status: '+H(o.status||'')+'<br>Datum: '+H(niceDate(o.start))+(o.end&&o.end!==o.start?' t/m '+H(niceDate(o.end)):'')+'<br>Transport wordt uitgevoerd door: '+H(o.brand||'')+'</div><h2>Materialen</h2><table><thead><tr><th>#</th><th>Aantal</th><th>Code</th><th>Naam</th><th>Rubriek</th><th>Prijs</th></tr></thead><tbody>'+mats+'</tbody></table><h2>Bijzonderheden</h2>'+(o.extra?'<div class="box" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th>Omschrijving</th><th>Opmerking</th><th>Bedrag</th></tr></thead><tbody>'+trans+'</tbody></table>'+''+'<div class="box"><table><tr><td>Materialen</td><td style="text-align:right">'+H(euro(tt.mat))+'</td></tr><tr><td>Bijzonderheden</td><td style="text-align:right">'+H(euro(tt.trans))+'</td></tr><tr><td>Subtotaal excl. btw</td><td style="text-align:right">'+H(euro(tt.sub))+'</td></tr><tr><td>BTW</td><td style="text-align:right">'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td style="text-align:right">'+H(euro(tt.dep))+'</td></tr><tr class="total"><td>Te betalen</td><td style="text-align:right">'+H(euro(tt.grand))+'</td></tr></table></div></main></body></html>';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>'+H(type)+' '+H(orderNo(o))+'</title><style>body{font-family:Arial,Helvetica,sans-serif;color:#172033;background:#f1f5f9;margin:0;padding:22px}.bns653-doc{max-width:980px;margin:0 auto;background:#fff;border-radius:18px;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.12)}h1{margin:0 0 8px}.top{display:flex;justify-content:space-between;border-bottom:4px solid #0f172a;padding-bottom:14px;margin-bottom:18px}.muted{color:#64748b}.box{border:1px solid #dbe3ef;border-radius:14px;padding:12px;margin:12px 0;background:#fff}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}table{width:100%;border-collapse:collapse}th{background:#0f172a;color:#fff}td,th{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}.total{font-size:20px;font-weight:1000;color:#065f46}.actions{position:sticky;top:0;background:#fff;padding:10px 0;display:flex;gap:8px;flex-wrap:wrap}.actions button{border:0;border-radius:10px;padding:9px 13px;background:#2563eb;color:#fff;font-weight:900}@media print{body{background:white;padding:0}.actions{display:none}.bns653-doc{box-shadow:none;border-radius:0}}@media(max-width:700px){.grid{grid-template-columns:1fr}}</style></head><body><main class="bns653-doc"><div class="actions"><button onclick="window.print()">Afdrukken</button><button onclick="location.href=\'mailto:?subject=\'+encodeURIComponent(document.title)+\'&body=\'+encodeURIComponent(document.body.innerText)">Mailen</button><button onclick="try{window.close()}catch(e){};setTimeout(function(){history.back()},100)">Terug</button></div><section class="top"><div><h1>'+H(type)+'</h1><div class="muted">Powered by Tapwagen.nl</div></div><div><b>Opdracht '+H(orderNo(o))+'</b>'+invoiceMeta+'<br>'+H(new Date().toLocaleDateString())+'</div></section><div class="grid"><div class="box"><b>Klant</b><br>'+H(c.name||o.customerName||'')+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'<br>'+H(c.phone||'')+'<br>'+H(c.email||'')+'</div><div class="box"><b>Locatie</b><br>'+H(l.name||o.locationName||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'<br>'+H(l.phone||'')+'</div></div><div class="box"><b>'+H(titleOf(o))+'</b><br>Status: '+H(o.status||'')+'<br>Datum: '+H(niceDate(o.start))+(o.end&&o.end!==o.start?' t/m '+H(niceDate(o.end)):'')+'<br>Merk: '+H(o.brand||'')+'</div><h2>Materialen</h2><table><thead><tr><th>#</th><th>Aantal</th><th>Code</th><th>Naam</th><th>Rubriek</th><th>Prijs</th></tr></thead><tbody>'+mats+'</tbody></table><h2>Bijzonderheden</h2>'+(o.extra?'<div class="box" style="white-space:pre-wrap">'+H(o.extra)+'</div>':'')+'<table><thead><tr><th>Aantal</th><th>Omschrijving</th><th>Opmerking</th><th>Bedrag</th></tr></thead><tbody>'+trans+'</tbody></table>'+''+'<div class="box"><table><tr><td>Materialen</td><td style="text-align:right">'+H(euro(tt.mat))+'</td></tr><tr><td>Bijzonderheden</td><td style="text-align:right">'+H(euro(tt.trans))+'</td></tr><tr><td>Subtotaal excl. btw</td><td style="text-align:right">'+H(euro(tt.sub))+'</td></tr><tr><td>BTW</td><td style="text-align:right">'+H(euro(tt.vat))+'</td></tr><tr><td>Borg</td><td style="text-align:right">'+H(euro(tt.dep))+'</td></tr><tr class="total"><td>Te betalen</td><td style="text-align:right">'+H(euro(tt.grand))+'</td></tr></table></div></main></body></html>';
   }
   function openFilledDoc(o,kind){
     if(!o) return false;
@@ -44988,13 +44841,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   }
   function run(){
     try{
-      /* v1-fix: dit verving overal op de pagina het woord "Transport" door
-         "Bijzonderheden" - inclusief het nieuwe, losstaande label
-         "Transport wordt uitgevoerd door" bij het merk/transport-veld,
-         wat daar niets mee te maken heeft. Dat ene label wordt nu
-         overgeslagen. */
       document.querySelectorAll('button,h1,h2,h3,h4,label,legend,summary,.tab,.label,.section-title,.card-title,.btn').forEach(function(el){
-        if(el.querySelector && el.querySelector('#orderBrand')) return;
         fixTextNode(el);
         if(el.placeholder) el.placeholder=String(el.placeholder).replace(/Transport/g,'Bijzonderheden').replace(/Bijkomende zaken/g,'Bijzonderheden');
         if(el.value && typeof el.value==='string') el.value=el.value.replace(/Transport/g,'Bijzonderheden').replace(/Bijkomende zaken/g,'Bijzonderheden');
@@ -45431,29 +45278,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   /* --- 4. 14-dagen backup --- */
   var DAY_MS = 86400000;
-  var BK_HOUR = 17; // v1-fix: vaste tijd - pas na sluitingstijd back-uppen, niet meteen bij elke pagina-opening (zelfde fix als Tapwagen)
-  function bkSleep(ms){ return new Promise(function(resolve){ setTimeout(resolve, ms); }); }
-  /* v1-fix: dit systeem controleerde tot nu toe alleen lokaal (per apparaat/
-     browser) of er al een back-up was gedaan vandaag - elk apparaat dat de
-     app opent dacht daardoor apart "ik heb nog niet gebackupt", en voerde
-     onafhankelijk dezelfde zware, complete database-back-up uit, 6 seconden
-     na elke pagina-opening. Dat gaf onnodig veel gelijktijdige schrijfdruk
-     op Firestore, en kan bijdragen aan trage laadtijden. Zelfde fix als
-     eerder bij Tapwagen: eerst een gedeelde vlag in Firebase zelf checken. */
-  async function bkClaimSharedLock(day, t){
-    try{
-      var ref = t.fs.doc(t.db,'backups','_lock');
-      var snap = await t.fs.getDoc(ref);
-      var data = snap.exists() ? snap.data() : {};
-      if(data && data.day === day) return false;
-      await bkSleep(300 + Math.floor(Math.random()*1200));
-      var snap2 = await t.fs.getDoc(ref);
-      var data2 = snap2.exists() ? snap2.data() : {};
-      if(data2 && data2.day === day) return false;
-      await t.fs.setDoc(ref, {day:day, claimedAt:new Date().toISOString()}, {merge:false});
-      return true;
-    }catch(e){ return false; }
-  }
   var CHUNK  = 400000;
   var BK_KEY = 'bns767_backup_day';
   var VER    = 'bns767';
@@ -45505,10 +45329,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var day = new Date().toISOString().slice(0,10);
     if(!force && localStorage.getItem(BK_KEY) === day) return;
     var t = await bkGetFb(); if(!t){ bkLog('Firebase niet beschikbaar'); return; }
-    if(!force){
-      var claimed = await bkClaimSharedLock(day, t);
-      if(!claimed){ localStorage.setItem(BK_KEY, day); return; }
-    }
     try{
       var orders    = await bkReadCol('orders');
       var materials = await bkReadCol('materials');
@@ -45542,17 +45362,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   window.BNS = window.BNS || {};
   window.BNS.runBackup767 = function(){ return runBackup(true); };
 
-  /* v1-fix: dit draaide tot nu toe 6 seconden na elke pagina-opening, en
-     daarna elke 30 minuten - dus ook midden op de dag, tijdens druk
-     gebruik, wat kan bijdragen aan trage laadtijden vlak na het openen.
-     Nu pas vanaf 17:00 (na sluitingstijd), gecontroleerd via de gedeelde
-     vlag hierboven zodat het maar 1x per dag echt gebeurt. */
-  function bkMaybeRunScheduled(){
-    var now = new Date();
-    if(now.getHours() >= BK_HOUR) runBackup(false);
-  }
-  setTimeout(bkMaybeRunScheduled, 30000);
-  setInterval(bkMaybeRunScheduled, 10*60*1000);
+  setTimeout(function(){ runBackup(false); }, 6000);
+  setInterval(function(){ runBackup(false); }, 30*60*1000);
 
   console.info('[BNS 767] Definitieve fix actief: state-sync, nummerbescherming, 14-dagen backup.');
 })();
@@ -46061,7 +45872,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var c=o.customer||{}, l=o.location||{};
     var m=document.createElement('div');
     m.id='bns821OrderOverviewModal';
-    m.innerHTML='<div class="bns821-box"><div class="bns821-actions"><button type="button" class="grey" id="bns821Back">Terug</button><button type="button" id="bns821Print">Afdrukken</button><button type="button" id="bns821Share">Delen</button><button type="button" id="bns821WA">WhatsApp</button></div><h2>Overzicht bestelling</h2><div class="bns821-sub"><b>'+H(orderNo(o))+'</b> - '+H(titleOf(o))+'</div><div class="bns821-grid"><div class="bns821-card"><b>Klant</b><br>'+H(c.name||o.customerName||'')+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'<br>'+H(c.phone||'')+'<br>'+H(c.email||'')+'</div><div class="bns821-card"><b>Locatie</b><br>'+H(l.name||o.locationName||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'<br>'+H(l.phone||'')+'</div></div><div class="bns821-card"><b>Opdracht</b><br>Datum: '+H(nice(o.start))+(o.end&&o.end!==o.start?' t/m '+H(nice(o.end)):'')+'<br>Status: '+H(o.status||'')+'<br>Transport wordt uitgevoerd door: '+H(o.brand||'')+'</div><h3>Materialen</h3><table><thead><tr><th>#</th><th>Code</th><th>Omschrijving</th><th>Rubriek</th><th>Aantal</th></tr></thead><tbody>'+materialRows(o)+'</tbody></table><h3>Extra</h3><div class="bns821-card bns821-pre">'+H(transportText(o)||'Geen extra.')+'</div></div>';
+    m.innerHTML='<div class="bns821-box"><div class="bns821-actions"><button type="button" class="grey" id="bns821Back">Terug</button><button type="button" id="bns821Print">Afdrukken</button><button type="button" id="bns821Share">Delen</button><button type="button" id="bns821WA">WhatsApp</button></div><h2>Overzicht bestelling</h2><div class="bns821-sub"><b>'+H(orderNo(o))+'</b> - '+H(titleOf(o))+'</div><div class="bns821-grid"><div class="bns821-card"><b>Klant</b><br>'+H(c.name||o.customerName||'')+'<br>'+H([c.street,c.zip,c.city].filter(Boolean).join(' '))+'<br>'+H(c.phone||'')+'<br>'+H(c.email||'')+'</div><div class="bns821-card"><b>Locatie</b><br>'+H(l.name||o.locationName||'')+'<br>'+H([l.street,l.zip,l.city].filter(Boolean).join(' '))+'<br>'+H(l.phone||'')+'</div></div><div class="bns821-card"><b>Opdracht</b><br>Datum: '+H(nice(o.start))+(o.end&&o.end!==o.start?' t/m '+H(nice(o.end)):'')+'<br>Status: '+H(o.status||'')+'<br>Merk: '+H(o.brand||'')+'</div><h3>Materialen</h3><table><thead><tr><th>#</th><th>Code</th><th>Omschrijving</th><th>Rubriek</th><th>Aantal</th></tr></thead><tbody>'+materialRows(o)+'</tbody></table><h3>Extra</h3><div class="bns821-card bns821-pre">'+H(transportText(o)||'Geen extra.')+'</div></div>';
     document.body.appendChild(m);
     E('bns821Back').onclick=closeOverview;
     m.addEventListener('click',function(ev){ if(ev.target===m) closeOverview(); });
@@ -46112,9 +45923,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v3-fix: opnieuw uitgeschakeld voor een schone test zonder enige
-     eigen module erbij. */
-  return;
   if(window.__BNS829_RENTAL_CLEAN_CATEGORIES__) return;
   window.__BNS829_RENTAL_CLEAN_CATEGORIES__ = true;
 
@@ -46382,9 +46190,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v3-fix: opnieuw uitgeschakeld voor een schone test zonder enige
-     eigen module erbij. */
-  return;
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
@@ -46477,11 +46282,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   function lockRenderers(){
     if(locked) return;
     locked=true;
-    /* v2-fix: de v1-fix hierboven (omleiden naar V611) gaf juist meer
-       onrust - wisselde zichtbaar heen en weer tussen twee verschillende
-       weergaven, terwijl de oorspronkelijke, simpele versie tenminste
-       stabiel was (ook al miste die de kleur-badges). Teruggedraaid naar
-       het origineel; rust weegt zwaarder dan gedeeltelijk correct. */
     try{
       Object.defineProperty(window,'renderCats',{ configurable:true, enumerable:true, get:function(){ return calmRenderCats; }, set:function(v){ lastExternalRenderCats=v; } });
     }catch(e){ window.renderCats=calmRenderCats; }
@@ -48772,118 +48572,7 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
      leidende Firebase-data alsnog binnenkwam - dat voelde aan als
      "opdrachten zijn weg, komen na lang wachten terug". Nu veel sneller. */
   setTimeout(loadOrdersV47, 150);
-  /* v2-fix: op verzoek teruggezet - zelfde reden als bij meldingen: een
-     eenmalige poging die op een slecht moment valt, kreeg zonder
-     herhaling geen tweede kans meer om zich te herstellen. */
   setInterval(loadOrdersV47, 30000);
 
   console.info('[AMS v47] leesfunctie actief voor customers/amsterdam-verhuur/orders, met nieuwste-wint bescherming.');
-})();
-
-
-
-
-/* =========================================================
-   BNS 954 - Nette rubriekknoppen, zonder kleuren-logica
-   Doel: alleen de opmaak (nette rasterindeling, stabiele tekstgrootte)
-   behouden - dat werkte al rustig. Alle kleuren-opzoeklogica van
-   eerdere pogingen (BNS951/952/953) is hier bewust weggelaten, omdat
-   die herhaaldelijk samenviel met materiaal dat leeg leek te worden.
-   Puur CSS, raakt geen klik-logica, rubriek-data of kleuren aan.
-   ========================================================= */
-(function(){
-  'use strict';
-  if(window.__BNS954_MATCAT_LAYOUT__) return;
-  window.__BNS954_MATCAT_LAYOUT__ = true;
-
-  function E(id){ return document.getElementById(id); }
-
-  function injectCss(){
-    var s=E('bns954Css');
-    if(!s){
-      s=document.createElement('style');
-      s.id='bns954Css';
-      s.textContent =
-        '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
-          'gap:8px!important;align-items:stretch!important;' +
-          'padding:10px!important;margin:0 0 6px!important;background:#f1f5f9!important;border-radius:14px!important;' +
-          'min-height:0!important;overflow:visible!important;}\n' +
-        '#materialCats button{' +
-          'position:static!important;width:100%!important;min-width:0!important;height:44px!important;' +
-          'margin:0!important;padding:0 12px!important;border:0!important;border-radius:10px!important;' +
-          'background:var(--cat-color,#475569)!important;color:#fff!important;font-weight:800!important;' +
-          'font-size:13px!important;letter-spacing:.2px!important;' +
-          'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
-          'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
-        '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
-        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
-      document.head.appendChild(s);
-    }
-    if(document.head.lastElementChild!==s) document.head.appendChild(s);
-  }
-
-  function tick(){ try{ injectCss(); }catch(e){} }
-
-  /* v1-fix (op verzoek): materiaal bleek soms leeg te tonen op het
-     "Nieuwe opdracht"-scherm, terwijl state.materials wel degelijk
-     gewoon gevuld was (bevestigd: 56 materialen aanwezig) - dus geen
-     dataverlies, maar een weergave die het niet toont. Vaak samenvallend
-     met het instellen van een kleur in Admin, via één van de vele,
-     verspreide admin-kleurenfuncties. In plaats van elk van die vele
-     plekken apart te moeten vinden, controleert dit periodiek: staat
-     het materiaal-vak zichtbaar leeg terwijl er wél materiaal bekend is?
-     Dan wordt gewoon opnieuw getekend met de juiste rubriek. */
-  function recoverIfEmpty(){
-    try{
-      var list=E('materialList');
-      var mats=(window.state && Array.isArray(window.state.materials)) ? window.state.materials : [];
-      if(!list || !mats.length) return;
-      var looksEmpty = list.children.length===0 || (list.textContent||'').trim().length===0;
-      if(!looksEmpty) return;
-      var cat = window.currentCat || (mats[0] && (mats[0].cat||mats[0].rubriek||mats[0].category)) || '';
-      if(typeof window.renderCats==='function') window.renderCats();
-      if(typeof window.renderMaterials==='function') window.renderMaterials(cat);
-      try{ console.info('[BNS 954] Materiaal-scherm leek leeg terwijl er data was - opnieuw getekend.'); }catch(e){}
-    }catch(e){}
-  }
-  /* v1-fix (op verzoek): het materiaal bleek soms binnen 1 seconde weer
-     leeggeveegd te worden nadat het eerst even correct getoond werd -
-     dat is te snel voor een controle die maar om de 2 seconden draait.
-     Nu wordt dit direct opgemerkt via een observer (reageert vrijwel
-     onmiddellijk op elke wijziging), met de trage 2-seconden-controle
-     alleen nog als extra vangnet erachter. */
-  var recoverDebounce=null;
-  var materialListObserver=new MutationObserver(function(){
-    if(recoverDebounce) clearTimeout(recoverDebounce);
-    recoverDebounce=setTimeout(recoverIfEmpty,150);
-  });
-  function attachMaterialListObserver(){
-    var list=E('materialList');
-    if(list && materialListObserver.__target!==list){
-      materialListObserver.disconnect();
-      materialListObserver.observe(list,{childList:true,subtree:true});
-      materialListObserver.__target=list;
-    }
-  }
-  setInterval(attachMaterialListObserver, 250);
-  attachMaterialListObserver();
-  setInterval(recoverIfEmpty, 2000);
-  var debounce=null;
-  var observer=new MutationObserver(function(){
-    if(debounce) clearTimeout(debounce);
-    debounce=setTimeout(tick,150);
-  });
-  function attachObserver(){
-    var cats=E('materialCats');
-    if(cats && observer.__target!==cats){
-      observer.disconnect();
-      observer.observe(cats,{childList:true,subtree:true});
-      observer.__target=cats;
-    }
-  }
-  setInterval(attachObserver, 250);
-  attachObserver();
-  tick();
-
-  try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica).'); }catch(e){}
 })();
