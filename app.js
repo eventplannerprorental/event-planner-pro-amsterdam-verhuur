@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R38';
+window.AMSTERDAM_BUILD_ID = 'AMS-FIX-2026-08-07-R39';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48729,57 +48729,27 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
 
 
+
 /* =========================================================
-   BNS 953 - Nette rubriekknoppen + kleuren-zoekbalk
-   Doel: dezelfde nette indeling en kleurenfunctie als Tapwagen. Bouwt
-   voort op bns-stabilizer.js (nu ook geladen in Amsterdam), die het
-   echte flikker-probleem oplost via animation:none/transition:none op
-   #materialList - dus deze module hoeft niet langer agressief te
-   concurreren met andere systemen, alleen nette, statische CSS toe te
-   voegen. Puur opmaak, raakt geen klik-logica of rubriek-data aan.
+   BNS 954 - Nette rubriekknoppen, zonder kleuren-logica
+   Doel: alleen de opmaak (nette rasterindeling, stabiele tekstgrootte)
+   behouden - dat werkte al rustig. Alle kleuren-opzoeklogica van
+   eerdere pogingen (BNS951/952/953) is hier bewust weggelaten, omdat
+   die herhaaldelijk samenviel met materiaal dat leeg leek te worden.
+   Puur CSS, raakt geen klik-logica, rubriek-data of kleuren aan.
    ========================================================= */
 (function(){
   'use strict';
-  if(window.__BNS953_MATCAT_STYLE__) return;
-  window.__BNS953_MATCAT_STYLE__ = true;
+  if(window.__BNS954_MATCAT_LAYOUT__) return;
+  window.__BNS954_MATCAT_LAYOUT__ = true;
 
   function E(id){ return document.getElementById(id); }
-  function H(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function U(v){ return String(v==null?'':v).trim().toUpperCase(); }
 
-  var ATTR_CANDIDATES=['data-bns611-cat','data-bns392-cat','data-bns386-cat','data-v838-cat','data-v830-cat','data-bns829-cat','data-bns-cat','data-v56-cat','data-v83-cat','data-cat'];
-  function findCatAttr(cats){
-    for(var i=0;i<ATTR_CANDIDATES.length;i++){
-      if(cats.querySelector('['+ATTR_CANDIDATES[i]+']')) return ATTR_CANDIDATES[i];
-    }
-    return null;
-  }
-  function catColor(cat){
-    var k=U(cat).replace(/[^A-Z0-9]/g,'').slice(0,16);
-    /* v1-fix: er blijkt een volledig apart, geïsoleerd Admin-kleurenpaneel
-       te bestaan ("BNS V12 PRO") dat uitsluitend naar de sleutel
-       bns_rubriek_kleuren_v12_pro schrijft, nooit naar bnsCatColors. Als
-       dat het scherm is dat gebruikt wordt om kleuren in te stellen, zag
-       deze functie die wijzigingen nooit. Nu worden beide sleutels
-       gecontroleerd, met bnsCatColors als eerste (actief naar Firebase
-       gesynchroniseerd). */
-    try{
-      var map=JSON.parse(localStorage.getItem('bnsCatColors')||'{}');
-      if(map[k]) return map[k];
-    }catch(e){}
-    try{
-      var map2=JSON.parse(localStorage.getItem('bns_rubriek_kleuren_v12_pro')||'{}');
-      if(map2[k]) return map2[k];
-    }catch(e){}
-    var def={TAPW:'#dc2626',BIERSLANG:'#16a34a',POMP:'#2563eb',SLANG:'#0ea5e9',BIERTANK:'#7c3aed',TANK:'#f97316',TW:'#1683d8',TO:'#f97316',KW:'#22c55e',KA:'#a855f7',SL:'#eab308'};
-    return def[k]||'#475569';
-  }
-
-  function injectLayoutCss(){
-    var s=E('bns953LayoutCss');
+  function injectCss(){
+    var s=E('bns954Css');
     if(!s){
       s=document.createElement('style');
-      s.id='bns953LayoutCss';
+      s.id='bns954Css';
       s.textContent =
         '#materialCats{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(110px,1fr))!important;' +
           'gap:8px!important;align-items:stretch!important;' +
@@ -48793,90 +48763,29 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
           'box-shadow:0 2px 5px rgba(15,23,42,.18)!important;' +
           'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;}\n' +
         '#materialCats button::after,#materialCats button::before{content:none!important;border:none!important;background:none!important;}\n' +
-        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n' +
-        '#bns953ColorBar{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important;' +
-          'padding:8px 10px!important;margin:0 0 10px!important;background:#f8fafc!important;border:1px dashed #cbd5e1!important;' +
-          'border-radius:12px!important;}\n' +
-        '#bns953ColorBar .bns953-label{font-size:12px!important;font-weight:800!important;color:#475569!important;' +
-          'text-transform:uppercase!important;letter-spacing:.4px!important;margin-right:4px!important;}\n' +
-        '#bns953ColorBar button{width:34px!important;height:34px!important;min-width:34px!important;padding:0!important;' +
-          'margin:0!important;border:2px solid #fff!important;border-radius:50%!important;' +
-          'box-shadow:0 0 0 1px rgba(15,23,42,.18),0 2px 5px rgba(15,23,42,.15)!important;cursor:pointer!important;}\n' +
-        '#bns953ColorBar button.active{outline:3px solid #0f172a!important;outline-offset:2px!important;}\n';
+        '#materialCats button.active{outline:3px solid #0f172a!important;outline-offset:1px!important;}\n';
       document.head.appendChild(s);
     }
     if(document.head.lastElementChild!==s) document.head.appendChild(s);
   }
 
-  function buildColorBar(){
-    var cats=E('materialCats'); if(!cats) return;
-    var attr=findCatAttr(cats);
-    var bar=E('bns953ColorBar');
-    if(!attr){ if(bar) bar.remove(); return; }
-    var list=[];
-    var colorFor={};
-    cats.querySelectorAll('['+attr+']').forEach(function(btn){
-      var c=btn.getAttribute(attr);
-      if(c && list.indexOf(c)<0){
-        list.push(c);
-        /* v1-fix: hier ook de al-werkende, bestaande kleur van de knop
-           zelf overnemen (net als de knoppen-opmaak), in plaats van
-           zelf opnieuw te proberen op te zoeken welke kleur erbij hoort. */
-        var cs=getComputedStyle(btn);
-        colorFor[c]=cs.backgroundColor||cs.borderBottomColor||'#475569';
-      }
-    });
-    if(!list.length){ if(bar) bar.remove(); return; }
-    var activeBtn=cats.querySelector('.active');
-    var activeCat=(activeBtn&&activeBtn.getAttribute(attr))||'';
-    var html='<span class="bns953-label">Zoek op kleur:</span>'+list.map(function(k){
-      var col=colorFor[k]||'#475569';
-      return '<button type="button" title="'+H(k)+'" data-bns953-target="'+H(k)+'" class="'+(k===activeCat?'active':'')+
-        '" style="background:'+H(col)+'"></button>';
-    }).join('');
-    if(!bar){
-      bar=document.createElement('div');
-      bar.id='bns953ColorBar';
-      cats.parentNode.insertBefore(bar, cats.nextSibling);
-    }
-    bar.innerHTML=html;
-  }
-  document.addEventListener('click', function(ev){
-    var t=ev.target; if(!t||!t.closest) return;
-    var b=t.closest('#bns953ColorBar [data-bns953-target]');
-    if(!b) return;
-    var cats=E('materialCats');
-    var attr=cats && findCatAttr(cats);
-    var twin=attr && cats.querySelector('['+attr+'="'+CSS.escape(b.getAttribute('data-bns953-target'))+'"]');
-    if(twin) twin.click();
-  }, true);
-
-  var lastCatsHtml='';
-  function tick(){
-    var cats=E('materialCats');
-    if(!cats) return;
-    try{ injectLayoutCss(); }catch(e){}
-    var html=cats.innerHTML;
-    if(html===lastCatsHtml) return;
-    lastCatsHtml=html;
-    try{ buildColorBar(); }catch(e){}
-  }
-  var matCatsDebounce=null;
-  var matCatsObserver=new MutationObserver(function(){
-    if(matCatsDebounce) clearTimeout(matCatsDebounce);
-    matCatsDebounce=setTimeout(tick,150);
+  function tick(){ try{ injectCss(); }catch(e){} }
+  var debounce=null;
+  var observer=new MutationObserver(function(){
+    if(debounce) clearTimeout(debounce);
+    debounce=setTimeout(tick,150);
   });
   function attachObserver(){
     var cats=E('materialCats');
-    if(cats && matCatsObserver.__target!==cats){
-      matCatsObserver.disconnect();
-      matCatsObserver.observe(cats,{childList:true,subtree:true});
-      matCatsObserver.__target=cats;
+    if(cats && observer.__target!==cats){
+      observer.disconnect();
+      observer.observe(cats,{childList:true,subtree:true});
+      observer.__target=cats;
     }
   }
   setInterval(attachObserver, 250);
   attachObserver();
   tick();
 
-  try{ console.info('[BNS 953] Nette rubriekknoppen + kleuren-zoekbalk actief (bouwt voort op bns-stabilizer.js).'); }catch(e){}
+  try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica).'); }catch(e){}
 })();
