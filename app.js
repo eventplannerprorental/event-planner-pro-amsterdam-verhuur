@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R4-TEST';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R1d';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -46218,12 +46218,6 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
    ========================================================= */
 (function(){
   'use strict';
-  /* v1-fix (test op verzoek): BNS838 bestaat niet bij Tapwagen - daar
-     wint de volledige V611-renderer vanzelf, die zelf al ingebouwde
-     kleurondersteuning heeft. BNS838 forceert bij Amsterdam telkens
-     zijn eigen, kale versie zonder kleur-infrastructuur. Test: wat
-     gebeurt er als dit systeem hier ook niet meer ingrijpt. */
-  return;
   if(window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__) return;
   window.__BNS838_CALM_EMPTY_CATEGORY_LOCK__ = true;
 
