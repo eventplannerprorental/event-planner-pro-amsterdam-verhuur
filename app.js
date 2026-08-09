@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R10';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R11';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -34674,12 +34674,12 @@ setTimeout(()=>{
   if(window.__BNS_V390_ADMIN_MATERIAL_CLEAN__) return;
   window.__BNS_V390_ADMIN_MATERIAL_CLEAN__=true;
   var editId='';
-  var activeCat='TW';
+  var activeCat=''; // R11-fix: was 'TW'
   function E(id){return document.getElementById(id);}
   function A(sel,root){return Array.prototype.slice.call((root||document).querySelectorAll(sel));}
   function T(v){return String(v==null?'':v).trim();}
   function H(v){return T(v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function cat(v){return T(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16)||'TW';}
+  function cat(v){return T(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);} // R11-fix: gaf hier 'TW' terug zodra het rubriekveld leeg was
   function getState(){
     try{ if(typeof state!=='undefined' && state && Array.isArray(state.materials)) return state; }catch(e){}
     try{ if(window.state && Array.isArray(window.state.materials)) return window.state; }catch(e){}
@@ -34827,11 +34827,11 @@ setTimeout(()=>{
   }
   function html(){
     return '<div id="bns390AdminCard"><h3 style="margin:0 0 14px">Materialen beheren</h3><div id="bns390Grid">'
-      +'<div><label>Rubriek</label><input id="bns390Cat" value="TW"></div><div><label>Product nr</label><input id="bns390Nr" placeholder="17"></div>'
+      +'<div><label>Rubriek</label><input id="bns390Cat" value=""></div><div><label>Product nr</label><input id="bns390Nr" placeholder="17"></div>'
       +'<div><label>Product / zoeknaam</label><input id="bns390Product" placeholder="Product"></div><div><label>Product omschrijving</label><input id="bns390Desc" placeholder="Omschrijving"></div>'
       +'<div style="grid-column:1 / span 2"><label>Prijs / vrije tekst</label><input id="bns390Price" placeholder="oude prijs: € 0"></div><div><label>Status</label><select id="bns390Status"><option value="free">Vrij</option><option value="reserved">Gereserveerd</option><option value="defect">Defect</option><option value="inactive">Niet actief</option></select></div><div><label>Mode</label><div id="bns390Mode">Nieuw materiaal</div></div>'
       +'</div><div id="bns390Actions"><button id="bns390Save" type="button">Opslaan materiaal</button><button id="bns390Delete" type="button">Wis materiaal</button><button id="bns390New" type="button">Nieuw/leeg</button><button id="bns390Cancel" type="button">Annuleren</button></div>'
-      +'<div id="bns390Cats"><button type="button" data-cat="TW">TW</button><button type="button" data-cat="TO">TO</button><button type="button" data-cat="KW">KW</button><button type="button" data-cat="EXTRA">EXTRA</button></div>'
+      +'<div id="bns390Cats"></div>'
       +'<input id="bns390Search" placeholder="Zoek binnen rubriek"><div id="bns390List"></div></div>';
   }
   function install(){
@@ -34847,7 +34847,23 @@ setTimeout(()=>{
       bind();
       fill(null);
     }
-    A('#bns390Cats button').forEach(function(b){b.classList.toggle('active',cat(b.getAttribute('data-cat'))===activeCat);});
+    /* R11-fix (2026-08-09): de rubriekknoppen stonden hier als vaste HTML
+       (TW/TO/KW/EXTRA) en werden alleen aan/uit gezet. Nu worden ze opgebouwd
+       uit de rubrieken die echt in je materiaal voorkomen. */
+    var box390=E('bns390Cats');
+    if(box390){
+      var s390=getState(), seen390={}, list390=[];
+      (s390&&Array.isArray(s390.materials)?s390.materials:[]).forEach(function(m){
+        var c=cat(m&&(m.cat||m.rubriek||m.category));
+        if(c&&!seen390[c]){ seen390[c]=1; list390.push(c); }
+      });
+      list390.sort(function(a,b){return String(a).localeCompare(String(b),'nl',{numeric:true});});
+      if(activeCat && !seen390[activeCat]) list390.unshift(activeCat);
+      if(list390.indexOf(activeCat)<0) activeCat=list390[0]||'';
+      box390.innerHTML=list390.map(function(c){
+        return '<button type="button" data-cat="'+H(c)+'" class="'+(c===activeCat?'active':'')+'">'+H(c)+'</button>';
+      }).join('');
+    }
     if(E('bns390Cat')) E('bns390Cat').value=activeCat;
     renderList();
     return true;
@@ -34891,7 +34907,7 @@ setTimeout(()=>{
   if(window.__BNS_V391_ADMIN_MATERIAL_FULL__) return;
   window.__BNS_V391_ADMIN_MATERIAL_FULL__=true;
   var editId='';
-  var activeCat='TW';
+  var activeCat=''; // R11-fix: was 'TW'
   var BASE_COLORS=['#0ea5e9','#dc2626','#f97316','#eab308','#16a34a','#06b6d4','#2563eb','#64748b','#111827'];
   var COLOR_KEY='bns_rubriek_kleuren_v12_pro';
   var COLOR_KEY2='bnsCatColors';
@@ -34900,7 +34916,7 @@ setTimeout(()=>{
   function A(sel,root){return Array.prototype.slice.call((root||document).querySelectorAll(sel));}
   function T(v){return String(v==null?'':v).trim();}
   function H(v){return T(v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-  function cat(v){return T(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16)||'TW';}
+  function cat(v){return T(v||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);} // R11-fix: gaf hier 'TW' terug zodra het rubriekveld leeg was
   function hex(v){v=T(v); if(!v) return ''; if(v[0]!=='#') v='#'+v; return v.toLowerCase();}
   function toastSafe(msg){try{ if(typeof toast==='function') return toast(msg); }catch(e){} try{ if(typeof toastMsg==='function') return toastMsg(msg); }catch(e){} try{ alert(msg); }catch(e){}}
   function getState(){try{ if(typeof state!=='undefined'&&state&&Array.isArray(state.materials)) return state;}catch(e){} try{ if(window.state&&Array.isArray(window.state.materials)) return window.state;}catch(e){} return null;}
@@ -34975,8 +34991,9 @@ setTimeout(()=>{
   }
   function row(m){var c=cat(m.cat||m.rubriek||m.category); var col=getCatColor(c); var cls=T(m.id)===editId?' bns391-selected':''; return '<div class="bns391-row'+cls+'" data-bns391-id="'+H(m.id)+'" style="--c:'+H(col)+'"><span></span><div><b>'+H(codeOf(m))+'</b> '+H(productOf(m))+'<br><small>'+H(descOf(m))+' | rubriek '+H(c)+'</small></div><button type="button">Wijzig</button></div>';}
   function renderList(){var s=getState(), list=E('bns391List'); if(!s||!list)return; var q=T(E('bns391Search')&&E('bns391Search').value).toLowerCase(); var rows=(s.materials||[]).filter(function(m){return cat(m.cat||m.rubriek||m.category)===activeCat;}); if(q) rows=rows.filter(function(m){return [codeOf(m),productOf(m),descOf(m),T(m.price),statusOf(m)].join(' ').toLowerCase().indexOf(q)>=0;}); rows=rows.sort(function(a,b){return codeOf(a).localeCompare(codeOf(b),undefined,{numeric:true});}).slice(0,300); list.innerHTML=rows.length?rows.map(row).join(''):'<div class="bns391-empty">Geen materiaal in rubriek '+H(activeCat)+'.</div>';}
-  function materialCatsList391(){var s=getState();var seen={},out=[];(s&&Array.isArray(s.materials)?s.materials:[]).forEach(function(m){var c=cat(m.cat||m.rubriek||m.category);if(c&&!seen[c]){seen[c]=1;out.push(c);}});out.sort(function(a,b){return String(a).localeCompare(String(b),'nl',{numeric:true});});if(activeCat&&!seen[activeCat])out.unshift(activeCat);return out.length?out:['TW','TO','KW','EXTRA'];}
-  function updateCats(){var box=E('bns391Cats');if(!box)return;var cats=materialCatsList391();if(cats.indexOf(activeCat)<0)activeCat=cats[0];box.innerHTML=cats.map(function(c){var col=getCatColor(c);return '<button type="button" data-cat="'+H(c)+'" class="'+(c===activeCat?'active':'')+'" style="--c:'+H(col)+'">'+H(c)+'</button>';}).join('');}
+  function materialCatsList391(){var s=getState();var seen={},out=[];(s&&Array.isArray(s.materials)?s.materials:[]).forEach(function(m){var c=cat(m.cat||m.rubriek||m.category);if(c&&!seen[c]){seen[c]=1;out.push(c);}});out.sort(function(a,b){return String(a).localeCompare(String(b),'nl',{numeric:true});});if(activeCat&&!seen[activeCat])out.unshift(activeCat);return out;} // R11-fix: terugval was ['TW','TO','KW','EXTRA']
+  function updateCats(){var box=E('bns391Cats');if(!box)return;var cats=materialCatsList391();if(cats.indexOf(activeCat)<0)activeCat=cats[0]||''; // R11-fix: lege lijst gaf undefined
+    box.innerHTML=cats.map(function(c){var col=getCatColor(c);return '<button type="button" data-cat="'+H(c)+'" class="'+(c===activeCat?'active':'')+'" style="--c:'+H(col)+'">'+H(c)+'</button>';}).join('');}
   function style(){if(E('bns391Style'))return; var st=document.createElement('style');st.id='bns391Style';st.textContent='\
     #bns390AdminCard,#bnsV56AdminCard,#adminMatList,#bnsV56AdminList:not(#bns391List){display:none!important}\
     #bns391AdminCard{background:#fff;border:1px solid #dce6f2;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 1px 3px rgba(15,23,42,.06)}\
@@ -34995,7 +35012,7 @@ setTimeout(()=>{
     .bns391-row>span{height:100%;min-height:42px;border-radius:8px;background:var(--c,#0ea5e9)}.bns391-row.bns391-selected{border-color:#0b74d1;background:#f0f9ff}.bns391-row button{background:#0b74d1;color:white;border:0;border-radius:10px;padding:8px 12px;font-weight:900;cursor:pointer}\
     #bns391ConfirmOverlay{position:fixed;inset:0;z-index:2147483647;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:20px}    .bns391-confirm-card{max-width:560px;width:100%;background:white;border-radius:18px;padding:20px;box-shadow:0 24px 80px rgba(15,23,42,.35);border:2px solid #cbd5e1}    .bns391-confirm-card h3{margin:0 0 10px;color:#0f172a}.bns391-confirm-card p{font-weight:800;color:#334155}.bns391-confirm-extra{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;border-radius:12px;padding:12px;margin:10px 0;font-weight:800}    .bns391-confirm-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}.bns391-confirm-actions button{border:0;border-radius:12px;padding:11px 14px;font-weight:900;cursor:pointer}.bns391-confirm-cancel{background:#475569;color:white}.bns391-confirm-ok{background:#dc2626;color:white}    #bns391Mode{font-weight:900;color:#0f172a;background:#eaf6ff;border-radius:999px;padding:7px 12px}.bns391-empty{padding:18px;color:#64748b;font-weight:800}@media(max-width:900px){#bns391Grid{grid-template-columns:1fr 1fr}#bns391AdminCard{padding:12px}}\
   ';document.head.appendChild(st);}
-  function html(){return '<div id="bns391AdminCard"><h3 style="margin:0 0 14px">Materialen beheren</h3><div id="bns391Grid"><div><label>Rubriek</label><input id="bns391Cat" value="TW"></div><div><label>Product nr</label><input id="bns391Nr" placeholder="17"></div><div><label>Product / zoeknaam</label><input id="bns391Product" placeholder="Product"></div><div><label>Product omschrijving</label><input id="bns391Desc" placeholder="Omschrijving"></div><div style="grid-column:1 / span 2"><label>Prijs / vrije tekst</label><input id="bns391Price" placeholder="oude prijs: € 0"></div><div><label>Status</label><select id="bns391Status"><option value="free">Vrij</option><option value="reserved">Gereserveerd</option><option value="defect">Defect</option><option value="inactive">Niet actief</option></select></div><div><label>Mode</label><div id="bns391Mode">Nieuw materiaal</div></div></div><div id="bns391Actions"><button id="bns391Save" type="button">Opslaan materiaal</button><button id="bns391Delete" type="button">Wis materiaal</button><button id="bns391DeleteCat" type="button">Wis rubriek</button><button id="bns391New" type="button">Nieuw/leeg</button><button id="bns391Cancel" type="button">Annuleren</button></div><div id="bns391ColorLine"><b>Rubriek kleur</b><span id="bns391ColorPreview"></span><span id="bns391ColorText"></span><input id="bns391ColorInput" type="color" value="#0ea5e9"><button id="bns391FavSave" type="button">Favoriet opslaan</button><button id="bns391FavDel" type="button">Favoriet wissen</button><div id="bns391Dots"></div></div><div id="bns391Cats"><button type="button" data-cat="TW">TW</button><button type="button" data-cat="TO">TO</button><button type="button" data-cat="KW">KW</button><button type="button" data-cat="EXTRA">EXTRA</button></div><input id="bns391Search" placeholder="Zoek rubriek / product nr / product / omschrijving"><div id="bns391List"></div></div>';}
+  function html(){return '<div id="bns391AdminCard"><h3 style="margin:0 0 14px">Materialen beheren</h3><div id="bns391Grid"><div><label>Rubriek</label><input id="bns391Cat" value=""></div><div><label>Product nr</label><input id="bns391Nr" placeholder="17"></div><div><label>Product / zoeknaam</label><input id="bns391Product" placeholder="Product"></div><div><label>Product omschrijving</label><input id="bns391Desc" placeholder="Omschrijving"></div><div style="grid-column:1 / span 2"><label>Prijs / vrije tekst</label><input id="bns391Price" placeholder="oude prijs: € 0"></div><div><label>Status</label><select id="bns391Status"><option value="free">Vrij</option><option value="reserved">Gereserveerd</option><option value="defect">Defect</option><option value="inactive">Niet actief</option></select></div><div><label>Mode</label><div id="bns391Mode">Nieuw materiaal</div></div></div><div id="bns391Actions"><button id="bns391Save" type="button">Opslaan materiaal</button><button id="bns391Delete" type="button">Wis materiaal</button><button id="bns391DeleteCat" type="button">Wis rubriek</button><button id="bns391New" type="button">Nieuw/leeg</button><button id="bns391Cancel" type="button">Annuleren</button></div><div id="bns391ColorLine"><b>Rubriek kleur</b><span id="bns391ColorPreview"></span><span id="bns391ColorText"></span><input id="bns391ColorInput" type="color" value="#0ea5e9"><button id="bns391FavSave" type="button">Favoriet opslaan</button><button id="bns391FavDel" type="button">Favoriet wissen</button><div id="bns391Dots"></div></div><div id="bns391Cats"></div><input id="bns391Search" placeholder="Zoek rubriek / product nr / product / omschrijving"><div id="bns391List"></div></div>';}
   function bind(){document.addEventListener('click',function(ev){var t=ev.target;if(!t||!t.closest)return;var card=t.closest('#bns391AdminCard');if(!card)return;if(t.closest('#bns391ColorInput'))return;ev.preventDefault();ev.stopPropagation();if(ev.stopImmediatePropagation)ev.stopImmediatePropagation();var cb=t.closest('#bns391Cats button');if(cb){activeCat=cat(cb.getAttribute('data-cat'));editId='';fill(null);updateCats();renderList();return false;}var dot=t.closest('.bns391-dot');if(dot){setCatColor(E('bns391Cat').value||activeCat,dot.getAttribute('data-color'));updateColorUI();updateCats();renderList();try{if(typeof window.renderMaterials==='function')window.renderMaterials(activeCat);}catch(e){}return false;}if(t.closest('#bns391FavSave')){saveFav(E('bns391ColorInput')&&E('bns391ColorInput').value);updateColorUI();return false;}if(t.closest('#bns391FavDel')){removeFav(E('bns391ColorInput')&&E('bns391ColorInput').value);updateColorUI();return false;}if(t.closest('#bns391Save'))return doSave();if(t.closest('#bns391DeleteCat'))return doDeleteRubriek();if(t.closest('#bns391Delete'))return doDelete();if(t.closest('#bns391New,#bns391Cancel')){fill(null);renderList();return false;}var r=t.closest('.bns391-row');if(r){var s=getState();var m=s&&(s.materials||[]).find(function(x){return T(x.id)===T(r.getAttribute('data-bns391-id'));});if(m){fill(m);renderList();}return false;}},true);document.addEventListener('input',function(ev){if(!ev.target||!ev.target.closest||!ev.target.closest('#bns391AdminCard'))return;if(ev.target.id==='bns391Search'){renderList();return;}if(ev.target.id==='bns391Cat'){activeCat=cat(ev.target.value);updateColorUI();updateCats();renderList();return;}if(ev.target.id==='bns391ColorInput'){setCatColor(E('bns391Cat').value||activeCat,ev.target.value);updateColorUI();updateCats();renderList();try{if(typeof window.renderMaterials==='function')window.renderMaterials(activeCat);}catch(e){}return;}},true);}
   function install(){style();var _cats=materialCatsList391(); if(_cats.length && (!_cats.includes(activeCat))) activeCat=_cats[0]; var old=E('bns390AdminCard')||E('bnsV56AdminCard')||E('bnsV56AdminList')||E('adminMatList');if(!old)return false;var parent=(old.id==='bns390AdminCard'||old.id==='bnsV56AdminCard'?old.parentNode:old.closest('.card,.panel,.adminPane,section,main,div')||old.parentNode);if(!parent)return false;if(!E('bns391AdminCard')){var tmp=document.createElement('div');tmp.innerHTML=html();parent.insertBefore(tmp.firstChild,old.id==='bns390AdminCard'||old.id==='bnsV56AdminCard'?old:parent.firstChild);bind();fill(null);}updateCats();updateColorUI();renderList();return true;}
   function boot(){install();}
