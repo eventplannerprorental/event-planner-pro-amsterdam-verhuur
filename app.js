@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-08-R8';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R9';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -668,7 +668,12 @@ function save(){
     try{
       // Als nog steeds vol: verwijder backup keys om ruimte te maken
       ['event-planner-pro-amsterdam-verhuur-v1','event-planner-pro-amsterdam-verhuur-v1-date'].forEach(function(k){ try{localStorage.removeItem(k);}catch(_){} });
-      localStorage.setItem(KEY, JSON.stringify({orders:state.orders||[],materials:state.materials||[],users:state.users||[],alerts:state.alerts||[]}));
+      /* R9-fix (2026-08-09): "settings" ontbrak hier. Deze noodroute gaat af
+         zodra de lokale opslag vol raakt - en wiste dan in één klap alle
+         rubriekkleuren, omdat die uitsluitend in state.settings staan. De
+         kleuren zijn klein (een paar honderd tekens) en zijn nooit de oorzaak
+         van een volle opslag, dus ze horen hier gewoon bij te blijven. */
+      localStorage.setItem(KEY, JSON.stringify({orders:state.orders||[],materials:state.materials||[],users:state.users||[],alerts:state.alerts||[],settings:state.settings||{}}));
       console.warn('[Master test] lokale opslag vol, basis opgeslagen');
     } catch(_){
       console.warn('[Master test] lokale opslag vol, Firebase blijft leidend');
@@ -41260,6 +41265,34 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       localStorage.setItem(KEY, JSON.stringify(s));
     }catch(e){ log('localStorage overslaan: '+(e && e.message || e)); }
   }
+  /* R9-fix (2026-08-09): samenvoegen van gebruikers i.p.v. vervangen.
+     Sleutel is bij voorkeur de PIN (die is uniek per persoon en hetzelfde in
+     beide databases), met het id als terugvaloptie. Zo levert dezelfde persoon
+     die ooit met twee verschillende ids is aangemaakt niet twee regels op. */
+  function bnsR9UserKey(u){
+    var pin = T(u && u.pin);
+    if(pin) return 'pin:' + pin;
+    var id = T(u && u.id);
+    if(id) return 'id:' + id;
+    return 'naam:' + T(u && u.name).toLowerCase();
+  }
+  function bnsR9MergeUsers(localUsers, remoteUsers){
+    var by = {}, order = [];
+    function put(u){
+      if(!u) return;
+      var k = bnsR9UserKey(u);
+      if(!k || k === 'naam:') return;
+      if(!by[k]){ by[k] = {}; order.push(k); }
+      Object.keys(u).forEach(function(f){
+        var v = u[f];
+        if(v === undefined || v === null || v === '') return; // lege velden nooit over gevulde heen
+        by[k][f] = v;
+      });
+    }
+    A(localUsers).forEach(put);   // eerst lokaal/RTDB
+    A(remoteUsers).forEach(put);  // daarna Firestore: wint per veld, wist niets
+    return order.map(function(k){ return by[k]; });
+  }
   function docIdRow(d){ var data = d.data ? (d.data() || {}) : {}; if(!data.id) data.id = d.id; return data; }
   function matId(m){ return T(m && (m.id || m.docId || m.materialId)); }
   function cleanMaterials(list){
@@ -41330,10 +41363,24 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var s = stateObj();
       if(s){
         if(mats.length) s.materials = mats;
-        if(users.length) s.users = users;
+        /* R9-fix (2026-08-09): DIT was de hoofdoorzaak van "bezorger van gisteren
+           is weg". Hier stond `s.users = users;` - een VOLLEDIGE vervanging van de
+           lokale gebruikerslijst door wat Firestore toevallig had. De admin-knop
+           schrijft gebruikers echter naar de Realtime Database (een andere
+           database), niet naar Firestore. Een nieuwe bezorger stond dus alleen in
+           de RTDB, werd hier bij de volgende start uit de lijst gegooid, en werd
+           daarna door hardSync (die de HELE gebruikersboom overschrijft) ook uit
+           de RTDB gewist. Nu wordt er samengevoegd op id/PIN: Firebase-gegevens
+           winnen per veld, maar een gebruiker die alleen lokaal of alleen in de
+           RTDB bestaat blijft gewoon staan. */
+        if(users.length) s.users = bnsR9MergeUsers(A(s.users), users);
         try{ window.state = s; }catch(e){}
       }
-      saveLocalPartial(mats, users);
+      /* R9-fix: ook de lokale opslag kreeg hier de RUWE Firestore-lijst, waarmee
+         de samenvoeging hierboven meteen weer ongedaan werd gemaakt zodra de
+         pagina opnieuw laadde. Nu wordt de samengevoegde lijst bewaard. */
+      var usersToStore = users.length ? bnsR9MergeUsers(A(readLocal().users), users) : users;
+      saveLocalPartial(mats, usersToStore);
       log('Firebase bootstrap via '+(reason||'start')+': materialen '+mats.length+', users '+users.length);
       if(mats.length || users.length) callRender();
     }catch(e){ log('fout bij bootstrap: '+(e && e.message || e)); }
@@ -47955,6 +48002,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       'orders/geannuleerd':mapBy(orders.filter(cancelled),orderKey),
       'agenda/brengen':agendaMap(orders,'brengen'),
       'agenda/ophalen':agendaMap(orders,'ophalen'),
+      /* R9-fix (2026-08-09): "settings" ontbrak in ELKE sync-payload. Daar staan
+         de rubriekkleuren in (settings.categoryColors). Ze werden dus nooit naar
+         Firebase geschreven en stonden alleen in de localStorage van die ene
+         browser - vandaar dat ze verdwenen zodra die opslag werd opgeschoond of
+         volliep. Nu gaan ze gewoon mee. */
+      settings:cleanValue(s.settings || {}),
       syncInfo:{version:'AMS_SYNC_V3',reason:reason||'save',updatedAt:now()}
     };
   }
@@ -48035,6 +48088,16 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     if(!copy.cat && !copy.rubriek && !copy.category && category) copy.cat=text(category).toUpperCase();
     if(!copy.code && copy.productCode) copy.code=copy.productCode;
     if(!copy.name && copy.product) copy.name=copy.product;
+    /* R9-fix (2026-08-09): in de tak "materialen_per_rubriek" heet het kleurveld
+       "kleur" (Nederlands), maar de rest van de app leest "color"/"catColor"/
+       "rubricColor". Bij het terughalen raakte de kleur daardoor zoek: hij stond
+       er wel, maar onder een naam die niemand las. Nu wordt hij vertaald. */
+    var kleur = copy.color || copy.catColor || copy.rubricColor || copy.kleur;
+    if(kleur){
+      if(!copy.color) copy.color = kleur;
+      if(!copy.catColor) copy.catColor = kleur;
+      if(!copy.rubricColor) copy.rubricColor = kleur;
+    }
     return copy;
   }
   function flattenMaterialTree(tree){
@@ -48075,7 +48138,8 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     loadedOnce=true;
     try{
       var result=await Promise.all([
-        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('materialen_per_rubriek'),getPart('alerts'),getPart('orders/alle'),getPart('syncInfo')
+        getPart('users'),getPart('customers'),getPart('locations'),getPart('materials'),getPart('materialen_per_rubriek'),getPart('alerts'),getPart('orders/alle'),getPart('syncInfo'),
+        getPart('settings').catch(function(){ return null; }) // R9-fix: rubriekkleuren ophalen; ontbreekt bij een bestaande database nog, dus fouten hier mogen de rest niet blokkeren
       ]);
       var candidate={
         users:objectValues(result[0]), customers:objectValues(result[1]), locations:objectValues(result[2]),
@@ -48102,6 +48166,26 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
       ['users','customers','locations','materials','alerts','orders'].forEach(function(k){
         if(Array.isArray(candidate[k])) merged[k]=candidate[k];
       });
+      /* R9-fix (2026-08-09): rubriekkleuren terugzetten uit Firebase. Bewust
+         samenvoegen en niet vervangen: een lege of nog niet bestaande
+         settings-tak in Firebase mag nooit de kleuren wissen die deze browser
+         al heeft. Alleen echt aanwezige waarden worden overgenomen. */
+      try{
+        var remoteSettings = result[8] && typeof result[8]==='object' ? result[8] : null;
+        if(remoteSettings){
+          var mergedSettings = Object.assign({}, local.settings || {});
+          Object.keys(remoteSettings).forEach(function(k){
+            var v = remoteSettings[k];
+            if(v === null || v === undefined) return;
+            if(typeof v === 'object' && !Array.isArray(v)){
+              mergedSettings[k] = Object.assign({}, mergedSettings[k] || {}, v);
+            } else {
+              mergedSettings[k] = v;
+            }
+          });
+          merged.settings = mergedSettings;
+        }
+      }catch(e){ console.warn('[Amsterdam sync] instellingen/kleuren samenvoegen mislukt, lokale kleuren blijven staan:', e); }
       merged.__amsUpdatedAt = remoteInfo.updatedAt || now();
       setCurrentState(merged);
       if(previousSave) previousSave();
@@ -48329,11 +48413,12 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     var s = S();
     if(!s) return null;
     s.users = Array.isArray(s.users) ? s.users : [];
-    // De handmatig aangemaakte test-bezorger uit Firebase mag niet lokaal blijven hangen.
-    s.users = s.users.filter(function(u){
-      var txt = (T(u && u.id) + ' ' + T(u && u.name)).toLowerCase();
-      return txt.indexOf('test-bezorger') < 0 && txt.indexOf('test bezorger') < 0;
-    });
+    /* R9-fix (2026-08-09): hier werd bij ELKE sync elke gebruiker weggegooid met
+       "test-bezorger" of "test bezorger" in naam of id. Dat was ooit bedoeld om
+       één specifieke testregel op te ruimen, maar het bleef permanent draaien:
+       een echte bezorger die je zo noemt, verdwijnt daardoor structureel weer.
+       Regel verwijderd - gebruikers worden alleen nog verwijderd via de knop
+       "Verwijder" in het adminscherm. */
     var nameEl = E('adminUserName'), pinEl = E('adminUserPin'), roleEl = E('adminUserRole');
     var name = T(nameEl && nameEl.value);
     var pin = T(pinEl && pinEl.value);
