@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R9';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R10';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -4786,7 +4786,10 @@ setTimeout(()=>{
     const wrap = $('materialCats');
     if (!wrap) return;
     let list = cats();
-    if (!list.length) list = ['TW','TO','KW','EXTRA'];
+    // R10-fix (2026-08-09): hier stond `list = ['TW','TO','KW','EXTRA'];` - vaste
+    // rubrieken uit de Tapwagen-tijd die vanzelf terugkwamen zodra de eigen lijst
+    // leeg was. Amsterdam heeft eigen rubrieken; niets meer verzinnen.
+    if (!list.length) list = [];
     let cur = catKey(window.currentCat || (typeof currentCat !== 'undefined' ? currentCat : '') || list[0]);
     if (!list.includes(cur)) cur = list[0];
     window.currentCat = cur;
@@ -4943,7 +4946,9 @@ setTimeout(()=>{
       if(typeof currentCat !== 'undefined' && currentCat) return cleanCat(currentCat);
     } catch(e){
     }
-    return 'TW';
+    // R10-fix: gaf hier vast 'TW' terug. Nu leeg, zodat de aanroeper zelf de
+    // eerste echte rubriek kiest in plaats van een Tapwagen-rubriek te tonen.
+    return '';
   }
   function setCat(cat){
     var c=cleanCat(cat);
@@ -10431,7 +10436,22 @@ setTimeout(()=>{
 (function bnsV127ReadableAlertsStrictMaterials(){
   'use strict';
   var STYLE_ID='bns-v127-readable-strict-style';
-  var CAT_LIST=['TW','TO','KW','KA','SL','EXTRA'];
+  /* R10-fix (2026-08-09): hier stond een vaste lijst ['TW','TO','KW','KA','SL','EXTRA'].
+     Die wordt gebruikt om te herkennen of een zoekwoord een rubriek is. Met een
+     vaste lijst werd "TW" altijd als rubriek gezien, ook als Amsterdam die
+     rubriek helemaal niet heeft. Nu wordt de lijst afgeleid uit het eigen
+     materiaal, zodat hij automatisch meegroeit met de rubrieken die je zelf
+     aanmaakt. */
+  function catList(){
+    var seen={}, out=[];
+    try{
+      (appState().materials||[]).forEach(function(m){
+        var c=catKey(m && (m.cat||m.rubriek||m.category));
+        if(c && !seen[c]){ seen[c]=1; out.push(c); }
+      });
+    }catch(e){}
+    return out;
+  }
   function $(id){
     return document.getElementById(id);
   }
@@ -10525,11 +10545,12 @@ setTimeout(()=>{
   function queryParts(q){
     var raw=String(q||'').trim();
     var tokens=raw.split(/\s+/).map(norm).filter(Boolean);
+    var LIST=catList(); // R10-fix: was de vaste lijst CAT_LIST
     var catTokens=tokens.filter(function(t){
-      return CAT_LIST.indexOf(t)>=0;
+      return LIST.indexOf(t)>=0;
     });
     var rest=tokens.filter(function(t){
-      return CAT_LIST.indexOf(t)<0;
+      return LIST.indexOf(t)<0;
     });
     return {
       raw:raw.toLowerCase(),cats:catTokens,rest:rest
@@ -17225,7 +17246,17 @@ setTimeout(()=>{
     return [m.cat,m.rubriek,m.category,m.code,m.productNr,m.nr,m.product,m.searchName,m.type,m.name,m.description,m.beschrijving,m.notes,m.price].map(T).join(' ').toLowerCase();
   }
   function currentAdminCat(){
-    return cat(localStorage.getItem('bnsV61AdminCat')||localStorage.getItem('bnsV56Cat')||'TW');
+    /* R10-fix (2026-08-09): hier stond `|| 'TW'` als laatste terugval. Zodra het
+       rubriekveld leeg was, werd TW ingevuld EN via setAdminCat vastgelegd in
+       localStorage (bnsV61AdminCat / bnsV56Cat) - vandaar dat hij na elke F5
+       terugkwam en nergens in Firebase te vinden was. Nu wordt een opgeslagen
+       waarde alleen gebruikt als er echt materiaal in die rubriek zit; anders
+       de eerste eigen rubriek, en anders leeg. Een oude TW-waarde in de lokale
+       opslag lost daarmee vanzelf op. */
+    var stored=cat(localStorage.getItem('bnsV61AdminCat')||localStorage.getItem('bnsV56Cat')||'');
+    var real=cats();
+    if(stored && real.indexOf(stored)>=0) return stored;
+    return real[0]||'';
   }
   function setAdminCat(c){
     c=cat(c);
@@ -21245,7 +21276,8 @@ setTimeout(()=>{
       ib=ib<0?99:ib;
       return ia-ib || a.localeCompare(b);
     });
-    if(!cats.length) cats=['TW'];
+    // R10-fix: hier stond `if(!cats.length) cats=['TW'];` - dat tekende TW erbij
+    // terwijl geen enkel materiaal die rubriek had.
     if(!activeCat) activeCat=catKey(window.currentCat || localStorage.getItem('bnsV56Cat') || cats[0]);
     box.innerHTML=cats.map(function(c){
       return '<button type="button" class="bns-v83-cat '+(c===activeCat?'active':'')+'" data-v83-cat="'+H(c)+'" style="--bns-cat-color:'+H(catColor(c))+'">'+H(c)+'</button>';
@@ -21257,7 +21289,7 @@ setTimeout(()=>{
     var list=E('materialList');
     if(!list) return;
     css();
-    activeCat=catKey(cat || activeCat || window.currentCat || localStorage.getItem('bnsV56Cat') || 'TW');
+    activeCat=catKey(cat || activeCat || window.currentCat || localStorage.getItem('bnsV56Cat') || ''); // R10-fix: laatste terugval was 'TW'
     window.currentCat=activeCat;
     try{
       currentCat=activeCat;
@@ -21367,7 +21399,7 @@ setTimeout(()=>{
   }
   function adminFormMaterial(){
     var useV56=!!E('bnsV56Cat');
-    var cat=catKey(val(useV56?'bnsV56Cat':'adminMatCat') || 'TW');
+    var cat=catKey(val(useV56?'bnsV56Cat':'adminMatCat') || ''); // R10-fix: was || 'TW' - een leeg rubriekveld zette TW voor de materiaalcode
     var nr=nrKey(val(useV56?'bnsV56Nr':'adminMatCode'));
     var code=useV56 ? codeFor(cat,nr) : codeFor(cat,nr);
     var prod=val(useV56?'bnsV56Product':'adminMatProduct') || val('adminMatName');
@@ -23366,7 +23398,7 @@ setTimeout(()=>{
     }
   }
   function formMaterial(){
-    var cat = catKey(readPreferred(['adminMatCat','bnsV56Cat']) || 'TW');
+    var cat = catKey(readPreferred(['adminMatCat','bnsV56Cat']) || ''); // R10-fix: was || 'TW'
     var nr = nrOnly(readPreferred(['adminMatCode','bnsV56Nr','adminMatNr','productNr']), cat);
     var code = makeCode(cat,nr);
     var product = readPreferred(['adminMatProduct','bnsV56Product','productSearchName','productName']);
@@ -23611,7 +23643,7 @@ setTimeout(()=>{
   }
   function renderMaterialPicker(cat){
     applyLatestOverrides();
-    var c=catKey(cat || readPreferred(['adminMatCat','bnsV56Cat']) || window.currentCat || 'TW');
+    var c=catKey(cat || readPreferred(['adminMatCat','bnsV56Cat']) || window.currentCat || ''); // R10-fix: was || 'TW'
     try{
       window.currentCat=c;
     } catch(e){
