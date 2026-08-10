@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R13';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R14';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -40522,12 +40522,18 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       var obj = JSON.parse(String(value));
       if(obj && typeof obj === 'object'){
         var min = {};
-        if(Array.isArray(obj.orders)) min.orders = obj.orders.map(function(o){
-          return o && typeof o === 'object' ? {
-            id:o.id, number:o.number||o.orderNumber||o.opdrachtNummer, status:o.status, folder:o.folder,
-            updatedAt:o.updatedAt||o.modifiedAt||o.createdAt
-          } : o;
-        });
+        /* R14-fix (2026-08-10): deze noodroute bracht elke opdracht terug tot
+           {id, number, status, folder, updatedAt} en schreef dat terug als de
+           opdrachtenlijst. Bij de volgende keer laden waren dat de "echte"
+           opdrachten, en zodra er iets mee gebeurde ging die stomp via een
+           volledige overschrijving naar Firebase - waarmee titel, klant, datum,
+           materialen en prijzen definitief weg waren, op alle apparaten.
+           Bij Tapwagen heeft precies dit 27 opdrachten gekost. Amsterdam heeft
+           dezelfde routine, dus dezelfde reparatie: de lijst wordt niet meer
+           meegeschreven. Een ontbrekende lijst is ongevaarlijk - die wordt
+           opnieuw uit Firebase geladen; een lijst vol stompen is dat niet. */
+        min.orders = [];
+        min.__bnsOrdersWeggelatenBijQuota = true;
         if(Array.isArray(obj.materials)) min.materials = obj.materials.map(function(m){
           return m && typeof m === 'object' ? {id:m.id, code:m.code, name:m.name||m.title, updatedAt:m.updatedAt} : m;
         });
@@ -49069,4 +49075,123 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     leegmaken:function(){ writeLedger({}); return 'register leeg'; }
   };
   try{ console.info('[BNS R13] Vangnet gebruikers actief.'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R14 — Blokkade tegen uitgeklede opdrachten (Amsterdam)
+   ----------------------------------------------------------
+   Zelfde bescherming als bij Tapwagen, want Amsterdam heeft exact dezelfde
+   zwakke plek: opdrachten worden naar Firestore geschreven met een VOLLEDIGE
+   overschrijving zonder merge. Wat een aanroeper meegeeft wordt dus het hele
+   document; komt er ergens een half object langs, dan is de rest van die
+   opdracht definitief weg, ook op elk ander apparaat.
+
+   Deze module zet een slot op het punt waar al die schrijvers samenkomen. Ze
+   houdt per opdracht een piepklein vingerafdrukje bij - had hij een titel, een
+   klant, een startdatum, hoeveel materialen - en weigert elke schrijfactie die
+   iets wegneemt wat er eerder wel was. Bewust GEEN opdrachtinhoud in dat
+   register, want dat zou de opslag juist weer vullen.
+
+   Bij een blokkade komt er een waarschuwing met stacktrace in de console,
+   zodat de verantwoordelijke routine zichzelf verraadt.
+========================================================== */
+(function bnsR14OrderWriteGuard(){
+  'use strict';
+  if(window.__BNS_R14_ORDER_GUARD__) return;
+  window.__BNS_R14_ORDER_GUARD__=true;
+
+  var LEDGER='bns_r14_order_fingerprints';
+  var blocked=[];
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function readLedger(){
+    try{ var v=JSON.parse(localStorage.getItem(LEDGER)||'{}'); return (v&&typeof v==='object'&&!Array.isArray(v))?v:{}; }
+    catch(e){ return {}; }
+  }
+  function writeLedger(l){ try{ localStorage.setItem(LEDGER,JSON.stringify(l)); }catch(e){} }
+
+  function fingerprint(o){
+    if(!o||typeof o!=='object') return null;
+    return {
+      t: T(o.title)?1:0,
+      k: (o.customer && T(o.customer.name||o.customer))?1:0,
+      s: T(o.start)?1:0,
+      m: Array.isArray(o.materials)?o.materials.length:0,
+      n: Object.keys(o).length
+    };
+  }
+  function isReductie(oud,nieuw){
+    if(!oud||!nieuw) return false;
+    if(oud.t && !nieuw.t) return 'titel';
+    if(oud.k && !nieuw.k) return 'klant';
+    if(oud.s && !nieuw.s) return 'startdatum';
+    if(oud.m>0 && nieuw.m===0) return 'materialen';
+    if(oud.n>=25 && nieuw.n < Math.round(oud.n/2)) return 'meer dan de helft van de velden';
+    return false;
+  }
+  function noodopslagActief(){
+    try{
+      var s=window.state;
+      return !!(s && (s.__bnsMinimalCache===true || s.__bnsOrdersWeggelatenBijQuota===true));
+    }catch(e){ return false; }
+  }
+  function melden(id,reden,herkomst,oud,nieuw){
+    blocked.push({id:id,reden:reden,herkomst:herkomst,oud:oud,nieuw:nieuw,tijd:new Date().toISOString()});
+    try{
+      console.warn('[BNS R14] Schrijfactie GEBLOKKEERD voor opdracht '+id+' via '+(herkomst||'onbekend')+': '+reden+'.',{was:oud,wordt:nieuw});
+      console.trace('[BNS R14] hierdoor veroorzaakt:');
+    }catch(e){}
+  }
+  function mag(o,herkomst){
+    if(window.__BNS_R14_UIT__) return true;
+    if(!o || !o.id) return true;
+    var nieuw=fingerprint(o); if(!nieuw) return true;
+    var id=String(o.id);
+    if(noodopslagActief() && !(nieuw.t && nieuw.k)){
+      melden(id,'noodopslag actief en de opdracht is niet compleet',herkomst,null,nieuw); return false;
+    }
+    var l=readLedger(), oud=l[id];
+    var reden=isReductie(oud,nieuw);
+    if(reden){ melden(id,'zou '+reden+' wissen',herkomst,oud,nieuw); return false; }
+    if(!oud || nieuw.n>=oud.n || nieuw.t || nieuw.k){ l[id]=nieuw; writeLedger(l); }
+    return true;
+  }
+
+  function wrap(){
+    try{
+      if(window.BNS && typeof window.BNS.syncOrder==='function' && !window.BNS.syncOrder.__r14){
+        var so=window.BNS.syncOrder;
+        var n1=function(order){ if(!mag(order,'BNS.syncOrder')) return Promise.resolve(false); return so.apply(this,arguments); };
+        n1.__r14=true; window.BNS.syncOrder=n1;
+      }
+    }catch(e){}
+    try{
+      if(window.BNS && typeof window.BNS.syncDoc==='function' && !window.BNS.syncDoc.__r14){
+        var sd=window.BNS.syncDoc;
+        var n2=function(col,row){ if(String(col)==='orders' && !mag(row,'BNS.syncDoc')) return Promise.resolve(false); return sd.apply(this,arguments); };
+        n2.__r14=true; window.BNS.syncDoc=n2;
+        if(window.BNSFirebaseSync) window.BNSFirebaseSync.syncDoc=n2;
+      }
+    }catch(e){}
+  }
+  wrap();
+  var n=0, tm=setInterval(function(){ wrap(); if(++n>40) clearInterval(tm); },500);
+  document.addEventListener('DOMContentLoaded',wrap);
+
+  window.BNS_R14={
+    geblokkeerd:function(){ return blocked.slice(); },
+    vingerafdrukken:readLedger,
+    uitzetten:function(){ window.__BNS_R14_UIT__=true; return 'blokkade uit tot herladen'; },
+    leegmaken:function(){ writeLedger({}); blocked=[]; return 'register leeg'; },
+    verbruik:function(){
+      var t=0,uit={};
+      for(var i=0;i<localStorage.length;i++){
+        var k=localStorage.key(i), v=localStorage.getItem(k)||'';
+        uit[k]=Math.round(v.length/1024)+' KB'; t+=v.length;
+      }
+      uit.__totaal=(t/1024/1024).toFixed(2)+' MB van ~5 MB';
+      return uit;
+    }
+  };
+  try{ console.info('[BNS R14] Blokkade tegen uitgeklede opdrachten actief (Amsterdam).'); }catch(e){}
 })();
