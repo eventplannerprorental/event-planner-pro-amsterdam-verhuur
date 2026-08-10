@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-09-R11';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R13';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -48810,4 +48810,263 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   setInterval(tick, 1000);
 
   try{ console.info('[BNS 954] Nette rubriekknoppen actief (zonder kleuren-logica, geen extra Firebase-aanroepen).'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R12 — Rubriekkleuren echt in Firebase
+   ----------------------------------------------------------
+   Waarom dit nodig is:
+   In R9 is "state.settings" aan de Firebase-sync toegevoegd, in de veronder-
+   stelling dat de rubriekkleuren daarin stonden. Dat blijkt niet zo te zijn.
+   De adminkaart die daadwerkelijk gebruikt wordt (BNS v391) bewaart kleuren
+   uitsluitend in localStorage, en de app gebruikt daarvoor door de jaren heen
+   VIER verschillende sleutels naast elkaar:
+       bns_rubriek_kleuren_v12_pro , bnsCatColors , bns.catColors , bns.categoryColors
+   Geen daarvan zit in de state, dus geen daarvan ging ooit mee naar Firebase.
+   De R9-kleurfix schreef daardoor een lege settings-tak weg.
+
+   Wat deze module doet - bewust als losse brug, zodat de zes bestaande
+   kleurmodules ongemoeid blijven:
+     1. verzamelt de kleuren uit alle vier de sleutels tot één kaart;
+     2. zet die kaart in state.settings.categoryColors, zodat de bestaande
+        R9-sync hem vanzelf naar Firebase schrijft;
+     3. deelt kleuren die uit Firebase terugkomen weer uit over alle vier de
+        sleutels, zodat elke module ze ziet;
+     4. gebruikt een tijdstempel om te bepalen wie wint, zodat een wijziging
+        op de ene computer de andere niet stilletjes terugdraait.
+========================================================== */
+(function bnsR12ColorBridge(){
+  'use strict';
+  if(window.__BNS_R12_COLOR_BRIDGE__) return;
+  window.__BNS_R12_COLOR_BRIDGE__=true;
+
+  var KEYS=['bns_rubriek_kleuren_v12_pro','bnsCatColors','bns.catColors','bns.categoryColors'];
+  var STAMP_KEY='bns_r12_colors_updated_at';
+  var lastPushed='';
+  var booted=false;
+
+  function readJSON(k){
+    try{ var v=JSON.parse(localStorage.getItem(k)||'{}'); return (v && typeof v==='object' && !Array.isArray(v))?v:{}; }
+    catch(e){ return {}; }
+  }
+  function stateObj(){
+    try{ if(typeof state!=='undefined' && state) return state; }catch(e){}
+    try{ if(window.state) return window.state; }catch(e){}
+    return null;
+  }
+  function localMap(){
+    var out={};
+    KEYS.forEach(function(k){
+      var m=readJSON(k);
+      Object.keys(m).forEach(function(c){ if(m[c]) out[String(c).toUpperCase()]=m[c]; });
+    });
+    return out;
+  }
+  function writeAll(map){
+    KEYS.forEach(function(k){ try{ localStorage.setItem(k,JSON.stringify(map)); }catch(e){} });
+    try{ window.bnsCatColors=map; }catch(e){}
+  }
+  function sig(map){
+    return Object.keys(map).sort().map(function(k){return k+'='+map[k];}).join(',');
+  }
+  function localStamp(){ return Number(localStorage.getItem(STAMP_KEY)||0)||0; }
+  function touchLocal(){ try{ localStorage.setItem(STAMP_KEY,String(Date.now())); }catch(e){} }
+
+  /* Kleuren uit Firebase (via state.settings) uitdelen over de lokale sleutels.
+     Alleen als de Firebase-kant aantoonbaar nieuwer is, anders wint wat hier
+     op het scherm staat - zo draait een oude kopie een verse wijziging nooit terug. */
+  function pullDown(){
+    var s=stateObj(); if(!s || !s.settings) return false;
+    var remote=s.settings.categoryColors;
+    if(!remote || typeof remote!=='object' || Array.isArray(remote)) return false;
+    if(!Object.keys(remote).length) return false;
+    var remoteStamp=Number(s.settings.categoryColorsUpdatedAt||0)||0;
+    if(remoteStamp && remoteStamp <= localStamp()) return false;
+    var merged={};
+    Object.keys(localMap()).forEach(function(k){ merged[k]=localMap()[k]; });
+    Object.keys(remote).forEach(function(k){ if(remote[k]) merged[String(k).toUpperCase()]=remote[k]; });
+    if(sig(merged)===sig(localMap())) return false;
+    writeAll(merged);
+    try{ localStorage.setItem(STAMP_KEY,String(remoteStamp||Date.now())); }catch(e){}
+    lastPushed=sig(merged);
+    try{ if(typeof window.renderAll==='function') window.renderAll(); }catch(e){}
+    console.info('[BNS R12] Rubriekkleuren uit Firebase teruggezet ('+Object.keys(merged).length+' rubrieken).');
+    return true;
+  }
+
+  /* Lokale kleuren in de state zetten, zodat de bestaande sync ze meeneemt. */
+  function pushUp(force){
+    var s=stateObj(); if(!s) return false;
+    var map=localMap();
+    if(!Object.keys(map).length) return false;
+    var current=sig(map);
+    if(!force && current===lastPushed) return false;
+    s.settings = (s.settings && typeof s.settings==='object') ? s.settings : {};
+    var changed = sig(s.settings.categoryColors||{}) !== current;
+    s.settings.categoryColors = map;
+    if(changed){
+      touchLocal();
+      s.settings.categoryColorsUpdatedAt = localStamp();
+    }
+    lastPushed = current;
+    return changed;
+  }
+
+  /* Bij opslaan altijd eerst de kleuren in de state zetten, zodat ze in
+     dezelfde ronde meegaan naar Firebase in plaats van een ronde later. */
+  try{
+    var prevSave = window.save;
+    if(typeof prevSave === 'function'){
+      window.save = function(){
+        try{ pushUp(false); }catch(e){}
+        return prevSave.apply(this, arguments);
+      };
+      try{ save = window.save; }catch(e){}
+    }
+  }catch(e){ console.warn('[BNS R12] kon save niet uitbreiden:', e); }
+
+  function tick(){
+    try{
+      if(!booted){
+        // Bij het opstarten mag Firebase de lokale kleuren bijwerken.
+        if(pullDown()){ booted=true; return; }
+      }
+      var before = sig(localMap());
+      if(before && before !== lastPushed){
+        if(pushUp(false)){
+          try{ if(typeof window.save==='function') window.save(); }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+
+  setTimeout(function(){ pullDown(); }, 3000);
+  setTimeout(function(){ pullDown(); booted=true; }, 9000);
+  setTimeout(function(){ pushUp(true); }, 12000);
+  setInterval(tick, 2000);
+
+  window.BNS_R12_COLORS={
+    lokaal:localMap,
+    inState:function(){ var s=stateObj(); return s&&s.settings&&s.settings.categoryColors||{}; },
+    nuOpslaan:function(){ pushUp(true); try{ window.save(); }catch(e){} return localMap(); }
+  };
+  try{ console.info('[BNS R12] Kleurenbrug actief: rubriekkleuren gaan nu mee naar Firebase.'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R13 — Vangnet gebruikers/bezorgers
+   ----------------------------------------------------------
+   Waarom dit nodig is:
+   Gebruikers worden in deze app door minstens drie modules weggeschreven en
+   door twee ingelezen, over TWEE databases (Realtime Database en Firestore),
+   en vrijwel alle schrijfacties zijn een volledige overschrijving van de hele
+   lijst. Elke race tussen die modules kan dus een bezorger stilzwijgend laten
+   verdwijnen - en zodra dat is gebeurd, schrijft de eerstvolgende volledige
+   overschrijving het verlies ook nog eens door naar Firebase.
+
+   Deze module lost dat niet per module op, maar op het niveau waar ze allemaal
+   samenkomen: state.users. Ze houdt een eigen register bij van iedere gebruiker
+   die ooit is gezien. Verdwijnt er een zonder dat je op "verwijderen" hebt
+   geklikt, dan wordt hij teruggezet en gemeld in de console. Verwijder je er
+   bewust een, dan krijgt die een grafsteen en komt hij niet terug.
+========================================================== */
+(function bnsR13UserSafetyNet(){
+  'use strict';
+  if(window.__BNS_R13_USER_NET__) return;
+  window.__BNS_R13_USER_NET__=true;
+
+  var LEDGER_KEY='bns_r13_user_ledger';
+  var DELETE_WINDOW_MS=4000;
+  var lastDeleteClick=0;
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function stateObj(){
+    try{ if(typeof state!=='undefined' && state) return state; }catch(e){}
+    try{ if(window.state) return window.state; }catch(e){}
+    return null;
+  }
+  function keyOf(u){
+    if(!u) return '';
+    var pin=T(u.pin);      if(pin)  return 'pin:'+pin;
+    var id=T(u.id);        if(id)   return 'id:'+id;
+    var nm=T(u.name);      if(nm)   return 'naam:'+nm.toLowerCase();
+    return '';
+  }
+  function readLedger(){
+    try{ var v=JSON.parse(localStorage.getItem(LEDGER_KEY)||'{}'); return (v&&typeof v==='object'&&!Array.isArray(v))?v:{}; }
+    catch(e){ return {}; }
+  }
+  function writeLedger(l){
+    try{ localStorage.setItem(LEDGER_KEY,JSON.stringify(l)); }catch(e){}
+  }
+
+  /* Een klik op een verwijderknop maakt van het eerstvolgende verdwijnen een
+     bewuste verwijdering in plaats van verlies. */
+  document.addEventListener('click',function(ev){
+    try{
+      var t=ev.target; if(!t||!t.closest) return;
+      var btn=t.closest('button,a,[role=button]'); if(!btn) return;
+      var txt=T(btn.textContent)+' '+T(btn.id);
+      if(/verwijder|wis|delete/i.test(txt)) lastDeleteClick=Date.now();
+    }catch(e){}
+  },true);
+
+  function tick(){
+    var s=stateObj();
+    if(!s || !Array.isArray(s.users)) return;
+    var ledger=readLedger();
+    var now=Date.now();
+    var present={};
+    var dirty=false;
+
+    // 1. alles wat er nu is, vastleggen
+    s.users.forEach(function(u){
+      var k=keyOf(u); if(!k) return;
+      present[k]=true;
+      var entry=ledger[k];
+      if(!entry || entry.deleted){ ledger[k]={user:u,seen:now,deleted:false}; dirty=true; }
+      else { entry.user=u; entry.seen=now; dirty=true; }
+    });
+
+    // 2. wat er was maar nu weg is
+    var restored=[];
+    Object.keys(ledger).forEach(function(k){
+      var entry=ledger[k];
+      if(!entry || entry.deleted || present[k]) return;
+      if(now - lastDeleteClick < DELETE_WINDOW_MS){
+        entry.deleted=true; entry.deletedAt=now; dirty=true;   // bewust verwijderd
+        return;
+      }
+      if(entry.user){ s.users.push(entry.user); restored.push(T(entry.user.name)||k); dirty=true; }
+    });
+
+    if(dirty) writeLedger(ledger);
+    if(restored.length){
+      console.warn('[BNS R13] Gebruiker(s) waren uit de lijst verdwenen zonder dat er verwijderd is; teruggezet: '+restored.join(', '));
+      try{ if(typeof window.save==='function') window.save(); }catch(e){}
+      try{ if(typeof window.renderAll==='function') window.renderAll(); }catch(e){}
+    }
+  }
+
+  setTimeout(tick,4000);
+  setInterval(tick,3000);
+
+  window.BNS_R13_USERS={
+    register:function(){ return readLedger(); },
+    actief:function(){ var s=stateObj(); return (s&&s.users)||[]; },
+    vergeet:function(naamOfPin){
+      var l=readLedger(), n=T(naamOfPin).toLowerCase(), hit=[];
+      Object.keys(l).forEach(function(k){
+        var u=l[k]&&l[k].user;
+        if(!u) return;
+        if(k.toLowerCase().indexOf(n)>=0 || T(u.name).toLowerCase().indexOf(n)>=0 || T(u.pin)===T(naamOfPin)){
+          l[k].deleted=true; l[k].deletedAt=Date.now(); hit.push(T(u.name)||k);
+        }
+      });
+      writeLedger(l);
+      return hit;
+    },
+    leegmaken:function(){ writeLedger({}); return 'register leeg'; }
+  };
+  try{ console.info('[BNS R13] Vangnet gebruikers actief.'); }catch(e){}
 })();
