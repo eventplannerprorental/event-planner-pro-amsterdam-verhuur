@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R17';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R18';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -49479,4 +49479,183 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
 
   window.BNS_R17_MELDING=toon;
   try{ console.info('[BNS R17] Planner kan nu zelf een schade/melding maken vanuit Overzicht bestelling.'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R18 — Vragen om foto's op te ruimen na 6 maanden
+   ----------------------------------------------------------
+   Een uitgevoerde opdracht houdt zijn foto's voor altijd. Die worden bij elke
+   start meegeladen, dus hoe meer er zijn, hoe trager de app wordt. Deze module
+   vraagt daarom zes maanden na afloop of de foto's van die opdracht weg mogen.
+
+   Belangrijk: er wordt NOOIT iets uit zichzelf gewist. Er komt alleen een
+   vraag; wissen gebeurt pas als je zelf op Ja klikt.
+
+   Is er bij de opdracht een schademelding gemaakt - door de bezorger of door
+   de planner - dan wordt die eerst getoond, met wie hem gemaakt heeft en wat
+   erin staat, zodat je met kennis van zaken beslist.
+
+   De MELDING zelf blijft altijd bewaard, ook als je de foto's wist. Dat is een
+   paar regels tekst en het is je bewijsstuk; de zwaarte zit in het beeld.
+
+   Antwoorden worden onthouden: zeg je Nee, dan wordt er voor die opdracht niet
+   meer gevraagd. Met "Later" komt hij een volgende keer terug.
+========================================================== */
+(function bnsR18FotoOpruimVraag(){
+  'use strict';
+  if(window.__BNS_R18__) return;
+  window.__BNS_R18__=true;
+
+  var MAANDEN=6;
+  var BESLIST='bns_r18_beslist';
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  var ditBezoekOvergeslagen={};
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function H(v){ return T(v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function st(){ try{ if(typeof state!=='undefined'&&state) return state; }catch(e){} return window.state||null; }
+
+  function beslist(){ try{ var v=JSON.parse(localStorage.getItem(BESLIST)||'{}'); return (v&&typeof v==='object')?v:{}; }catch(e){ return {}; } }
+  function onthoud(id,antwoord){ var b=beslist(); b[String(id)]={antwoord:antwoord,op:new Date().toISOString()}; try{ localStorage.setItem(BESLIST,JSON.stringify(b)); }catch(e){} }
+
+  function isUitgevoerd(o){
+    var s=T(o&&o.status).toLowerCase();
+    var f=T(o&&(o.folder||o.map)).toLowerCase();
+    return s==='uitgevoerd' || f==='uitgevoerd';
+  }
+  function langGenoegGeleden(o){
+    var d=T(o&&(o.end||o.dateEnd||o.endDate||o.start)).slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+    var grens=new Date(); grens.setMonth(grens.getMonth()-MAANDEN);
+    return new Date(d) < grens;
+  }
+  function fotosVan(o){
+    var uit=[];
+    ['media','photos','driverUploads','signatures'].forEach(function(k){
+      (Array.isArray(o&&o[k])?o[k]:[]).forEach(function(m){
+        if(!m||typeof m!=='object') return;
+        var beeld=T(m.imageData||m.data||m.photoData||m.src);
+        if(beeld.length>1000) uit.push({lijst:k,item:m});
+      });
+    });
+    return uit;
+  }
+  function meldingenVan(o){
+    var s=st(); if(!s||!Array.isArray(s.alerts)) return [];
+    var k=T(o.id||o.number), n=T(o.number);
+    return s.alerts.filter(function(a){
+      if(!a) return false;
+      var oid=T(a.orderId), onr=T(a.orderNumber);
+      return (k&&(oid===k||onr===k)) || (n&&(oid===n||onr===n));
+    });
+  }
+
+  function kandidaten(){
+    var s=st(); if(!s||!Array.isArray(s.orders)) return [];
+    var b=beslist();
+    return s.orders.filter(function(o){
+      if(!o||!o.id) return false;
+      var sleutel=String(o.id);
+      if(b[sleutel] && b[sleutel].antwoord==='nee') return false;   // niet meer vragen
+      if(ditBezoekOvergeslagen[sleutel]) return false;              // "later"
+      if(!isUitgevoerd(o) || !langGenoegGeleden(o)) return false;
+      return fotosVan(o).length>0;
+    });
+  }
+
+  async function wisFotos(o){
+    var s=st(); if(!s) return 0;
+    var gewist=0, ids=[];
+    ['media','photos','driverUploads','signatures'].forEach(function(k){
+      if(!Array.isArray(o[k])) return;
+      o[k]=o[k].filter(function(m){
+        if(!m||typeof m!=='object') return true;
+        var beeld=T(m.imageData||m.data||m.photoData||m.src);
+        if(beeld.length>1000){ gewist++; if(m.id) ids.push(String(m.id)); return false; }
+        return true;
+      });
+    });
+    if(!gewist) return 0;
+    try{ if(typeof window.save==='function') window.save(); }catch(e){ console.warn('[BNS R18] opslaan mislukt:',e); }
+    // Ook de losse kopieen in de klantmap opruimen, die reizen niet met de gewone opslag mee.
+    var sleutel=encodeURIComponent(T(o._key||o.id||o.number));
+    for(var i=0;i<ids.length;i++){
+      var mid=encodeURIComponent(ids[i]);
+      try{ await fetch(DB+'/'+BASE+'/customerFiles/'+sleutel+'/media/'+mid+'.json',{method:'DELETE'}); }catch(e){}
+      try{ await fetch(DB+'/'+BASE+'/orders/'+sleutel+'/media/'+mid+'.json',{method:'DELETE'}); }catch(e){}
+    }
+    console.info('[BNS R18] '+gewist+' foto(s) gewist bij opdracht '+T(o.number||o.id)+'. De melding(en) zijn bewaard.');
+    return gewist;
+  }
+
+  function sluit(){ var m=document.getElementById('bnsR18Modal'); if(m) m.remove(); }
+
+  function vraag(o){
+    sluit();
+    var fotos=fotosVan(o).length;
+    var meld=meldingenVan(o);
+    var kop, waarschuwing='';
+    if(meld.length){
+      kop='Let op: bij deze opdracht is een schademelding gemaakt.';
+      waarschuwing=meld.slice(0,3).map(function(a){
+        var wie=T(a.from||a.driverName||a.source||'onbekend');
+        var wanneer=T(a.time||a.createdAt).slice(0,16);
+        return '<div style="background:#fef2f2;border-left:4px solid #dc2626;padding:8px 10px;margin:6px 0;border-radius:6px">'+
+               '<b>'+H(a.title||a.type||'Melding')+'</b><br>'+
+               '<small>van '+H(wie)+(wanneer?' - '+H(wanneer):'')+'</small>'+
+               (T(a.message)?'<br>'+H(a.message):'')+'</div>';
+      }).join('');
+    } else {
+      kop='Deze opdracht is meer dan '+MAANDEN+' maanden geleden uitgevoerd en er is geen schade gemeld.';
+    }
+
+    var wrap=document.createElement('div');
+    wrap.id='bnsR18Modal';
+    wrap.style.cssText='position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+    wrap.innerHTML=
+      '<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.35);font-family:Arial,Helvetica,sans-serif;max-height:88vh;overflow:auto">'+
+        '<h2 style="margin:0 0 4px">Foto\u0027s opruimen?</h2>'+
+        '<div style="color:#475569;margin-bottom:10px">'+H(o.number||'')+' - '+H(o.title||'')+'</div>'+
+        '<p style="margin:0 0 8px">'+H(kop)+'</p>'+
+        waarschuwing+
+        '<p style="margin:8px 0"><b>'+fotos+'</b> foto(\u0027s) bij deze opdracht. De melding zelf blijft altijd bewaard - alleen het beeld wordt gewist.</p>'+
+        '<p style="color:#b91c1c;margin:0 0 14px"><b>Wissen kan niet ongedaan worden gemaakt.</b></p>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'+
+          '<button type="button" id="bnsR18Later" style="padding:12px;border:0;border-radius:10px;background:#475569;color:#fff;font-weight:700;cursor:pointer">Later</button>'+
+          '<button type="button" id="bnsR18Nee" style="padding:12px;border:0;border-radius:10px;background:#0ea5e9;color:#fff;font-weight:700;cursor:pointer">Nee, bewaren</button>'+
+          '<button type="button" id="bnsR18Ja" style="padding:12px;border:0;border-radius:10px;background:#dc2626;color:#fff;font-weight:700;cursor:pointer">Ja, wissen</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(wrap);
+
+    document.getElementById('bnsR18Later').onclick=function(){ ditBezoekOvergeslagen[String(o.id)]=1; sluit(); };
+    document.getElementById('bnsR18Nee').onclick=function(){ onthoud(o.id,'nee'); sluit(); };
+    document.getElementById('bnsR18Ja').onclick=async function(){
+      var knop=this; knop.disabled=true; knop.textContent='Bezig...';
+      var n=await wisFotos(o);
+      onthoud(o.id,'gewist');
+      sluit();
+      try{ alert(n+' foto(s) gewist bij opdracht '+T(o.number||o.id)+'. De melding is bewaard.'); }catch(e){}
+    };
+  }
+
+  function ronde(){
+    try{
+      if(document.getElementById('bnsR18Modal')) return;
+      var lijst=kandidaten();
+      if(lijst.length) vraag(lijst[0]);
+    }catch(e){ console.warn('[BNS R18] controle mislukt:',e); }
+  }
+
+  setTimeout(ronde, 30000);   // rustig: pas een halve minuut na het laden
+
+  window.BNS_R18={
+    maanden:MAANDEN,
+    kandidaten:function(){ return kandidaten().map(function(o){ return {nr:T(o.number||o.id), einde:T(o.end||o.start), fotos:fotosVan(o).length, meldingen:meldingenVan(o).length}; }); },
+    nuVragen:ronde,
+    beslissingen:beslist,
+    beslissingenWissen:function(){ try{ localStorage.removeItem(BESLIST); }catch(e){} ditBezoekOvergeslagen={}; return 'antwoorden gewist - hij vraagt opnieuw'; }
+  };
+  try{ console.info('[BNS R18] Opruimvraag actief (na '+MAANDEN+' maanden). Niets wordt uit zichzelf gewist.'); }catch(e){}
 })();
