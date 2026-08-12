@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R18';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R19';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -25886,21 +25886,40 @@ setTimeout(()=>{
     var fs = window.BNS.fs;
     var db = window.BNS.db;
     var chunks = jsonChunks(json);
+    /* R19-fix (2026-08-12): hier werd ELKE dag dezelfde backup overschreven.
+       Er was dus maar EEN kopie: merkte je een dag later dat er iets mis was,
+       dan was de goede kopie al weg. Precies daarom bleken bij Tapwagen 27
+       beschadigde opdrachten onherstelbaar - er was geen kopie uit het juiste
+       venster. Nu roteert de backup over 14 dagen (daily_00 t/m daily_13), net
+       als bij Tapwagen, en blijft daily_latest ook staan zodat bestaande
+       hulpmiddelen die dat pad lezen blijven werken. */
+    var VAKKEN = 14;
+    var vak = "daily_" + String((Math.floor(Date.now()/86400000)) % VAKKEN).padStart(2,"0");
     var meta = {
-      type: "eventplanner-daily-latest",
+      type: "eventplanner-daily",
       date: day,
       updatedAt: nowIso(),
       chunkCount: chunks.length,
       size: json.length,
-      note: "Automatische dagbackup. Deze overschrijft steeds dezelfde backup en groeit dus niet per dag."
+      slot: vak,
+      note: "Automatische dagbackup. Roteert over " + VAKKEN + " dagen; de kopie van vandaag komt in " + vak + "."
     };
-    try{
-      await fs.setDoc(fs.doc(db, "backups", "daily_latest"), meta, {
-        merge:false
-      });
+    async function schrijfNaar(naam){
+      /* Eerst kijken hoeveel delen er de vorige keer in dit vak stonden. Waren
+         het er meer, dan moeten de overtollige weg - anders plakt een oudere,
+         langere backup zijn staart achter de nieuwe en is het bestand niet meer
+         te lezen ("Unexpected non-whitespace character after JSON"). */
+      var oudAantal = 0;
+      try{
+        var bestaand = await fs.getDoc(fs.doc(db, "backups", naam));
+        if(bestaand && bestaand.exists && bestaand.exists()){
+          oudAantal = Number((bestaand.data()||{}).chunkCount||0) || 0;
+        }
+      }catch(e){}
+      await fs.setDoc(fs.doc(db, "backups", naam), meta, { merge:false });
       for(var i=0; i<chunks.length; i++){
         await fs.setDoc(
-        fs.doc(db, "backups", "daily_latest", "chunks", String(i).padStart(4,"0")),
+        fs.doc(db, "backups", naam, "chunks", String(i).padStart(4,"0")),
         {
           index:i, data:chunks[i], updatedAt:meta.updatedAt
         },
@@ -25908,6 +25927,13 @@ setTimeout(()=>{
           merge:false
         });
       }
+      for(var j=chunks.length; j<oudAantal; j++){
+        try{ await fs.deleteDoc(fs.doc(db, "backups", naam, "chunks", String(j).padStart(4,"0"))); }catch(e){}
+      }
+    }
+    try{
+      await schrijfNaar(vak);
+      await schrijfNaar("daily_latest");
       localStorage.setItem(FIREBASE_DATE_KEY, day);
       setStatus("Firebase dagbackup gemaakt: " + day + " (" + chunks.length + " deel" + (chunks.length===1?"":"en") + ")");
       return true;
@@ -25977,7 +26003,7 @@ setTimeout(()=>{
       (localStorage.getItem(LOCAL_STATUS_KEY) || "Nog geen status")+
       '</div>'+
       '<button type="button" id="bnsAutoBackupNow" style="background:#16a34a;color:#fff;border:0;border-radius:10px;padding:12px 16px;font-weight:900;cursor:pointer;">Backup nu naar Firebase</button>'+
-      '<div style="font-size:13px;margin-top:8px;color:#374151;">Maakt maximaal 1 automatische backup per dag en overschrijft dezelfde backup: backups/daily_latest.</div>';
+      '<div style="font-size:13px;margin-top:8px;color:#374151;">Maakt maximaal 1 automatische backup per dag. De kopie roteert over 14 dagen (backups/daily_00 t/m daily_13); daily_latest blijft de kopie van vandaag.</div>';
       anchor.parentNode.insertBefore(box, anchor.nextSibling);
       var btn = document.getElementById("bnsAutoBackupNow");
       if(btn){
