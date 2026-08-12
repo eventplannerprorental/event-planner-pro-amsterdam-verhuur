@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R16';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R17';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -38831,6 +38831,15 @@ console.log('[BNS v460] mappen/folder + v459 fixes actief.');
       '<h3>Materialen / artikelen</h3><table class="bns-v493-table"><thead><tr><th>#</th><th>Code</th><th>Naam</th><th>Rubriek</th><th>Status</th><th>Prijs</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '<div class="bns-v493-total">Totaal: '+money(total)+' &nbsp; | &nbsp; Borg: '+money(deposit)+'</div>'+
       (o.extra?'<h3>Extra</h3><div class="bns-v493-box">'+H(o.extra)+'</div>':'')+
+      /* R17 (2026-08-12): knop om als planner zelf een schademelding te maken.
+         Bewust HIER, binnen overviewHtml, zodat de knop gewoon meekomt met de
+         normale opbouw van dit venster in plaats van er achteraf ingeprikt te
+         worden - dat laatste is wat vroeger het geflikker gaf. */
+      '<div class="bns-v493-box" style="margin-top:10px">'+
+        '<button type="button" onclick="BNS_R17_MELDING(\''+H(String(o.id||o.number||''))+'\')" '+
+        'style="background:#dc2626;color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer">'+
+        'Schade / melding maken</button>'+
+      '</div>'+
       mediaHtmlBlock(o)+'</div>';
   }
 
@@ -49350,4 +49359,124 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
   installeer();
   var n=0, tm=setInterval(function(){ installeer(); if(++n>40) clearInterval(tm); },500);
   document.addEventListener('DOMContentLoaded',installeer);
+})();
+
+/* ==========================================================
+   BNS R17 — Schade/melding maken vanuit "Overzicht bestelling"
+   ----------------------------------------------------------
+   Tot nu toe kon alleen de bezorger een melding maken. Deze module geeft de
+   planner dezelfde mogelijkheid, op de plek waar de knop vroeger ook zat.
+
+   Over het geflikker van vroeger: dat kwam niet van de knop maar van een
+   automatische herbouw van dit venster elke 2,5 seconde. Die is destijds
+   uitgezet (er staat nog een lege setInterval met precies die opmerking in de
+   code). Deze module bouwt dus NIETS opnieuw op eigen houtje:
+     - de knop zit in de gewone opbouw van het venster, niet er achteraf in
+       geprikt, dus er is niets dat met de tekenmachine kan vechten;
+     - na het opslaan wordt alleen DIT venster ververst, niet het hele scherm;
+     - renderAll() wordt nergens aangeroepen.
+
+   De melding wordt in state.alerts gezet en gaat via de gewone opslag mee naar
+   Firebase, precies zoals een melding van de bezorger.
+========================================================== */
+(function bnsR17PlannerMelding(){
+  'use strict';
+  if(window.__BNS_R17__) return;
+  window.__BNS_R17__=true;
+
+  var SOORTEN=[
+    ['schade','Schade'],
+    ['storing','Storing / defect'],
+    ['vermissing','Vermissing'],
+    ['algemeen','Algemene melding']
+  ];
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function H(v){ return T(v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function st(){ try{ if(typeof state!=='undefined'&&state) return state; }catch(e){} return window.state||null; }
+  function vindOpdracht(id){
+    var s=st(); if(!s||!Array.isArray(s.orders)) return null;
+    var n=T(id);
+    return s.orders.filter(function(o){ return o && (T(o.id)===n || T(o.number)===n); })[0]||null;
+  }
+  function wieBenIk(){
+    try{
+      var s=st();
+      var u=(window.currentUser)||(s&&s.currentUser)||null;
+      return T(u&&(u.name||u.naam))||'Planner';
+    }catch(e){ return 'Planner'; }
+  }
+  function nieuwId(){
+    try{ if(typeof id==='function') return id(); }catch(e){}
+    return 'a_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  }
+
+  function sluit(){ var m=document.getElementById('bnsR17Modal'); if(m) m.remove(); }
+
+  function bewaar(o, soort, tekst){
+    var s=st(); if(!s) return false;
+    if(!Array.isArray(s.alerts)) s.alerts=[];
+    var naam=(SOORTEN.filter(function(x){return x[0]===soort;})[0]||['','Melding'])[1];
+    s.alerts.unshift({
+      id:nieuwId(),
+      type:soort,
+      title:naam+' - '+T(o.number||o.id),
+      message:T(tekst),
+      orderId:T(o.id||o.number),
+      orderNumber:T(o.number||''),
+      createdAt:new Date().toISOString(),
+      time:new Date().toLocaleString('nl-NL'),
+      from:wieBenIk(),
+      driverName:'',
+      source:'planner',
+      resolved:false
+    });
+    try{ if(typeof window.save==='function') window.save(); }catch(e){
+      console.warn('[BNS R17] opslaan mislukt:',e);
+      return false;
+    }
+    return true;
+  }
+
+  function toon(id){
+    var o=vindOpdracht(id);
+    if(!o){ alert('Opdracht niet gevonden.'); return; }
+    sluit();
+    var wrap=document.createElement('div');
+    wrap.id='bnsR17Modal';
+    wrap.style.cssText='position:fixed;inset:0;z-index:2147483600;background:rgba(15,23,42,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+    wrap.innerHTML=
+      '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.35);font-family:Arial,Helvetica,sans-serif">'+
+        '<h2 style="margin:0 0 4px">Melding maken</h2>'+
+        '<div style="color:#475569;margin-bottom:12px">'+H(o.number||'')+' - '+H(o.title||'')+'</div>'+
+        '<label style="display:block;font-weight:700;margin-bottom:4px">Soort</label>'+
+        '<select id="bnsR17Soort" style="width:100%;padding:10px;border:2px solid #cbd5e1;border-radius:10px;margin-bottom:12px">'+
+          SOORTEN.map(function(x){ return '<option value="'+x[0]+'">'+x[1]+'</option>'; }).join('')+
+        '</select>'+
+        '<label style="display:block;font-weight:700;margin-bottom:4px">Omschrijving</label>'+
+        '<textarea id="bnsR17Tekst" rows="4" placeholder="Wat is er aan de hand?" style="width:100%;padding:10px;border:2px solid #cbd5e1;border-radius:10px;margin-bottom:14px"></textarea>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+          '<button type="button" id="bnsR17Annuleer" style="padding:12px;border:0;border-radius:10px;background:#475569;color:#fff;font-weight:700;cursor:pointer">Annuleren</button>'+
+          '<button type="button" id="bnsR17Opslaan" style="padding:12px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;cursor:pointer">Opslaan</button>'+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click',function(e){ if(e.target===wrap) sluit(); });
+    document.getElementById('bnsR17Annuleer').onclick=sluit;
+    document.getElementById('bnsR17Opslaan').onclick=function(){
+      var soort=document.getElementById('bnsR17Soort').value;
+      var tekst=document.getElementById('bnsR17Tekst').value;
+      if(!T(tekst)){ alert('Vul een korte omschrijving in.'); return; }
+      if(!bewaar(o,soort,tekst)){ alert('Opslaan is niet gelukt. Probeer het nog een keer.'); return; }
+      sluit();
+      /* Alleen dit ene venster verversen - niet het hele scherm. */
+      try{
+        if(typeof window.BNS_V493_SHOW==='function') window.BNS_V493_SHOW(T(o.id||o.number));
+      }catch(e){}
+      try{ console.info('[BNS R17] Melding opgeslagen bij opdracht '+T(o.number||o.id)+'.'); }catch(e){}
+    };
+  }
+
+  window.BNS_R17_MELDING=toon;
+  try{ console.info('[BNS R17] Planner kan nu zelf een schade/melding maken vanuit Overzicht bestelling.'); }catch(e){}
 })();
