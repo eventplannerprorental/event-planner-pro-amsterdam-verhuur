@@ -1,4 +1,4 @@
-window.AMSTERDAM_DRIVER_BUILD_ID = 'AMS-DRIVER-FIX-2026-07-28-R1';
+window.AMSTERDAM_DRIVER_BUILD_ID = 'AMS-DRIVER-2026-08-12-R2';
 /* Event Planner PRO Amsterdam verhuur - driver v51
    Tapwagen-achtige compacte telefoonindeling.
    Alleen Amsterdam RTDB: customers/amsterdam-verhuur.
@@ -130,4 +130,137 @@ window.AMSTERDAM_DRIVER_BUILD_ID = 'AMS-DRIVER-FIX-2026-07-28-R1';
   function bind(){E('loginBtn')&&(E('loginBtn').onclick=doLogin);E('logoutBtn')&&(E('logoutBtn').onclick=function(){currentUser=null;localStorage.removeItem(LS_USER);location.reload()});E('refreshBtn')&&(E('refreshBtn').onclick=loadData);E('clearSearchBtn')&&(E('clearSearchBtn').onclick=function(){currentSearch='';E('searchInput').value='';renderOrders()});E('searchInput')&&(E('searchInput').oninput=function(){currentSearch=this.value;renderOrders()})}
   async function boot(){bind();try{await initFirebase();await loadData();setInterval(loadData,15000)}catch(e){setStatus('Firebase fout: '+(e.message||e),true)}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+
+/* ==========================================================
+   BNS DRV-R2 — Bezorger-app Amsterdam werkt zichzelf bij
+   ----------------------------------------------------------
+   Waarom dit nodig is:
+   driver.js werd geladen als `driver.js?v=520` - een VAST versienummer. Zolang
+   dat nummer niet met de hand wordt verhoogd, blijft een telefoon zijn eigen
+   opgeslagen kopie gebruiken. Een bezorger kan daardoor maanden op oude code
+   draaien zonder dat iemand het merkt, en op een telefoon is dat niet te zien
+   omdat je er geen ontwikkelaarsscherm kunt openen.
+
+   Wat deze module doet:
+     1. zet het versienummer ZICHTBAAR onderaan het scherm, af te lezen zonder
+        console; tik erop om meteen bij te werken;
+     2. controleert bij het opstarten, elk kwartier en bij terugkomst in de app
+        of er een nieuwere versie op de server staat;
+     3. zo ja: opgeslagen kopieen wissen, service workers uitschakelen en
+        zichzelf opnieuw laden met een verse adresregel.
+
+   Maximaal twee automatische herstarts per sessie, zodat een bezorger nooit in
+   een herstartlus kan komen als er aan de serverkant iets niet klopt.
+
+   Deze module raakt de opdrachtgegevens niet aan - hij leest alleen zijn eigen
+   bestand op en vergelijkt het versienummer.
+========================================================== */
+(function bnsAmsDriverZelfBijwerken(){
+  'use strict';
+  if(window.__BNS_AMS_DRV_UPDATER__) return;
+  window.__BNS_AMS_DRV_UPDATER__=true;
+
+  var HUIDIG=String(window.AMSTERDAM_DRIVER_BUILD_ID||'onbekend');
+  var TELLER='bns_ams_drv_herlaad_teller';
+  var MAX_HERLAAD=2;
+
+  function tel(){ try{ return Number(sessionStorage.getItem(TELLER)||0)||0; }catch(e){ return 0; } }
+  function telOp(){ try{ sessionStorage.setItem(TELLER,String(tel()+1)); }catch(e){} }
+
+  function melding(tekst){
+    try{
+      var s=document.getElementById('status');
+      if(s){ s.textContent=tekst; return; }
+    }catch(e){}
+    try{ console.info('[BNS AMS DRV] '+tekst); }catch(e){}
+  }
+
+  function toonVersie(){
+    try{
+      var el=document.getElementById('bnsAmsDrvVersie');
+      if(!el){
+        el=document.createElement('div');
+        el.id='bnsAmsDrvVersie';
+        el.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9998;'+
+          'background:rgba(15,23,42,.85);color:#fff;font:11px Arial,Helvetica,sans-serif;'+
+          'padding:4px 8px;text-align:center;letter-spacing:.2px';
+        el.title='Versie van deze bezorger-app';
+        document.body.appendChild(el);
+        el.addEventListener('click', function(){ nuBijwerken(true); });
+      }
+      el.textContent='versie '+HUIDIG+'  (tik om bij te werken)';
+    }catch(e){}
+  }
+
+  async function wisOpslagKopieen(){
+    try{
+      if('serviceWorker' in navigator){
+        var regs=await navigator.serviceWorker.getRegistrations();
+        for(var i=0;i<regs.length;i++){ try{ await regs[i].unregister(); }catch(e){} }
+      }
+    }catch(e){}
+    try{
+      if(window.caches){
+        var keys=await caches.keys();
+        for(var j=0;j<keys.length;j++){ try{ await caches.delete(keys[j]); }catch(e){} }
+      }
+    }catch(e){}
+  }
+
+  function herlaadVers(){
+    try{
+      var basis=location.href.split('#')[0].split('?')[0];
+      location.replace(basis+'?vers='+Date.now());
+    }catch(e){ try{ location.reload(); }catch(_){} }
+  }
+
+  async function serverVersie(){
+    try{
+      var res=await fetch('driver.js?vers='+Date.now(),{cache:'no-store'});
+      if(!res || !res.ok) return '';
+      var tekst=await res.text();
+      var m=tekst.match(/AMSTERDAM_DRIVER_BUILD_ID\s*=\s*['"]([^'"]+)['"]/);
+      return m?m[1]:'';
+    }catch(e){ return ''; }
+  }
+
+  async function nuBijwerken(handmatig){
+    var opServer=await serverVersie();
+    if(!opServer){
+      if(handmatig) melding('Kon de serverversie niet ophalen. Controleer de internetverbinding.');
+      return false;
+    }
+    if(opServer===HUIDIG){
+      if(handmatig) melding('Je hebt al de nieuwste versie ('+HUIDIG+').');
+      return false;
+    }
+    if(!handmatig && tel()>=MAX_HERLAAD){
+      console.warn('[BNS AMS DRV] Nieuwere versie ('+opServer+') gezien, maar al '+tel()+'x herladen. Gestopt om een lus te voorkomen.');
+      return false;
+    }
+    melding('Nieuwe versie gevonden ('+opServer+'). De app werkt zichzelf bij...');
+    telOp();
+    await wisOpslagKopieen();
+    setTimeout(herlaadVers,600);
+    return true;
+  }
+
+  function start(){
+    toonVersie();
+    setTimeout(function(){ nuBijwerken(false); },2500);
+    setInterval(function(){ nuBijwerken(false); },15*60*1000);
+    document.addEventListener('visibilitychange',function(){
+      if(document.visibilityState==='visible') setTimeout(function(){ nuBijwerken(false); },1200);
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',start);
+  else start();
+
+  window.BNS_AMS_DRV={
+    versie:HUIDIG,
+    bijwerken:function(){ return nuBijwerken(true); },
+    wissen:async function(){ await wisOpslagKopieen(); herlaadVers(); }
+  };
+  try{ console.info('[BNS AMS DRV] Zelf-bijwerken actief. Versie: '+HUIDIG); }catch(e){}
 })();
