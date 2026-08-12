@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R14';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-10-R16';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -13092,7 +13092,20 @@ setTimeout(()=>{
 ========================================================= */
 (function(){
   const FIREBASE_VERSION = '10.12.5';
-  const MIN_ORDER_DATE_BNS = '2025-01-01';
+  /* R15 (2026-08-10): dit was een VAST jaartal dat ooit is ingetikt en niet
+     meeloopt, waardoor de lokale opslag elk jaar verder groeit tot hij tegen de
+     5 MB-grens van de browser aanloopt. Bij Tapwagen heeft precies dat de hele
+     ellende veroorzaakt. Nu schuift de grens vanzelf mee.
+     De ondergrens 2025-01-01 blijft staan, zodat er vandaag NIETS verandert:
+     de grens gaat pas schuiven als hij daaroverheen groeit (vanaf 2031). */
+  const JAREN_IN_BEELD = 5;
+  const MIN_ORDER_DATE_BNS = (function(){
+    try{
+      var jaar = new Date().getFullYear() - JAREN_IN_BEELD;
+      var rollend = jaar + '-01-01';
+      return rollend > '2025-01-01' ? rollend : '2025-01-01';
+    }catch(e){ return '2025-01-01'; }
+  })();
   const PENDING_KEY = 'bns_pending_firebase_orders_v1';
   window.BNS = window.BNS || {
   };
@@ -21649,7 +21662,7 @@ setTimeout(()=>{
         firebaseOrdersStarted=true;
         var ref=fs.collection(window.BNS.db,'orders');
         try{
-          ref=fs.query(ref,fs.where('start','>=','2025-01-01'));
+          ref=fs.query(ref,fs.where('start','>=',MIN_ORDER_DATE_BNS)); // R15: was een tweede, los ingetikt vast jaartal
         } catch(e){
         }
         fs.onSnapshot(ref,function(snap){
@@ -49194,4 +49207,147 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     }
   };
   try{ console.info('[BNS R14] Blokkade tegen uitgeklede opdrachten actief (Amsterdam).'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R16 — Archiefscherm haalt oude jaren zelf op (Amsterdam)
+   ----------------------------------------------------------
+   De laadgrens loopt vanaf nu mee (zie JAREN_IN_BEELD): opdrachten ouder dan
+   vijf jaar worden niet meer lokaal geladen. Dat houdt de browseropslag vanzelf
+   gezond, maar het archiefscherm toont alleen wat er IN HET GEHEUGEN zit - dus
+   zonder deze module zouden die oude jaren daar straks uit verdwijnen.
+
+   Zodra het archiefscherm wordt getekend, worden de opdrachten van voor de
+   laadgrens eenmalig uit Firebase gehaald en toegevoegd, met een markering.
+   Die markering zorgt dat ze bij het opslaan weer worden weggelaten: ze mogen
+   op je scherm staan, maar niet in de browseropslag.
+
+   Vandaag doet dit nog niets - de grens staat op 2025-01-01 en schuift pas
+   vanaf 2031. De leiding ligt er dan alleen al klaar.
+========================================================== */
+(function bnsR16ArchiefAanvullen(){
+  'use strict';
+  if(window.__BNS_R16__) return;
+  window.__BNS_R16__=true;
+
+  var gehaald=false, bezig=false, aantal=0;
+  var GRENS=(typeof MIN_ORDER_DATE_BNS!=='undefined')?MIN_ORDER_DATE_BNS:'2025-01-01';
+
+  function st(){ try{ if(typeof state!=='undefined'&&state) return state; }catch(e){} return window.state||null; }
+
+  /* Opgehaalde archiefopdrachten mogen nooit in de opslag terechtkomen. */
+  function schoonVoorOpslag(){
+    var s=st(); if(!s||!Array.isArray(s.orders)) return;
+    s.orders=s.orders.filter(function(o){ return !(o && o.__bnsAlleenArchiefWeergave); });
+  }
+  try{
+    var vorige=window.save;
+    if(typeof vorige==='function' && !vorige.__r16){
+      var nieuweSave=function(){ try{ schoonVoorOpslag(); }catch(e){} return vorige.apply(this,arguments); };
+      nieuweSave.__r16=true;
+      window.save=nieuweSave;
+      try{ save=nieuweSave; }catch(e){}
+    }
+  }catch(e){}
+
+  async function haalOudeJaren(){
+    if(gehaald || bezig) return aantal;
+    if(!(window.BNS && window.BNS.fs && window.BNS.db)) return 0;
+    bezig=true;
+    try{
+      var fs=window.BNS.fs;
+      var ref=fs.query(fs.collection(window.BNS.db,'orders'), fs.where('start','<',GRENS));
+      var snap=await fs.getDocs(ref);
+      var s=st(); if(!s || !Array.isArray(s.orders)) return 0;
+      var bestaand={}; s.orders.forEach(function(o){ if(o&&o.id) bestaand[String(o.id)]=1; });
+      var n=0;
+      snap.docs.forEach(function(d){
+        var o=d.data()||{};
+        if(!o.id) o.id=d.id;
+        if(bestaand[String(o.id)]) return;
+        o.__bnsAlleenArchiefWeergave=true;
+        s.orders.push(o); n++;
+      });
+      gehaald=true; aantal=n;
+      if(n) console.info('[BNS R16] Archief aangevuld met '+n+' opdracht(en) van voor '+GRENS+'.');
+      return n;
+    }catch(e){
+      console.warn('[BNS R16] oude jaren ophalen mislukt:',e);
+      return 0;
+    }finally{ bezig=false; }
+  }
+
+  function koppel(){
+    try{
+      var orig=window.BNS_V126_REFRESH_ARCHIVE;
+      if(typeof orig!=='function' || orig.__r16) return;
+      var nieuw=function(){
+        var uit=orig.apply(this,arguments);
+        if(!gehaald){ haalOudeJaren().then(function(n){ if(n){ try{ orig(); }catch(e){} } }); }
+        return uit;
+      };
+      nieuw.__r16=true;
+      window.BNS_V126_REFRESH_ARCHIVE=nieuw;
+    }catch(e){}
+    /* Ook rechtstreeks aan de twee archiefknoppen hangen, want die tekenen het
+       scherm soms zonder via REFRESH_ARCHIVE te lopen. */
+    ['bns362ArchBtn','bns363ArchBtn'].forEach(function(id){
+      try{
+        var b=document.getElementById(id);
+        if(b && !b.__r16){ b.__r16=true; b.addEventListener('click',function(){ setTimeout(haalOudeJaren,400); }); }
+      }catch(e){}
+    });
+  }
+  koppel();
+  var k=0, tm=setInterval(function(){ koppel(); if(++k>60) clearInterval(tm); },500);
+  document.addEventListener('DOMContentLoaded',koppel);
+
+  window.BNS_R16={
+    grens:GRENS,
+    stand:function(){
+      var s=st(), a=(s&&s.orders)||[];
+      return {laadgrens:GRENS, opdrachten_in_geheugen:a.length,
+              waarvan_uit_archief:a.filter(function(o){return o&&o.__bnsAlleenArchiefWeergave;}).length,
+              al_opgehaald:gehaald};
+    },
+    nuOphalen:haalOudeJaren
+  };
+  try{ console.info('[BNS R16] Laadgrens loopt mee ('+GRENS+'); archief vult zichzelf aan uit Firebase.'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R16 — Bevestiging op "Wis map" (Amsterdam)
+   ----------------------------------------------------------
+   Die knop wist een heel jaar aan opdrachten in een klik, zonder vragen.
+   Zelfde beveiliging als bij Tapwagen: de knop blijft werken, maar vraagt
+   eerst om bevestiging met het jaar en het aantal erbij.
+========================================================== */
+(function bnsR16WisMapBevestiging(){
+  'use strict';
+  if(window.__BNS_R16_WISMAP__) return;
+  window.__BNS_R16_WISMAP__=true;
+  function installeer(){
+    try{
+      var orig=window.BNS_V126_DELETE_BUCKET;
+      if(typeof orig!=='function' || orig.__r16) return;
+      var veilig=function(map){
+        var s=null;
+        try{ s=(typeof state!=='undefined'&&state)||window.state; }catch(e){}
+        var aantal=0;
+        try{
+          (s&&s.orders||[]).forEach(function(o){
+            var d=String(o&&(o.end||o.start)||'').slice(0,4);
+            if(d===String(map)) aantal++;
+          });
+        }catch(e){}
+        if(!window.confirm('Map "'+map+'" wissen?\n\nDit verwijdert '+(aantal||'alle')+' opdracht(en) uit dat jaar.\nDit kan niet ongedaan worden gemaakt.\n\nWeet je het zeker?')) return false;
+        return orig.apply(this,arguments);
+      };
+      veilig.__r16=true;
+      window.BNS_V126_DELETE_BUCKET=veilig;
+    }catch(e){}
+  }
+  installeer();
+  var n=0, tm=setInterval(function(){ installeer(); if(++n>40) clearInterval(tm); },500);
+  document.addEventListener('DOMContentLoaded',installeer);
 })();
