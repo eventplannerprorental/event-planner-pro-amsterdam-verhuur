@@ -1,4 +1,4 @@
-window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-12-R19';
+window.AMSTERDAM_BUILD_ID = 'AMS-CLEAN-2026-08-18-R21';
 console.info('%c[AMSTERDAM] Build V22 actief - deze versie bevat: imageData-opschoning, 15-sec sync-lus uitgeschakeld, wis-beveiliging Firebase, leesbare opdracht-sleutels.', 'font-weight:bold;font-size:14px;color:#0a7');
 
 (function(){
@@ -1080,13 +1080,36 @@ function newNo(){
 }
 function saveCurrentOrder(){
   const currentId = editing || '';
-  const currentNumber = orderNumber.value || '';
+  let currentNumber = orderNumber.value || '';
   let existingIndex = -1;
   if(currentId){
     existingIndex = state.orders.findIndex(x => String(x.id||'') === String(currentId));
   }
-  if(existingIndex < 0 && currentNumber){
+  /* R21-fix (2026-08-18): HIER werd een bestaande opdracht overschreven - zelfde
+     fout als bij Tapwagen, waar dit een opdracht van thuis heeft gewist.
+     Deze regel zocht een bestaande opdracht op NUMMER, ook wanneer je bezig was
+     met een NIEUWE opdracht (editing is dan leeg). Kreeg die nieuwe opdracht een
+     nummer dat al bestond - wat gebeurt als newNo() draait voordat de opdrachten
+     binnen zijn, of als er op een ander apparaat is gewerkt - dan werd de id van
+     de oude opdracht overgenomen en ging die er compleet onder.
+     Nu: alleen op nummer zoeken als je echt een bestaande opdracht bewerkt. Ben
+     je nieuw bezig en is het nummer bezet, dan wordt er een vrij nummer gepakt. */
+  if(existingIndex < 0 && currentNumber && currentId){
     existingIndex = state.orders.findIndex(x => String(x.number||'') === String(currentNumber));
+  }
+  if(!currentId && currentNumber){
+    var bnsBezet = state.orders.some(function(x){ return String(x.number||'') === String(currentNumber); });
+    if(bnsBezet){
+      var bnsJaar = String(currentNumber).slice(0,4);
+      var bnsNums = state.orders
+        .map(function(x){ var m=String(x.number||'').match(new RegExp('^'+bnsJaar+'-(\\d+)$')); return m?+m[1]:null; })
+        .filter(function(n){ return n!==null; });
+      var bnsVrij = bnsJaar+'-'+String((bnsNums.length?Math.max.apply(null,bnsNums):0)+1).padStart(4,'0');
+      console.warn('[BNS R21] Opdrachtnummer '+currentNumber+' was al in gebruik. Nieuw nummer: '+bnsVrij+'. De bestaande opdracht is NIET overschreven.');
+      try{ orderNumber.value = bnsVrij; }catch(e){}
+      currentNumber = bnsVrij;
+      try{ if(typeof toastMsg==='function') toastMsg('Nummer was bezet - deze opdracht krijgt '+bnsVrij); }catch(e){}
+    }
   }
   const existing = existingIndex >= 0 ? state.orders[existingIndex] : null;
   const driverValue = orderDriver.value || '';
@@ -49684,4 +49707,259 @@ try{ console.info('[BNS 816] Documenten: opgeslagen opdracht wint van window.cho
     beslissingenWissen:function(){ try{ localStorage.removeItem(BESLIST); }catch(e){} ditBezoekOvergeslagen={}; return 'antwoorden gewist - hij vraagt opnieuw'; }
   };
   try{ console.info('[BNS R18] Opruimvraag actief (na '+MAANDEN+' maanden). Niets wordt uit zichzelf gewist.'); }catch(e){}
+})();
+
+/* ==========================================================
+   BNS R20 — "chosen" en "window.chosen" waren twee verschillende lijsten
+   ----------------------------------------------------------
+   Zelfde reparatie als bij Tapwagen, waar dit een echte fout bleek: materiaal
+   van de vorige opdracht dook op in een nieuwe, lege opdracht - op de factuur
+   en op de opdrachtbevestiging - en werd bij het opslaan ook nog overgenomen.
+
+   Oorzaak: bovenin dit bestand staat
+
+       let pin='', user=null, chosen=[], editing=null, currentCat='', ...
+
+   Een `let` komt NIET op window te staan. `window.chosen` is daardoor een
+   TWEEDE, losstaande lijst. Zes modules in dit bestand schrijven alleen naar
+   die tweede, en vijfentwintig plekken lezen hem juist als eerste keus. Wordt
+   het formulier geleegd, dan wordt alleen de echte lijst leeggemaakt en blijft
+   de tweede staan met wat er de vorige keer in zat.
+
+   Oplossing: window.chosen wordt geen aparte lijst meer maar een doorgeefluik
+   naar de echte `chosen`. Lezen en schrijven komen daarmee altijd bij dezelfde
+   lijst uit, ongeacht welke module het doet.
+========================================================== */
+(function bnsR20ChosenGelijktrekken(){
+  'use strict';
+  if(window.__BNS_R20__) return;
+  window.__BNS_R20__=true;
+
+  try{
+    if(typeof chosen==='undefined'){
+      console.warn('[BNS R20] variabele "chosen" niet in bereik - overgeslagen.');
+      return;
+    }
+
+    /* Wat er nu nog los in window.chosen zit is de restlijst van de vorige
+       opdracht. Alleen overnemen als de echte lijst leeg is EN er echt een
+       opdracht openstaat; anders gaat hij weg. */
+    var restant = Array.isArray(window.chosen) ? window.chosen : null;
+    try{ delete window.chosen; }catch(e){}
+
+    Object.defineProperty(window,'chosen',{
+      configurable:true,
+      enumerable:true,
+      get:function(){ return chosen; },
+      set:function(v){ chosen = Array.isArray(v) ? v : []; }
+    });
+
+    if(restant && restant.length && Array.isArray(chosen) && !chosen.length){
+      var bezig=false;
+      try{ bezig = !!window.__bnsEditingOrder; }catch(e){}
+      if(bezig) chosen = restant;
+    }
+
+    console.info('[BNS R20] window.chosen wijst nu naar dezelfde materiaallijst als chosen.');
+  }catch(e){
+    /* Lukt het doorgeefluik niet, dan het strikt noodzakelijke: bij het legen
+       van het formulier ook window.chosen leegmaken. */
+    try{
+      var vorige=window.clearOrder;
+      if(typeof vorige==='function' && !vorige.__r20){
+        var nieuw=function(){
+          var uit=vorige.apply(this,arguments);
+          try{ window.chosen=[]; }catch(_){}
+          try{ if(typeof renderChosen==='function') renderChosen(); }catch(_){}
+          return uit;
+        };
+        nieuw.__r20=true;
+        window.clearOrder=nieuw;
+        console.info('[BNS R20] terugval actief: window.chosen wordt leeggemaakt bij een nieuwe opdracht.');
+      }
+    }catch(_){}
+    console.warn('[BNS R20] doorgeefluik mislukt:',e);
+  }
+})();
+
+/* ==========================================================
+   BNS R21 — Opdrachtnummers: wachten tot de lijst binnen is + laatste check
+   ----------------------------------------------------------
+   Zelfde bewaking als bij Tapwagen, waar dit is opgespoord nadat een opdracht
+   die thuis was aangemaakt op de zaak bleek te zijn overschreven.
+
+   Twee gaten:
+   1. TE VROEG. Het volgende nummer wordt afgeleid uit de opdrachten die op dat
+      moment in de browser staan. Open je de app en klik je meteen op Nieuwe
+      opdracht, dan zijn ze nog niet binnen, is de lijst kort, en krijg je een
+      nummer dat al bestaat.
+   2. TWEE APPARATEN. Thuis en op de zaak zijn allebei geladen en zien allebei
+      hetzelfde hoogste nummer. Wie tegelijk aanmaakt, komt op hetzelfde nummer.
+
+   Daarom:
+     - Nieuwe opdracht wordt pas vrijgegeven als de opdrachten binnen zijn; de
+       knop toont zolang "Opdrachten laden...". De rest van de app blijft
+       gewoon werken, ook zonder bereik.
+     - Vlak voor het opslaan wordt in Firebase gekeken of het nummer al bestaat.
+
+   Amsterdam bewaart de opdrachten in de Realtime Database onder
+   customers/amsterdam-verhuur/orders. Die wordt bevraagd met orderBy/equalTo.
+   Ontbreekt daarvoor de index-regel in Firebase, dan mislukt die vraag stil en
+   blijft alleen de plaatselijke controle over - nog steeds beter dan nu, en er
+   gaat niets stuk. Wil je hem volledig sluitend, dan moet in de Firebase-regels
+   bij "orders" een index op "number" staan.
+========================================================== */
+(function bnsR21Nummerbewaking(){
+  'use strict';
+  if(window.__BNS_R21__) return;
+  window.__BNS_R21__=true;
+
+  var WACHT_MS=3000;
+  var DB='https://epp-amsterdam-verhuur-default-rtdb.europe-west1.firebasedatabase.app';
+  var BASE='customers/amsterdam-verhuur';
+  var geladen=false, laatsteAantal=-1, stabiel=0;
+
+  function T(v){ return String(v==null?'':v).trim(); }
+  function aantal(){
+    try{ return (window.state && Array.isArray(state.orders)) ? state.orders.length : 0; }catch(e){ return 0; }
+  }
+
+  /* ---------- 1. Nieuwe opdracht pas vrijgeven als de lijst binnen is ---------- */
+  function knoppen(){
+    try{ return Array.prototype.slice.call(document.querySelectorAll('.nav[data-page="newOrder"]')); }
+    catch(e){ return []; }
+  }
+  function zetKnoppen(bezig){
+    knoppen().forEach(function(b){
+      try{
+        if(bezig){
+          if(!b.__r21tekst) b.__r21tekst=b.textContent;
+          b.setAttribute('disabled','disabled');
+          b.style.opacity='.55'; b.style.cursor='wait';
+          b.textContent='Opdrachten laden...';
+        } else if(b.__r21tekst){
+          b.removeAttribute('disabled');
+          b.style.opacity=''; b.style.cursor='';
+          b.textContent=b.__r21tekst;
+          b.__r21tekst=null;
+        }
+      }catch(e){}
+    });
+  }
+
+  setInterval(function(){
+    try{
+      if(geladen) return;
+      var n=aantal();
+      if(n>0 && n===laatsteAantal){ stabiel++; } else { stabiel=0; laatsteAantal=n; }
+      if(stabiel>=3){
+        geladen=true;
+        zetKnoppen(false);
+        try{ if(typeof newNo==='function' && !window.editing) newNo(); }catch(e){}
+        console.info('[BNS R21] Opdrachten binnen ('+n+') - Nieuwe opdracht vrijgegeven.');
+      } else {
+        zetKnoppen(true);
+      }
+    }catch(e){}
+  }, 1000);
+
+  setTimeout(function(){
+    if(!geladen){
+      geladen=true; zetKnoppen(false);
+      console.warn('[BNS R21] Opdrachten kwamen niet binnen; Nieuwe opdracht toch vrijgegeven. Let op dubbele nummers.');
+    }
+  }, 20000);
+
+  /* ---------- 2. Laatste controle vlak voor het opslaan ---------- */
+  function metTijdslimiet(belofte, ms){
+    return Promise.race([
+      belofte,
+      new Promise(function(res){ setTimeout(function(){ res('__tijd_op__'); }, ms); })
+    ]);
+  }
+
+  async function bezetInFirebase(nummer){
+    var url = DB+'/'+BASE+'/orders.json?orderBy='+encodeURIComponent('"number"')+
+              '&equalTo='+encodeURIComponent('"'+String(nummer)+'"')+'&limitToFirst=1';
+    try{
+      var res=await metTijdslimiet(fetch(url,{cache:'no-store'}), WACHT_MS);
+      if(res==='__tijd_op__'){
+        console.warn('[BNS R21] Firebase antwoordde niet binnen '+(WACHT_MS/1000)+' sec; doorgegaan met '+nummer+'.');
+        return null;
+      }
+      if(!res || !res.ok){
+        console.warn('[BNS R21] nummercontrole niet mogelijk (mogelijk ontbreekt de index-regel op "number"); alleen plaatselijk gecontroleerd.');
+        return null;
+      }
+      var data=await res.json();
+      return !!(data && typeof data==='object' && Object.keys(data).length);
+    }catch(e){
+      console.warn('[BNS R21] nummercontrole mislukt, doorgegaan met '+nummer+':', e && e.message);
+      return null;
+    }
+  }
+
+  function volgendVrij(nummer){
+    var jaar=String(nummer).slice(0,4);
+    var nums=[];
+    try{
+      (state.orders||[]).forEach(function(o){
+        var m=String(o.number||'').match(new RegExp('^'+jaar+'-(\\d+)$'));
+        if(m) nums.push(+m[1]);
+      });
+    }catch(e){}
+    var huidig=parseInt(String(nummer).slice(5),10)||0;
+    var hoogste=nums.length?Math.max.apply(null,nums):0;
+    return jaar+'-'+String(Math.max(hoogste,huidig)+1).padStart(4,'0');
+  }
+
+  async function controleerEnCorrigeer(){
+    var el=document.getElementById('orderNumber');
+    if(!el) return;
+    if(window.editing) return;
+    var nu=T(el.value);
+    if(!nu) return;
+    for(var poging=0; poging<5; poging++){
+      var bezet=await bezetInFirebase(nu);
+      if(bezet!==true) break;
+      var vrij=volgendVrij(nu);
+      console.warn('[BNS R21] Nummer '+nu+' bestaat al in Firebase. Doorgeschoven naar '+vrij+'.');
+      nu=vrij; el.value=vrij;
+      try{ if(typeof toastMsg==='function') toastMsg('Nummer was bezet - deze opdracht krijgt '+vrij); }catch(e){}
+    }
+  }
+
+  document.addEventListener('click', function(ev){
+    try{
+      var t=ev.target; if(!t||!t.closest) return;
+      var b=t.closest('#saveOrder,[data-save-order]');
+      if(!b || b.__r21bezig) return;
+      if(window.editing) return;
+      ev.preventDefault(); ev.stopPropagation();
+      b.__r21bezig=true;
+      var oudeTekst=b.textContent;
+      b.textContent='Nummer controleren...';
+      controleerEnCorrigeer().then(function(){
+        b.textContent=oudeTekst; b.__r21bezig=false; b.click();
+      }).catch(function(){
+        b.textContent=oudeTekst; b.__r21bezig=false; b.click();
+      });
+    }catch(e){}
+  }, true);
+
+  window.BNS_R21={
+    geladen:function(){ return geladen; },
+    controleer:controleerEnCorrigeer,
+    bezet:bezetInFirebase,
+    vrijgeven:function(){ geladen=true; zetKnoppen(false); return 'Nieuwe opdracht vrijgegeven'; },
+    dubbeleNummers:function(){
+      var t={}, uit=[];
+      try{
+        (state.orders||[]).forEach(function(o){ var n=String(o.number||''); if(n) t[n]=(t[n]||0)+1; });
+        Object.keys(t).forEach(function(n){ if(t[n]>1) uit.push({nummer:n, aantal:t[n]}); });
+      }catch(e){}
+      return uit;
+    }
+  };
+  try{ console.info('[BNS R21] Nummerbewaking actief.'); }catch(e){}
 })();
